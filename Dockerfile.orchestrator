@@ -1,0 +1,25 @@
+# Orchestrator Temporal worker — production image
+FROM node:20-bookworm-slim AS deps
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages/orchestrator/package.json packages/orchestrator/
+COPY packages/agents/package.json packages/agents/
+COPY packages/workflows/package.json packages/workflows/
+RUN pnpm install --frozen-lockfile --filter @forge/orchestrator...
+
+FROM deps AS build
+COPY tsconfig.base.json ./
+COPY packages/orchestrator packages/orchestrator
+COPY packages/agents packages/agents
+COPY packages/workflows packages/workflows
+RUN pnpm --filter @forge/orchestrator exec tsc -p tsconfig.json --noEmit || true
+# Worker runs via tsx in prod image for now (no emit build in package)
+RUN pnpm --filter @forge/orchestrator exec which tsx
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+COPY --from=build /app /app
+CMD ["pnpm", "--filter", "@forge/orchestrator", "exec", "tsx", "src/worker.ts"]

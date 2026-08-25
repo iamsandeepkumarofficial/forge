@@ -1,0 +1,30 @@
+# Tool-plane (@forge/server) — production image
+FROM node:20-bookworm-slim AS deps
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/server/package.json apps/server/
+COPY packages/core/package.json packages/core/
+COPY packages/db/package.json packages/db/
+COPY packages/agents/package.json packages/agents/
+COPY packages/workflows/package.json packages/workflows/
+COPY packages/tools/package.json packages/tools/
+RUN pnpm install --frozen-lockfile --filter @forge/server...
+
+FROM deps AS build
+COPY tsconfig.base.json ./
+COPY apps/server apps/server
+COPY packages/core packages/core
+COPY packages/db packages/db
+COPY packages/agents packages/agents
+COPY packages/workflows packages/workflows
+COPY packages/tools packages/tools
+RUN pnpm --filter @forge/server build
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+COPY --from=build /app /app
+EXPOSE 4000
+CMD ["pnpm", "--filter", "@forge/server", "exec", "node", "dist/index.js"]

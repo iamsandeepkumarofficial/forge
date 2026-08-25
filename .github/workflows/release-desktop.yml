@@ -1,0 +1,17 @@
+# Future: build and publish Forge desktop (Tauri) artifacts for macOS / Windows / Linux.
+# Not active yet — scaffold only (see apps/desktop and RFC 0002).
+name: Release Desktop
+
+on:
+  workflow_dispatch:
+  # push:
+  #   tags: ["desktop-v*"]
+
+jobs:
+  stub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder
+        run: |
+          echo "TODO: Tauri release pipeline (matrix OS, signing, artifacts)."
+          echo "See apps/desktop/README.md and docs/rfcs/0002-local-desktop-runtime.md"

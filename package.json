@@ -1,0 +1,45 @@
+{
+  "name": "forge",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "postinstall": "node scripts/setup.mjs",
+    "setup": "node scripts/setup.mjs",
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel --filter=@forge/server --filter=@forge/orchestrator --filter=@forge/web-ui",
+    "dev:orchestrator": "pnpm --filter @forge/orchestrator worker",
+    "temporal:dev": "temporal server start-dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "docker:sandbox": "docker build -f Dockerfile.sandbox -t forge-sandbox:latest ."
+  },
+  "devDependencies": {
+    "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.5.2",
+    "eslint": "^9.35.0",
+    "eslint-plugin-no-comments": "^1.2.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.65.0",
+    "ws": "^8.20.0"
+  },
+  "dependencies": {
+    "uuid": "^14.0.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@swc/core",
+      "protobufjs",
+      "@temporalio/core-bridge"
+    ]
+  }
+}

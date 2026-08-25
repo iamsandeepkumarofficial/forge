@@ -1,0 +1,20 @@
+# Preview-plane — auth reverse proxy for *.preview.<product-domain>
+FROM node:20-bookworm-slim AS deps
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/preview-plane/package.json apps/preview-plane/
+RUN pnpm install --frozen-lockfile --filter @forge/preview-plane...
+
+FROM deps AS build
+COPY tsconfig.base.json ./
+COPY apps/preview-plane apps/preview-plane
+RUN pnpm --filter @forge/preview-plane build
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+COPY --from=build /app /app
+EXPOSE 8081
+CMD ["pnpm", "--filter", "@forge/preview-plane", "exec", "node", "dist/index.js"]

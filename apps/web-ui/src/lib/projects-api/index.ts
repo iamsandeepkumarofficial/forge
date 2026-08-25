@@ -1,0 +1,66 @@
+export {
+  ConnectProjectError,
+  type ProjectSummary,
+  type ChatSummary,
+  type SessionStatus,
+  type ChatFeatureType,
+  type DescriptionDocument
+} from "./shared.js";
+export {
+  connectProject,
+  uploadProject,
+  fetchProjects,
+  fetchProject,
+  deleteProject
+} from "./projects.js";
+export {
+  createChat,
+  fetchChats,
+  fetchChat,
+  updateChat,
+  deleteChat
+} from "./chats.js";
+export { type ChatComment, fetchComments, createComment } from "./comments.js";
+export { startSession, getSessionStatus, pushToSession } from "./sessions.js";
+export {
+  type ChatAttachment,
+  listAttachments,
+  uploadAttachment,
+  deleteAttachment,
+  downloadAttachmentUrl
+} from "./attachments.js";
+export {
+  type LinkedItem,
+  listLinkedItems,
+  createLinkedItem,
+  deleteLinkedItem
+} from "./linked-items.js";
+export {
+  type WorkflowNodeState,
+  type WorkflowLifecycleStatus,
+  type WorkflowNode,
+  type WorkflowGraph,
+  type StageMessage,
+  type StageMessagesResponse,
+  type WorkflowTranscriptStage,
+  type WorkflowTranscript,
+  getWorkflow,
+  getStageMessages,
+  getWorkflowTranscript,
+  enterManualMode,
+  completeManualStage,
+  retryStage,
+  stopWorkflow
+} from "./workflow.js";
+export {
+  type ChatFeatureKind,
+  type ProjectWorkbenchSession,
+  createWorkbenchSession,
+  fetchWorkbenchSessions
+} from "./workbench.js";
+export {
+  type ActivityFilter,
+  type ActivityEntry,
+  type ActivityFeed,
+  getActivity
+} from "./activity.js";

@@ -1,0 +1,62 @@
+const BEARER_PREFIX = "Bearer ";
+const DEFAULT_PREVIEW_ZONE = "preview.forge.local";
+
+export type ParsedPreviewHost = {
+  sessionId: string;
+  port: number | null;
+};
+
+function previewZone(): string {
+  return (
+    process.env.FORGE_PREVIEW_BASE_DOMAIN?.trim().toLowerCase() ||
+    DEFAULT_PREVIEW_ZONE
+  );
+}
+
+function sessionIdFromRest(rest: string): string | null {
+  const zone = previewZone();
+  const suffix = `.${zone}`;
+  if (rest.endsWith(suffix)) {
+    const id = rest.slice(0, -suffix.length);
+    return id || null;
+  }
+  const marker = rest.indexOf(".preview.");
+  if (marker > 0) {
+    return rest.slice(0, marker);
+  }
+  return null;
+}
+
+export function parsePreviewHostname(
+  hostHeader: string
+): ParsedPreviewHost | null {
+  const host = (hostHeader.split(":")[0] ?? "").toLowerCase();
+  const extra = /^p(\d+)-s-(.+)$/.exec(host);
+  if (extra?.[1] && extra[2]) {
+    const sessionId = sessionIdFromRest(extra[2]);
+    if (sessionId) {
+      return { sessionId, port: Number(extra[1]) };
+    }
+  }
+  const primary = /^s-(.+)$/.exec(host);
+  if (primary?.[1]) {
+    const sessionId = sessionIdFromRest(primary[1]);
+    if (sessionId) {
+      return { sessionId, port: null };
+    }
+  }
+  return null;
+}
+
+export function previewUrl(hostname: string, scheme = "https"): string {
+  return `${scheme}://${hostname}`;
+}
+
+export function stripBearer(
+  authorization: string | undefined
+): string | undefined {
+  if (!authorization?.startsWith(BEARER_PREFIX)) {
+    return undefined;
+  }
+  return authorization.slice(BEARER_PREFIX.length);
+}
