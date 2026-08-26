@@ -1,4 +1,4 @@
-import { pocToken, runnerUrl, userEmailHeader } from "./tool-runner.js";
+import { runnerUrl } from "./tool-runner.js";
 import { ConnectProjectError } from "./projects-api.js";
 
 const N_204 = 204;
@@ -7,9 +7,7 @@ const N_500 = 500;
 const BASE_URL = runnerUrl();
 function authHeaders(json = true): HeadersInit {
   return {
-    Authorization: `Bearer ${pocToken()}`,
-    ...(json ? { "Content-Type": "application/json" } : {}),
-    ...userEmailHeader()
+    ...(json ? { "Content-Type": "application/json" } : {})
   };
 }
 export type GithubOAuthStatus = {

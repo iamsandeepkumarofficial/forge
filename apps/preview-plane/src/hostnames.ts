@@ -1,5 +1,7 @@
 const BEARER_PREFIX = "Bearer ";
 const DEFAULT_PREVIEW_ZONE = "preview.forge.local";
+const N_80 = 80;
+const N_443 = 443;
 
 export type ParsedPreviewHost = {
   sessionId: string;
@@ -7,10 +9,14 @@ export type ParsedPreviewHost = {
 };
 
 function previewZone(): string {
-  return (
-    process.env.FORGE_PREVIEW_BASE_DOMAIN?.trim().toLowerCase() ||
-    DEFAULT_PREVIEW_ZONE
-  );
+  const explicit = process.env.FORGE_PREVIEW_BASE_DOMAIN?.trim().toLowerCase();
+  if (explicit) return explicit;
+  const plane =
+    process.env.PREVIEW_PUBLIC_ORIGIN?.trim() ||
+    process.env.PREVIEW_PLANE_URL?.trim() ||
+    "";
+  if (/localhost|127\.0\.0\.1/i.test(plane)) return "preview.localhost";
+  return DEFAULT_PREVIEW_ZONE;
 }
 
 function sessionIdFromRest(rest: string): string | null {
@@ -48,7 +54,27 @@ export function parsePreviewHostname(
   return null;
 }
 
+/** Public listen port for preview URLs (from PREVIEW_PUBLIC_ORIGIN or PREVIEW_PLANE_URL). */
+export function previewPublicPort(): number | null {
+  const raw =
+    process.env.PREVIEW_PUBLIC_ORIGIN?.trim() ||
+    process.env.PREVIEW_PLANE_URL?.trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw.includes("://") ? raw : `http://${raw}`);
+    if (u.port) return Number(u.port);
+    return u.protocol === "https:" ? N_443 : N_80;
+  } catch {
+    return null;
+  }
+}
+
 export function previewUrl(hostname: string, scheme = "https"): string {
+  const port = previewPublicPort();
+  const defaultPort = scheme === "https" ? N_443 : N_80;
+  if (port != null && port !== defaultPort) {
+    return `${scheme}://${hostname}:${port}`;
+  }
   return `${scheme}://${hostname}`;
 }
 

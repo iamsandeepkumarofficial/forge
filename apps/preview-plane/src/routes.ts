@@ -3,7 +3,6 @@ import { previewUrl } from "./hostnames.js";
 import type { RouteStore } from "./routeStore.js";
 
 const N_400 = 400;
-const N_401 = 401;
 const N_200 = 200;
 const N_204 = 204;
 const FIRST_APP_PORT = 3000;
@@ -23,25 +22,6 @@ export type PreviewRoutesOptions = {
   previewBaseDomain: string;
 };
 
-function internalTokenOk(req: Request, token: string): boolean {
-  const hdr = req.headers.authorization ?? "";
-  const got = hdr.startsWith("Bearer ") ? hdr.slice("Bearer ".length) : "";
-  return Boolean(token) && got === token;
-}
-
-function withInternalAuth(
-  token: string,
-  handler: (req: Request, res: Response) => void
-): (req: Request, res: Response) => void {
-  return (req, res) => {
-    if (!internalTokenOk(req, token)) {
-      res.status(N_401).json({ error: "unauthenticated" });
-      return;
-    }
-    handler(req, res);
-  };
-}
-
 function defaultHostname(input: {
   sessionId: string;
   port: number;
@@ -55,33 +35,23 @@ function defaultHostname(input: {
 
 export function previewInternalRouter(options: PreviewRoutesOptions): Router {
   const router = Router();
-  const token = options.token;
 
-  router.post(
-    "/preview/register",
-    withInternalAuth(token, (req, res) => {
-      handleRegister({ req, res, options });
-    })
-  );
-  router.delete(
-    "/preview/:sessionId/:port",
-    withInternalAuth(token, (req, res) => {
-      const removed = options.store.deletePort({
-        sessionId: String(req.params.sessionId),
-        port: Number(req.params.port)
-      });
-      res
-        .status(removed ? N_204 : N_400)
-        .json(removed ? {} : { error: "not_found" });
-    })
-  );
-  router.delete(
-    "/preview/:sessionId",
-    withInternalAuth(token, (req, res) => {
-      options.store.deleteSession(String(req.params.sessionId));
-      res.status(N_204).json({});
-    })
-  );
+  router.post("/preview/register", (req, res) => {
+    handleRegister({ req, res, options });
+  });
+  router.delete("/preview/:sessionId/:port", (req, res) => {
+    const removed = options.store.deletePort({
+      sessionId: String(req.params.sessionId),
+      port: Number(req.params.port)
+    });
+    res
+      .status(removed ? N_204 : N_400)
+      .json(removed ? {} : { error: "not_found" });
+  });
+  router.delete("/preview/:sessionId", (req, res) => {
+    options.store.deleteSession(String(req.params.sessionId));
+    res.status(N_204).json({});
+  });
   return router;
 }
 

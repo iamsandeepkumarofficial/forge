@@ -27,8 +27,7 @@ describe("attachments API", () => {
     } as Response);
     const items = await listAttachments("p1", "c1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1/chats/c1/attachments",
-      expect.any(Object)
+      "http://127.0.0.1:4000/api/projects/p1/chats/c1/attachments"
     );
     expect(items[0]?.fileName).toBe("x.png");
   });

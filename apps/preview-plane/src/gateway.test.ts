@@ -5,16 +5,12 @@ import type { AddressInfo } from "node:net";
 import { createPreviewApp } from "./app.js";
 import { RouteStore } from "./routeStore.js";
 
-const TOKEN = "gw-token";
 const N_200 = 200;
-const N_401 = 401;
-const N_403 = 403;
 const N_404 = 404;
 
-describe("preview gateway auth", () => {
+describe("preview gateway", () => {
   const store = new RouteStore();
   const app = createPreviewApp({
-    token: TOKEN,
     store,
     previewBaseDomain: "preview.forge.local",
     previewScheme: "http"
@@ -37,8 +33,7 @@ describe("preview gateway auth", () => {
       sessionId: "abc",
       port: 3000,
       hostname: "s-abc.preview.forge.local",
-      backendService: upstreamUrl,
-      ownerEmail: "alice@x.com"
+      backendService: upstreamUrl
     });
     server = app.listen(0, "127.0.0.1");
     await new Promise<void>((resolve) =>
@@ -57,43 +52,19 @@ describe("preview gateway auth", () => {
     });
   });
 
-  it("returns 401 without credentials", async () => {
-    const res = await fetch(base, {
-      headers: { "X-Forwarded-Host": "s-abc.preview.forge.local" }
-    });
-    assert.equal(res.status, N_401);
-    assert.notEqual(await res.text(), "upstream-ok");
-  });
-
-  it("returns 403 for authenticated non-owner", async () => {
-    const res = await fetch(base, {
-      headers: {
-        "X-Forwarded-Host": "s-abc.preview.forge.local",
-        Authorization: `Bearer ${TOKEN}`,
-        "X-Forge-User-Email": "bob@x.com"
-      }
-    });
-    assert.equal(res.status, N_403);
-    assert.notEqual(await res.text(), "upstream-ok");
-  });
-
   it("returns 404 when route is missing", async () => {
     const res = await fetch(base, {
       headers: {
-        "X-Forwarded-Host": "s-missing.preview.forge.local",
-        Authorization: `Bearer ${TOKEN}`,
-        "X-Forge-User-Email": "alice@x.com"
+        "X-Forwarded-Host": "s-missing.preview.forge.local"
       }
     });
     assert.equal(res.status, N_404);
   });
 
-  it("proxies when authenticated owner is allowed", async () => {
+  it("proxies without auth (RFC 0004)", async () => {
     const res = await fetch(base, {
       headers: {
-        "X-Forwarded-Host": "s-abc.preview.forge.local",
-        Authorization: `Bearer ${TOKEN}`,
-        "X-Forge-User-Email": "alice@x.com"
+        "X-Forwarded-Host": "s-abc.preview.forge.local"
       }
     });
     assert.equal(res.status, N_200);

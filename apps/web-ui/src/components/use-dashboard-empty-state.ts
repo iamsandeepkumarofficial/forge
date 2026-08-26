@@ -1,20 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { isDesktop, pickFolder } from "../lib/desktop.js";
 import { SUGGESTION_SETS } from "./empty-state-shared.js";
 import {
   connectGithubAndFinish,
+  connectLocalAndFinish,
   errorMessage,
-  maybeCreateChat,
-  uploadDroppedTransfer,
-  uploadFolderList,
-  uploadProject
-} from "./dashboard-empty-uploads.js";
+  maybeCreateChat
+} from "./dashboard-empty-connect.js";
 
 export function useDashboardEmptyState(options: { onConnected: () => void }) {
   const { onConnected } = options;
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
   const importSectionRef = useRef<HTMLDivElement>(null);
   const [buildText, setBuildText] = useState("");
   const [pendingTitle, setPendingTitle] = useState("");
@@ -22,9 +19,11 @@ export function useDashboardEmptyState(options: { onConnected: () => void }) {
   const [showGithubPicker, setShowGithubPicker] = useState(false);
   const [connectingSlug, setConnectingSlug] = useState<string | null>(null);
   const [buildHint, setBuildHint] = useState(false);
-  const [loading, setLoading] = useState<"github" | "upload" | null>(null);
+  const [loading, setLoading] = useState<"github" | "local" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
+  const [desktop] = useState(() => isDesktop());
+  const [showPathInput, setShowPathInput] = useState(() => !isDesktop());
+  const [localPath, setLocalPath] = useState("");
   const suggestions = SUGGESTION_SETS[suggestionSet % SUGGESTION_SETS.length]!;
   const finishConnect = useCallback(
     async (projectId: string) => {
@@ -37,8 +36,8 @@ export function useDashboardEmptyState(options: { onConnected: () => void }) {
     },
     [buildText, navigate, onConnected, pendingTitle]
   );
-  const withUpload = async (run: () => Promise<void>) => {
-    setLoading("upload");
+  const withLocal = async (run: () => Promise<void>) => {
+    setLoading("local");
     setError(null);
     try {
       await run();
@@ -56,15 +55,14 @@ export function useDashboardEmptyState(options: { onConnected: () => void }) {
     setError,
     setLoading,
     setConnectingSlug,
-    setDragOver,
+    setShowPathInput,
+    desktop,
+    localPath,
     importSectionRef,
-    folderInputRef,
     finishConnect,
-    withUpload
+    withLocal
   });
   return {
-    fileInputRef,
-    folderInputRef,
     importSectionRef,
     buildText,
     setBuildText,
@@ -77,8 +75,10 @@ export function useDashboardEmptyState(options: { onConnected: () => void }) {
     loading,
     error,
     setError,
-    dragOver,
-    setDragOver,
+    desktop,
+    showPathInput,
+    localPath,
+    setLocalPath,
     setSuggestionSet,
     busy: loading !== null,
     ...actions
@@ -91,13 +91,14 @@ function useDashboardEmptyActions(options: {
   setBuildHint: (v: boolean) => void;
   setShowGithubPicker: (v: boolean) => void;
   setError: (v: string | null) => void;
-  setLoading: (v: "github" | "upload" | null) => void;
+  setLoading: (v: "github" | "local" | null) => void;
   setConnectingSlug: (v: string | null) => void;
-  setDragOver: (v: boolean) => void;
+  setShowPathInput: (v: boolean) => void;
+  desktop: boolean;
+  localPath: string;
   importSectionRef: React.RefObject<HTMLDivElement | null>;
-  folderInputRef: React.RefObject<HTMLInputElement | null>;
   finishConnect: (projectId: string) => Promise<void>;
-  withUpload: (run: () => Promise<void>) => Promise<void>;
+  withLocal: (run: () => Promise<void>) => Promise<void>;
 }) {
   const o = options;
   return {
@@ -128,28 +129,31 @@ function useDashboardEmptyActions(options: {
         o.setLoading(null);
       }
     },
-    handleZipFile: async (file: File | null | undefined) => {
-      if (!file) return;
-      await o.withUpload(async () => {
-        const result = await uploadProject(file);
-        await o.finishConnect(result.projectId);
+    handleSelectFolder: async () => {
+      o.setError(null);
+      if (!o.desktop) {
+        o.setShowPathInput(true);
+        return;
+      }
+      await o.withLocal(async () => {
+        const path = await pickFolder();
+        if (!path) return;
+        await connectLocalAndFinish({
+          localPath: path,
+          finishConnect: o.finishConnect
+        });
       });
     },
-    handleFolderFiles: async (fileList: FileList | null) => {
-      if (!fileList || fileList.length === 0) return;
-      await o.withUpload(async () => {
-        await uploadFolderList({ fileList, finishConnect: o.finishConnect });
-        if (o.folderInputRef.current) o.folderInputRef.current.value = "";
-      });
-    },
-    onDrop: async (e: React.DragEvent) => {
-      e.preventDefault();
-      o.setDragOver(false);
-      await o.withUpload(async () => {
-        await uploadDroppedTransfer({
-          dataTransfer: e.dataTransfer,
-          finishConnect: o.finishConnect,
-          onEmpty: () => o.setError("Drop a project folder or a .zip archive.")
+    handleConnectPath: async () => {
+      const trimmed = o.localPath.trim();
+      if (!trimmed) {
+        o.setError("Enter an absolute path to a project folder.");
+        return;
+      }
+      await o.withLocal(async () => {
+        await connectLocalAndFinish({
+          localPath: trimmed,
+          finishConnect: o.finishConnect
         });
       });
     }

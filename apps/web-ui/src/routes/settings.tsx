@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { runnerUrl } from "@/lib/tool-runner.js";
 
 export const LLM_SETTINGS_KEY = "forge.settings.llm";
 
@@ -43,23 +44,115 @@ export function saveLlmSettings(settings: LlmSettings): void {
   localStorage.setItem(LLM_SETTINGS_KEY, JSON.stringify(settings));
 }
 
+function settingsHasValues(s: Partial<LlmSettings>): boolean {
+  return Object.values(s).some(
+    (v) => typeof v === "string" && v.trim().length > 0
+  );
+}
+
+function normalizeSettings(raw: Partial<LlmSettings>): LlmSettings {
+  return {
+    openaiApiKey: String(raw.openaiApiKey ?? ""),
+    anthropicApiKey: String(raw.anthropicApiKey ?? ""),
+    openaiCompatibleBaseUrl: String(raw.openaiCompatibleBaseUrl ?? ""),
+    openaiCompatibleApiKey: String(raw.openaiCompatibleApiKey ?? ""),
+    openaiCompatibleModel: String(raw.openaiCompatibleModel ?? "")
+  };
+}
+
+async function persistLlmSettingsToServer(
+  settings: LlmSettings
+): Promise<LlmSettings> {
+  const res = await fetch(`${runnerUrl()}/api/settings/llm`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings)
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Failed to save settings (${res.status})`);
+  }
+  const saved = (await res.json()) as Partial<LlmSettings>;
+  return normalizeSettings(saved);
+}
+
 export function SettingsPage() {
   const [form, setForm] = useState<LlmSettings>(EMPTY);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
 
   useEffect(() => {
-    setForm(loadLlmSettings());
+    let cancelled = false;
+    void (async () => {
+      const local = loadLlmSettings();
+      try {
+        const res = await fetch(`${runnerUrl()}/api/settings/llm`);
+        if (res.ok) {
+          const remote = normalizeSettings(
+            (await res.json()) as Partial<LlmSettings>
+          );
+          const hasRemote = settingsHasValues(remote);
+          if (hasRemote) {
+            if (!cancelled) setForm(remote);
+            return;
+          }
+          // Migrate browser-only settings (pre-RFC 0004 save) into ~/.forge/config.json
+          if (settingsHasValues(local)) {
+            const migrated = await persistLlmSettingsToServer(local);
+            if (!cancelled) {
+              setForm(migrated);
+              setSyncNote(
+                "Synced browser settings to ~/.forge/config.json — try chat again."
+              );
+            }
+            return;
+          }
+          if (!cancelled) setForm(local);
+          return;
+        }
+      } catch {
+        /* fall back to local */
+      }
+      if (!cancelled) setForm(local);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const update = (key: keyof LlmSettings, value: string) => {
     setSaved(false);
+    setError(null);
+    setSyncNote(null);
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const onSave = (e: FormEvent) => {
+  const onSave = async (e: FormEvent) => {
     e.preventDefault();
-    saveLlmSettings(form);
-    setSaved(true);
+    setSaving(true);
+    setError(null);
+    setSyncNote(null);
+    try {
+      if (
+        !form.openaiCompatibleBaseUrl.trim() &&
+        !form.openaiApiKey.trim() &&
+        !form.anthropicApiKey.trim()
+      ) {
+        throw new Error(
+          "Enter at least an OpenAI-compatible base URL (or an OpenAI/Anthropic API key)."
+        );
+      }
+      saveLlmSettings(form);
+      const persisted = await persistLlmSettingsToServer(form);
+      setForm(persisted);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -74,22 +167,15 @@ export function SettingsPage() {
           </Link>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-sm text-muted-foreground">
-            LLM credentials are stored in this browser under{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              {LLM_SETTINGS_KEY}
-            </code>
-            . The desktop supervisor will sync them to{" "}
+            Must be saved to{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
               ~/.forge/config.json
-            </code>
-            .
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Desktop: Connect local folder or git URL via the Forge desktop app.
+            </code>{" "}
+            for chat to work. Browser storage alone is not enough.
           </p>
         </div>
 
-        <form onSubmit={onSave} className="space-y-6">
+        <form onSubmit={(e) => void onSave(e)} className="space-y-6">
           <fieldset className="space-y-3">
             <legend className="text-sm font-semibold">OpenAI</legend>
             <div className="space-y-1.5">
@@ -128,13 +214,14 @@ export function SettingsPage() {
               <Label htmlFor="openaiCompatibleBaseUrl">Base URL</Label>
               <Input
                 id="openaiCompatibleBaseUrl"
-                type="url"
+                type="text"
+                inputMode="url"
                 autoComplete="off"
                 value={form.openaiCompatibleBaseUrl}
                 onChange={(e) =>
                   update("openaiCompatibleBaseUrl", e.target.value)
                 }
-                placeholder="https://api.example.com/v1"
+                placeholder="https://openrouter.ai/api/v1"
               />
             </div>
             <div className="space-y-1.5">
@@ -159,15 +246,27 @@ export function SettingsPage() {
                 onChange={(e) =>
                   update("openaiCompatibleModel", e.target.value)
                 }
-                placeholder="gpt-4o-mini"
+                placeholder="openai/gpt-4o-mini"
               />
             </div>
           </fieldset>
 
-          <div className="flex items-center gap-3">
-            <Button type="submit">Save</Button>
-            {saved ? (
-              <span className="text-sm text-muted-foreground">Saved</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              {saved ? (
+                <span className="text-sm text-muted-foreground">
+                  Saved to ~/.forge/config.json — retry chat
+                </span>
+              ) : null}
+            </div>
+            {syncNote ? (
+              <span className="text-sm text-muted-foreground">{syncNote}</span>
+            ) : null}
+            {error ? (
+              <span className="text-sm text-destructive">{error}</span>
             ) : null}
           </div>
         </form>

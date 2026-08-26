@@ -1,24 +1,16 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { cn } from "../lib/utils.js";
-import { runnerUrl, pocToken, userEmailHeader } from "../lib/tool-runner.js";
+import { runnerUrl } from "../lib/tool-runner.js";
 import { formatTokens, N_100 } from "./chat-composer-shared.js";
 import {
   buildUsageRows,
   estimateTokensFromText
 } from "./context-usage-math.js";
 
-function authHeaders(): HeadersInit {
-  return {
-    Authorization: `Bearer ${pocToken()}`,
-    ...(userEmailHeader() ?? {})
-  };
-}
-
 async function fetchSystemPromptText(sessionId: string): Promise<string> {
   const res = await fetch(
-    `${runnerUrl()}/internal/system-prompt?sessionId=${encodeURIComponent(sessionId)}`,
-    { headers: authHeaders() }
+    `${runnerUrl()}/internal/system-prompt?sessionId=${encodeURIComponent(sessionId)}`
   );
   if (!res.ok) return "";
   return (await res.text()) || "";
@@ -26,8 +18,7 @@ async function fetchSystemPromptText(sessionId: string): Promise<string> {
 
 async function fetchToolDefinitionText(agentMode: string): Promise<string> {
   const res = await fetch(
-    `${runnerUrl()}/internal/chat-tool-definitions?mode=${encodeURIComponent(agentMode)}`,
-    { headers: authHeaders() }
+    `${runnerUrl()}/internal/chat-tool-definitions?mode=${encodeURIComponent(agentMode)}`
   );
   if (!res.ok) return "";
   const body = (await res.json()) as { text?: string };

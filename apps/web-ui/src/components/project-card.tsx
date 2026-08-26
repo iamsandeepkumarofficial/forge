@@ -4,16 +4,22 @@ import { fetchProject } from "../lib/projects-api.js";
 interface ProjectCardProps {
   projectId: string;
   name: string;
-  source: "github" | "upload";
+  source: "github" | "local" | "upload";
   status: "available" | "unavailable";
   lastActivityAt?: number;
   onOpen: () => void;
   onDelete: () => void;
 }
 
+function sourceLabel(source: "github" | "local" | "upload"): string {
+  if (source === "github") return "GitHub";
+  if (source === "local") return "Local";
+  return "Upload";
+}
+
 function ProjectCardBody(options: {
   name: string;
-  source: "github" | "upload";
+  source: "github" | "local" | "upload";
   status: "available" | "unavailable";
   lastActivityAt?: number;
   error: string | null;
@@ -31,14 +37,14 @@ function ProjectCardBody(options: {
     onRefreshClick,
     onDeleteClick
   } = options;
-  const sourceIcon = source === "github" ? "🔗" : "📦";
+  const sourceIcon = source === "github" ? "🔗" : "📁";
   return (
     <>
       <div className="flex items-start justify-between">
         <div>
           <h3 className="font-semibold">{name}</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            {sourceIcon} {source === "github" ? "GitHub" : "Upload"}
+            {sourceIcon} {sourceLabel(source)}
           </p>
           {lastActivityAt && (
             <p className="text-xs text-muted-foreground mt-1">

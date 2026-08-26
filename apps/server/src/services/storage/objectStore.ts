@@ -1,170 +1,118 @@
-import {
-  S3Client,
-  GetObjectCommand,
-  PutObjectCommand,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  DeleteObjectsCommand,
-  DeleteObjectCommand
-} from "@aws-sdk/client-s3";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
-const N_404 = 404;
+const DEFAULT_STORAGE_ROOT = path.join(os.homedir(), ".forge", "storage");
 
-const client = new S3Client({
-  region: process.env.OBJECT_STORE_REGION || "us-east-1",
-  endpoint: process.env.OBJECT_STORE_ENDPOINT || "http://localhost:9000",
-  forcePathStyle: process.env.OBJECT_STORE_FORCE_PATH_STYLE === "true",
-  credentials: {
-    accessKeyId: process.env.OBJECT_STORE_ACCESS_KEY || "",
-    secretAccessKey: process.env.OBJECT_STORE_SECRET_KEY || ""
+function expandHome(raw: string): string {
+  if (raw.startsWith("~/")) {
+    return path.resolve(os.homedir(), raw.slice(2));
   }
-});
+  return raw;
+}
+
+function storageRoot(): string {
+  const raw = process.env.FORGE_STORAGE_ROOT?.trim();
+  if (!raw) return DEFAULT_STORAGE_ROOT;
+  const expanded = expandHome(raw);
+  return path.isAbsolute(expanded)
+    ? expanded
+    : path.resolve(process.cwd(), expanded);
+}
+
+function resolveKeyPath(bucket: string, key: string): string {
+  const normalized = key.replace(/^\/+/, "").replace(/\\/g, "/");
+  if (
+    !normalized ||
+    normalized.split("/").some((seg) => seg === ".." || seg === "")
+  ) {
+    throw new Error(`Invalid storage key: ${key}`);
+  }
+  return path.join(storageRoot(), bucket, ...normalized.split("/"));
+}
+
 export async function getObject(
   bucket: string,
   key: string
 ): Promise<Uint8Array | null> {
   try {
-    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-    const response = await client.send(command);
-    if (response.Body) {
-      const chunks: Uint8Array[] = [];
-      for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
-        if (chunk) chunks.push(chunk);
-      }
-      return chunks.length > 0 ? Buffer.concat(chunks) : null;
-    }
-    return null;
-  } catch (error) {
-    console.error("getObject error:", error);
+    const filePath = resolveKeyPath(bucket, key);
+    return await fs.readFile(filePath);
+  } catch {
     return null;
   }
 }
+
 export async function putObject(options: {
   bucket: string;
   key: string;
   body: Uint8Array;
   contentType?: string;
 }): Promise<void> {
-  const {
-    bucket,
-    key,
-    body,
-    contentType = "application/octet-stream"
-  } = options;
-  try {
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType
-    });
-    await client.send(command);
-  } catch (error) {
-    console.error("putObject error:", error);
-    throw error;
-  }
+  const filePath = resolveKeyPath(options.bucket, options.key);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, Buffer.from(options.body));
 }
+
 export function ticketAttachmentKey(
   chatFeatureId: string,
   attachmentId: string
 ): string {
   return `tickets/${chatFeatureId}/att/${attachmentId}`;
 }
+
 export async function objectExists(
   bucket: string,
   key: string
 ): Promise<boolean> {
   try {
-    const command = new HeadObjectCommand({ Bucket: bucket, Key: key });
-    await client.send(command);
+    await fs.access(resolveKeyPath(bucket, key));
     return true;
-  } catch (error) {
-    if (
-      error &&
-      typeof error === "object" &&
-      "$metadata" in error &&
-      (
-        error as {
-          $metadata?: {
-            httpStatusCode?: number;
-          };
-        }
-      ).$metadata?.httpStatusCode === N_404
-    ) {
-      return false;
-    }
-    console.error("objectExists error:", error);
-    throw error;
+  } catch {
+    return false;
   }
 }
+
 export async function listObjectsWithPrefix(
   bucket: string,
   prefix: string
 ): Promise<string[]> {
+  const root = path.join(storageRoot(), bucket);
+  const prefixNorm = prefix.replace(/^\/+/, "").replace(/\\/g, "/");
   const keys: string[] = [];
-  let continuationToken: string | undefined;
-  do {
-    const listed = await client.send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: prefix,
-        ContinuationToken: continuationToken
-      })
-    );
-    for (const obj of listed.Contents || []) {
-      if (obj.Key) keys.push(obj.Key);
+  async function walk(dir: string, rel: string): Promise<void> {
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
     }
-    continuationToken = listed.IsTruncated
-      ? listed.NextContinuationToken
-      : undefined;
-  } while (continuationToken);
+    for (const entry of entries) {
+      const nextRel = rel ? `${rel}/${entry.name}` : entry.name;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full, nextRel);
+      } else if (entry.isFile() && nextRel.startsWith(prefixNorm)) {
+        keys.push(nextRel);
+      }
+    }
+  }
+  await walk(root, "");
   return keys;
 }
+
 export async function deleteObject(bucket: string, key: string): Promise<void> {
   try {
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-  } catch (error) {
-    console.error("deleteObject error:", error);
-    throw error;
+    await fs.unlink(resolveKeyPath(bucket, key));
+  } catch {
+    /* ignore missing */
   }
 }
+
 export async function deleteObjectsWithPrefix(
   bucket: string,
   prefix: string
 ): Promise<void> {
-  try {
-    let continuationToken: string | undefined;
-    do {
-      const listed = await client.send(
-        new ListObjectsV2Command({
-          Bucket: bucket,
-          Prefix: prefix,
-          ContinuationToken: continuationToken
-        })
-      );
-      const objects = (listed.Contents || [])
-        .map((obj) => (obj.Key ? { Key: obj.Key } : null))
-        .filter(
-          (
-            obj
-          ): obj is {
-            Key: string;
-          } => obj !== null
-        );
-      if (objects.length > 0) {
-        await client.send(
-          new DeleteObjectsCommand({
-            Bucket: bucket,
-            Delete: { Objects: objects }
-          })
-        );
-      }
-      continuationToken = listed.IsTruncated
-        ? listed.NextContinuationToken
-        : undefined;
-    } while (continuationToken);
-  } catch (error) {
-    console.error("deleteObjectsWithPrefix error:", error);
-    throw error;
-  }
+  const keys = await listObjectsWithPrefix(bucket, prefix);
+  await Promise.all(keys.map((key) => deleteObject(bucket, key)));
 }

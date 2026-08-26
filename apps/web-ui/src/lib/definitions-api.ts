@@ -1,13 +1,11 @@
-import { pocToken, runnerUrl, userEmailHeader } from "./tool-runner.js";
+import { runnerUrl } from "./tool-runner.js";
 
 const N_204 = 204;
 
 const BASE_URL = runnerUrl();
 function headers(): HeadersInit {
   return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${pocToken()}`,
-    ...userEmailHeader()
+    "Content-Type": "application/json"
   };
 }
 async function readError(res: Response): Promise<string> {

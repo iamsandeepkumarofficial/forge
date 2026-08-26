@@ -5,9 +5,12 @@ import { ProjectRepository } from "../catalog/projectRepository.js";
 import { GithubOAuthService } from "../integrations/githubOAuth.js";
 import type { ChatFeature, Project } from "@forge/db";
 import {
+  allocateReservedAppPort,
   DEFAULT_SANDBOX_IMAGE,
   FIRST_APP_PORT,
   hostPortForContainerPort,
+  isReservedAppPort,
+  LAST_APP_PORT,
   RESERVED_PORTS,
   sandboxContainerName,
   sessionHostPortBase,
@@ -19,7 +22,6 @@ import {
   assertSafeBranch,
   cloneGithubIntoVolume,
   isRepoInitialized,
-  materializeUploadIntoVolume,
   repoDirForProject,
   type LocalFolderSource
 } from "./sessionSandbox/materialize.js";
@@ -27,10 +29,13 @@ import {
 const execFileAsync = promisify(execFile);
 
 export {
+  allocateReservedAppPort,
   DEFAULT_SANDBOX_IMAGE,
   WORKSPACE_MOUNT,
   RESERVED_PORTS,
   FIRST_APP_PORT,
+  LAST_APP_PORT,
+  isReservedAppPort,
   sessionHostPortBase,
   hostPortForContainerPort,
   sessionVolumeName,
@@ -111,21 +116,18 @@ export async function provisionSessionSandbox(
   const containerId = handle.ref;
   const repoInitialized = await isRepoInitialized(containerName);
   if (!repoInitialized) {
-    if (project.source === "github") {
-      const token = await githubOAuth.getAccessToken(chat.userId);
-      await cloneGithubIntoVolume({
-        containerName,
-        project,
-        branch: chat.branchName,
-        token: token ?? undefined
-      });
-    } else {
-      await materializeUploadIntoVolume({
-        containerName,
-        project,
-        branch: chat.branchName
-      });
+    if (project.source !== "github") {
+      throw new Error(
+        `Cannot materialize project source "${project.source}" — connect a local folder or GitHub repo.`
+      );
     }
+    const token = await githubOAuth.getAccessToken(chat.userId);
+    await cloneGithubIntoVolume({
+      containerName,
+      project,
+      branch: chat.branchName,
+      token: token ?? undefined
+    });
   }
   await execFileAsync("docker", [
     "exec",

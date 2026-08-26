@@ -40,8 +40,7 @@ describe("workbench API", () => {
     } as Response);
     const sessions = await fetchWorkbenchSessions("p1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1/workbench-sessions",
-      expect.any(Object)
+      "http://127.0.0.1:4000/api/projects/p1/workbench-sessions"
     );
     expect(sessions).toEqual([]);
   });

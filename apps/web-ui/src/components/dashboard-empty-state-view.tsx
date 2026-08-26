@@ -7,32 +7,15 @@ import type { useDashboardEmptyState } from "./use-dashboard-empty-state.js";
 const SUGGESTION_ICONS = [Mail, ImageIcon, Gamepad2, Calculator] as const;
 
 type FullState = ReturnType<typeof useDashboardEmptyState>;
-type ViewState = Omit<
-  FullState,
-  | "fileInputRef"
-  | "folderInputRef"
-  | "importSectionRef"
-  | "handleZipFile"
-  | "handleFolderFiles"
->;
+type ViewState = Omit<FullState, "importSectionRef">;
 
 export function DashboardEmptyStateView(options: {
   state: ViewState;
   onImportSectionRef: (el: HTMLDivElement | null) => void;
-  onChooseZip: () => void;
-  onChooseFolder: () => void;
 }) {
-  const { state: s, onImportSectionRef, onChooseZip, onChooseFolder } = options;
+  const { state: s, onImportSectionRef } = options;
   return (
-    <div
-      className={`min-h-screen px-6 py-10 ${s.dragOver ? "bg-muted/40" : ""}`}
-      onDragOver={(e) => {
-        e.preventDefault();
-        s.setDragOver(true);
-      }}
-      onDragLeave={() => s.setDragOver(false)}
-      onDrop={(e) => void s.onDrop(e)}
-    >
+    <div className="min-h-screen px-6 py-10">
       <div className="mx-auto max-w-5xl space-y-8">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -47,11 +30,7 @@ export function DashboardEmptyStateView(options: {
             </h1>
           </div>
         </div>
-        <DashboardBuildPrompt
-          state={s}
-          onChooseZip={onChooseZip}
-          onChooseFolder={onChooseFolder}
-        />
+        <DashboardBuildPrompt state={s} />
         {s.error && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             {s.error}
@@ -61,12 +40,16 @@ export function DashboardEmptyStateView(options: {
           <EmptyStateImportPanels
             busy={s.busy}
             loading={s.loading}
+            desktop={s.desktop}
+            showPathInput={s.showPathInput}
+            localPath={s.localPath}
+            onLocalPathChange={s.setLocalPath}
             onGithub={() => {
               s.setError(null);
               s.setShowGithubPicker(true);
             }}
-            onFolder={onChooseFolder}
-            onZip={onChooseZip}
+            onSelectFolder={() => void s.handleSelectFolder()}
+            onConnectPath={() => void s.handleConnectPath()}
           />
         </div>
       </div>
@@ -82,12 +65,8 @@ export function DashboardEmptyStateView(options: {
   );
 }
 
-function DashboardBuildPrompt(options: {
-  state: ViewState;
-  onChooseZip: () => void;
-  onChooseFolder: () => void;
-}) {
-  const { state: s, onChooseZip, onChooseFolder } = options;
+function DashboardBuildPrompt(options: { state: ViewState }) {
+  const { state: s } = options;
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 rounded-xl border border-border bg-background p-2 shadow-sm">
@@ -114,11 +93,7 @@ function DashboardBuildPrompt(options: {
         </button>
       </div>
       <SuggestionChips state={s} />
-      <UploadHints
-        state={s}
-        onChooseZip={onChooseZip}
-        onChooseFolder={onChooseFolder}
-      />
+      <ConnectHints state={s} />
     </div>
   );
 }
@@ -155,38 +130,26 @@ function SuggestionChips(options: { state: ViewState }) {
   );
 }
 
-function UploadHints(options: {
-  state: ViewState;
-  onChooseZip: () => void;
-  onChooseFolder: () => void;
-}) {
-  const { state: s, onChooseZip, onChooseFolder } = options;
+function ConnectHints(options: { state: ViewState }) {
+  const { state: s } = options;
   return (
     <>
       <p className="text-sm text-muted-foreground">
-        You can also drag and drop a project folder or ZIP, or choose a{" "}
+        You can also{" "}
         <button
           type="button"
           className="text-primary underline-offset-2 hover:underline"
           disabled={s.busy}
-          onClick={onChooseZip}
+          onClick={() => void s.handleSelectFolder()}
         >
-          file
+          select a folder
         </button>{" "}
-        or{" "}
-        <button
-          type="button"
-          className="text-primary underline-offset-2 hover:underline"
-          disabled={s.busy}
-          onClick={onChooseFolder}
-        >
-          folder
-        </button>
-        .
+        to connect a local project
+        {s.desktop ? "" : " (enter an absolute path below)"}.
       </p>
       {s.buildHint && (
         <p className="text-sm text-muted-foreground">
-          Connect a repo or upload a folder/ZIP to start
+          Connect a repo or select a folder to start
           {s.pendingTitle ? (
             <>
               {" "}

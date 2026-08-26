@@ -13,7 +13,7 @@ import {
   jsonb,
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
-export const projectSourceEnum = pgEnum("project_source", ["github", "upload", "local"]);
+export const projectSourceEnum = pgEnum("project_source", ["github", "local"]);
 export const projectStatusEnum = pgEnum("project_status", [
   "available",
   "unavailable"

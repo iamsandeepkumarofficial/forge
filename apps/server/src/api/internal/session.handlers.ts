@@ -14,6 +14,7 @@ import {
   stopApp,
   appLogs,
   appLogsForSession,
+  autoStartPreview,
   type ForgeConfig
 } from "../../projects/appRunner.js";
 import { scaffoldForgeConfig } from "../../projects/launchScaffold.js";
@@ -50,6 +51,11 @@ export async function handleSessionStart(
     const source = parseLocalFolderSource(req.body);
     const result = await provisionSessionSandbox(sessionId.trim(), {
       source
+    });
+    void autoStartPreview(sessionId.trim()).catch((err) => {
+      console.warn(
+        `[session ${sessionId}] autoStartPreview failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     });
     res.json({ sessionId, ...result });
   } catch (err) {

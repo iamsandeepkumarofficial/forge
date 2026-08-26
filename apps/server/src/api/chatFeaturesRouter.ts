@@ -4,7 +4,7 @@ import {
   VALID_TYPES,
   assertValidChatFeatureType
 } from "../projects/chatFeatureService.js";
-import { createPocAuth } from "./pocAuth.js";
+import { createLocalUserMiddleware } from "./pocAuth.js";
 import {
   handleCreateChat,
   handleGetChat,
@@ -22,7 +22,7 @@ import {
 } from "./chatFeaturesRouter/patchHandlers.js";
 
 const router = Router();
-const pocAuth = createPocAuth(process.env.FORGE_POC_TOKEN || "");
+const pocAuth = createLocalUserMiddleware();
 
 router.post("/:projectId/chats", pocAuth, (req, res) => {
   return handleCreateChat(req, res);

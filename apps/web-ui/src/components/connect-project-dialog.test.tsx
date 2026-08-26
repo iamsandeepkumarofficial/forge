@@ -2,9 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ConnectProjectDialog } from "./connect-project-dialog";
 
+vi.mock("../lib/desktop.js", () => ({
+  isDesktop: () => false,
+  pickFolder: vi.fn()
+}));
 vi.mock("../lib/projects-api.js", () => ({
   connectProject: vi.fn(),
-  uploadProject: vi.fn()
+  connectLocalProject: vi.fn()
 }));
 vi.mock("./github-repo-picker.js", () => ({
   GithubRepoPicker: ({
@@ -21,7 +25,7 @@ vi.mock("./github-repo-picker.js", () => ({
     ) : null
 }));
 
-import { connectProject, uploadProject } from "../lib/projects-api.js";
+import { connectProject, connectLocalProject } from "../lib/projects-api.js";
 
 describe("ConnectProjectDialog", () => {
   beforeEach(() => {
@@ -29,7 +33,7 @@ describe("ConnectProjectDialog", () => {
       projectId: "p1",
       alreadyConnected: false
     });
-    vi.mocked(uploadProject).mockResolvedValue({ projectId: "p1" });
+    vi.mocked(connectLocalProject).mockResolvedValue({ projectId: "p1" });
   });
 
   it("renders connect heading and cancel closes", () => {
@@ -40,20 +44,18 @@ describe("ConnectProjectDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("uploads a zip and notifies connected", async () => {
+  it("connects a local path and notifies connected", async () => {
     const onConnected = vi.fn();
     const onClose = vi.fn();
-    const { container } = render(
+    render(
       <ConnectProjectDialog onClose={onClose} onConnected={onConnected} />
     );
-    const input = container.querySelector(
-      'input[type="file"]'
-    ) as HTMLInputElement;
-    const file = new File(["zip"], "app.zip", { type: "application/zip" });
-    fireEvent.change(input, { target: { files: [file] } });
-    fireEvent.click(screen.getByRole("button", { name: "Upload ZIP" }));
+    fireEvent.change(screen.getByPlaceholderText(/\/Users\/you\/projects/i), {
+      target: { value: "/tmp/my-app" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() => {
-      expect(uploadProject).toHaveBeenCalledWith(file);
+      expect(connectLocalProject).toHaveBeenCalledWith("/tmp/my-app");
       expect(onConnected).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
     });

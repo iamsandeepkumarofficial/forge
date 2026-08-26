@@ -14,10 +14,10 @@ export function coerceChatProvider(raw: string | undefined): LlmProvider {
   return resolveProvider(raw);
 }
 
-export function resolveChatLanguageModel(
+export async function resolveChatLanguageModel(
   provider: LlmProvider | string,
   modelId?: string
-): LanguageModel {
+): Promise<LanguageModel> {
   return resolveLanguageModel({
     provider: coerceChatProvider(
       typeof provider === "string" ? provider : String(provider)

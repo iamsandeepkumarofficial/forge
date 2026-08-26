@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   ConnectProjectError,
   formatBytes,
@@ -38,20 +38,5 @@ describe("shared constants", () => {
     expect(N_204).toBe(204);
     expect(N_800).toBe(800);
     expect(N_1024).toBe(1024);
-  });
-});
-
-describe("pocToken", () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it("reads VITE_FORGE_POC_TOKEN from the environment", async () => {
-    vi.stubEnv("VITE_FORGE_POC_TOKEN", "test-token");
-    const { pocToken } = await import("./shared");
-    expect(pocToken()).toBe("test-token");
   });
 });

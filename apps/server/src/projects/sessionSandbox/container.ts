@@ -253,6 +253,7 @@ export async function ensureContainer(
   if (needsBootstrap) {
     await bootstrapSandboxTools(name);
   }
+  await repairHostPortBindings({ containerName: name, portBase });
   const { stdout } = await execFileAsync("docker", [
     "inspect",
     "-f",
@@ -260,4 +261,40 @@ export async function ensureContainer(
     name
   ]);
   return stdout.trim();
+}
+
+/**
+ * Docker Desktop (esp. gVisor) can drop published host ports while the
+ * container keeps running. Restart once if the reserved preview ports are gone.
+ */
+export async function repairHostPortBindings(options: {
+  containerName: string;
+  portBase: number;
+}): Promise<boolean> {
+  const { isHostTcpListening } = await import("../backgroundJob.js");
+  const missing = await missingHostPorts(options.portBase, isHostTcpListening);
+  if (missing.length === 0) return false;
+  console.warn(
+    `[sandbox] host ports missing for ${options.containerName}: ${missing.join(", ")}; restarting container to rebind`
+  );
+  await docker(["restart", options.containerName]);
+  // Give Docker Desktop a moment to re-attach port proxies.
+  for (let i = 0; i < 20; i += 1) {
+    const stillMissing = await missingHostPorts(
+      options.portBase,
+      isHostTcpListening
+    );
+    if (stillMissing.length === 0) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return true;
+}
+
+async function missingHostPorts(
+  portBase: number,
+  isOpen: (port: number) => Promise<boolean>
+): Promise<number[]> {
+  const ports = Array.from({ length: RESERVED_PORTS }, (_, i) => portBase + i);
+  const flags = await Promise.all(ports.map((p) => isOpen(p)));
+  return ports.filter((_, i) => !flags[i]);
 }

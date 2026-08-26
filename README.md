@@ -66,17 +66,17 @@ Forge is designed to ship as a **Tauri** desktop app that:
 
 - Detects Docker and runs `docker compose up`
 - Builds the sandbox image when needed
-- Spawns the server, orchestrator, and preview-plane
-- Injects a loopback auth token and opens the chat UI in a webview
+- Spawns the server and orchestrator (preview reverse-proxy runs in-process on the server)
+- Opens the chat UI in a webview (single-user local mode — no POC token)
 - Reads LLM settings from `~/.forge/config.json`
 
 The desktop shell (`apps/desktop`) is **work in progress / scaffold**—contributors should use the docker-compose + `pnpm dev` path above until the supervisor lands. Design details: [RFC 0002: Local Desktop Runtime](./docs/rfcs/0002-local-desktop-runtime.md).
 
 ## Architecture (short)
 
-- **tool-plane** (`apps/server`) — HTTP API, sandbox lifecycle, tools
+- **tool-plane** (`apps/server`) — HTTP API, sandbox lifecycle, tools, and in-process preview proxy (`*.preview.localhost:8081`)
 - **orchestrator** (`packages/orchestrator`) — Temporal worker for interactive chat turns
-- **preview-plane** (`apps/preview-plane`) — local `*.preview.localhost` proxy
+- **preview-plane** (`apps/preview-plane`) — optional standalone preview proxy (k8s / `PREVIEW_IN_PROCESS=0`)
 - **web-ui** (`apps/web-ui`) — chat workbench
 - **Docker sandbox** — per-session isolated workspace
 

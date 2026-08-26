@@ -1,4 +1,4 @@
-import { BASE_URL, ConnectProjectError, pocToken } from "./shared.js";
+import { BASE_URL, ConnectProjectError } from "./shared.js";
 import { parseApiErrorText } from "./project-errors.js";
 
 export interface ChatComment {
@@ -23,8 +23,7 @@ export async function fetchComments(
   }
   try {
     const response = await fetch(
-      `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/comments`,
-      { headers: { Authorization: `Bearer ${pocToken()}` } }
+      `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/comments`
     );
     if (!response.ok) {
       const errorText = await response.text();
@@ -67,8 +66,7 @@ export async function createComment(options: {
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${pocToken()}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({ text })
       }

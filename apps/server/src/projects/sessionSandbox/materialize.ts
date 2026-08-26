@@ -1,13 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import { assertSafeRepoDirectoryName, parseGithubSlug } from "@forge/core";
-import {
-  getObject,
-  listObjectsWithPrefix
-} from "../../services/storage/objectStore.js";
 import type { Project } from "@forge/db";
 import { docker } from "./container.js";
 import { WORKSPACE_MOUNT } from "./constants.js";
@@ -120,55 +115,16 @@ export async function copyLocalFolderIntoVolume(options: {
   hostPath: string;
 }): Promise<void> {
   const hostPath = await assertLocalFolderPath(options.hostPath);
-  await docker(["exec", options.containerName, "sh", "-c", `mkdir -p "${WORKSPACE_MOUNT}"`]);
-  await docker(["cp", `${hostPath}/.`, `${options.containerName}:${WORKSPACE_MOUNT}`]);
-}
-
-export async function materializeUploadIntoVolume(options: {
-  containerName: string;
-  project: Project;
-  branch: string;
-}): Promise<void> {
-  const { containerName, project, branch } = options;
-  if (!project.canonicalKey) {
-    throw new Error(
-      `Project "${project.name}" has no stored archive (canonicalKey missing) — re-upload it.`
-    );
-  }
-  const bucket = process.env.OBJECT_STORE_BUCKET || "projects";
-  const prefix = project.canonicalKey;
-  const keys = await listObjectsWithPrefix(bucket, `${prefix}/`);
-  if (keys.length === 0) {
-    throw new Error(
-      `Stored archive not found in object storage for project "${project.name}"`
-    );
-  }
-  const dest = WORKSPACE_MOUNT;
-  await docker(["exec", containerName, "sh", "-c", `mkdir -p "${dest}"`]);
-  const stage = await fs.mkdtemp(path.join(os.tmpdir(), "forge-upload-"));
-  try {
-    for (const key of keys) {
-      const relativePath = key.slice(prefix.length + 1);
-      if (!relativePath) continue;
-      const bytes = await getObject(bucket, key);
-      if (!bytes) continue;
-      const target = path.join(stage, relativePath);
-      await fs.mkdir(path.dirname(target), { recursive: true });
-      await fs.writeFile(target, Buffer.from(bytes));
-    }
-    await docker(["cp", `${stage}/.`, `${containerName}:${dest}`]);
-  } finally {
-    await fs.rm(stage, { recursive: true, force: true });
-  }
   await docker([
     "exec",
-    "-e",
-    `BRANCH=${branch}`,
-    containerName,
+    options.containerName,
     "sh",
     "-c",
-    'set -e; cd "' +
-      dest +
-      '"; if [ ! -d .git ]; then git init -q; git config user.email "forge@local"; git config user.name "Forge Agent"; git add -A; git commit -q -m "Initial import from uploaded archive" || true; fi; git checkout -B "$BRANCH"'
+    `mkdir -p "${WORKSPACE_MOUNT}"`
+  ]);
+  await docker([
+    "cp",
+    `${hostPath}/.`,
+    `${options.containerName}:${WORKSPACE_MOUNT}`
   ]);
 }

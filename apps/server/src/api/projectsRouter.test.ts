@@ -55,6 +55,10 @@ describe("createProjectsRouter", () => {
   before(async () => {
     mock.module("./pocAuth.js", {
       exports: {
+        createLocalUserMiddleware: () =>
+          (_r: unknown, _s: unknown, n: () => void) =>
+            n(),
+        createLocalUserMiddleware: () => (_r: unknown, _s: unknown, n: () => void) => n(),
         createPocAuth: () => (_r: unknown, _s: unknown, n: () => void) => n()
       }
     });
@@ -85,21 +89,7 @@ describe("createProjectsRouter", () => {
               : null;
           }
           async deleteProject() {}
-          async uploadArchive() {
-            return { projectId: "p2" };
-          }
         }
-      }
-    });
-    mock.module("multer", {
-      exports: {
-        default: Object.assign(
-          () => ({
-            single: () => (_req: unknown, _res: unknown, next: () => void) =>
-              next()
-          }),
-          { memoryStorage: () => ({}) }
-        )
       }
     });
     ({ createProjectsRouter } = await import("./projectsRouter.js"));

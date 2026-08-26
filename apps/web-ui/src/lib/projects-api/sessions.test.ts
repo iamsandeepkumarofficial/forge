@@ -34,8 +34,7 @@ describe("sessions API", () => {
     } as Response);
     await getSessionStatus("s1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/internal/session/status?sessionId=s1",
-      expect.any(Object)
+      "http://127.0.0.1:4000/internal/session/status?sessionId=s1"
     );
   });
 

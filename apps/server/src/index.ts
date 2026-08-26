@@ -2,23 +2,19 @@ import "./env.js";
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import { createPocAuth } from "./api/pocAuth.js";
+import { createLocalUserMiddleware } from "./api/pocAuth.js";
 import { connectPostgres } from "@forge/db";
 import { createInternalRouter } from "./api/internal/internal.router.js";
 import { createProjectsRouter } from "./api/projectsRouter.js";
 import { createChatFeaturesRouter } from "./api/chatFeaturesRouter.js";
 import { createAttachmentsRouter } from "./api/attachmentsRouter.js";
 import { createChatRouter } from "./api/chatRouter.js";
+import { startInProcessPreview } from "./preview/startInProcessPreview.js";
 
 const N_120 = 120;
 const N_1200 = 1200;
 const N_4000 = 4000;
 
-const pocToken = process.env.FORGE_POC_TOKEN?.trim();
-if (!pocToken) {
-  process.stderr.write("[forge-tool-plane] FORGE_POC_TOKEN is required\n");
-  process.exit(1);
-}
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "32mb" }));
@@ -42,11 +38,11 @@ try {
   );
   process.exit(1);
 }
-const pocAuth = createPocAuth(pocToken);
+const localUser = createLocalUserMiddleware();
 app.use("/api", createChatRouter());
-app.use("/api/projects", pocAuth, createChatFeaturesRouter());
-app.use("/api/projects", pocAuth, createAttachmentsRouter());
-app.use("/api/projects", pocAuth, createProjectsRouter());
+app.use("/api/projects", localUser, createChatFeaturesRouter());
+app.use("/api/projects", localUser, createAttachmentsRouter());
+app.use("/api/projects", localUser, createProjectsRouter());
 app.use(
   "/internal",
   rateLimit({
@@ -54,13 +50,18 @@ app.use(
     max: Number(process.env.INTERNAL_RATE_LIMIT_PER_MIN || N_1200),
     message: { error: "Too many requests, please try again later." }
   }),
-  createInternalRouter(pocToken)
+  createInternalRouter()
 );
 const port = Number(process.env.PORT || N_4000);
 const bindHost =
   process.env.FORGE_BIND_LOOPBACK === "1"
     ? "127.0.0.1"
     : process.env.FORGE_BIND_HOST?.trim() || "127.0.0.1";
+
+// Hostname preview proxy shares this process (local/desktop). Set
+// PREVIEW_IN_PROCESS=0 to use a standalone @forge/preview-plane instead.
+startInProcessPreview(bindHost);
+
 app.listen(port, bindHost, () => {
   process.stdout.write(
     `Forge tool plane listening on http://${bindHost}:${port}\n`

@@ -40,8 +40,7 @@ describe("chats API", () => {
     } as Response);
     const chats = await fetchChats("p1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1/chats",
-      expect.any(Object)
+      "http://127.0.0.1:4000/api/projects/p1/chats"
     );
     expect(chats).toHaveLength(1);
   });
@@ -53,8 +52,7 @@ describe("chats API", () => {
     } as Response);
     const chat = await fetchChat("p1", "c1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1/chats/c1",
-      expect.any(Object)
+      "http://127.0.0.1:4000/api/projects/p1/chats/c1"
     );
     expect(chat.id).toBe("c1");
   });

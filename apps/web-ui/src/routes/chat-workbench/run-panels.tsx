@@ -8,10 +8,27 @@ export { useApps } from "./use-apps.js";
 export function AppPreviewPane({ sessionId }: { sessionId: string }) {
   const { apps } = useApps(sessionId);
   const webRunning = apps.filter((a) => a.type === "web" && a.running && a.url);
+  const webRunningNoUrl = apps.filter(
+    (a) => a.type === "web" && a.running && !a.url
+  );
   const [selected, setSelected] = useState<string>("");
   const [reloadNonce, setReloadNonce] = useState(0);
   const active = webRunning.find((a) => a.name === selected) ?? webRunning[0];
   if (webRunning.length === 0) {
+    if (webRunningNoUrl.length > 0) {
+      const ports = webRunningNoUrl
+        .map((a) => (a.port != null ? `:${a.port}` : a.name))
+        .join(", ");
+      return (
+        <p className="p-4 text-sm text-muted-foreground">
+          App is running inside the sandbox ({ports}) but has no preview URL.
+          Forge only publishes ports{" "}
+          <span className="font-medium">3000–3009</span>. Set the app port in{" "}
+          <span className="font-medium">.forge/launch.json</span> to that range,
+          stop the app in the Run tab, then start it again.
+        </p>
+      );
+    }
     return (
       <p className="p-4 text-sm text-muted-foreground">
         No web app is running. Open the <span className="font-medium">Run</span>{" "}

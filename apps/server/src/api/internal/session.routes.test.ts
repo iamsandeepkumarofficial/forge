@@ -75,7 +75,8 @@ describe("mountSessionRoutes", () => {
         runApp: async () => ({ name: "web", running: true }),
         stopApp: async () => undefined,
         appLogs: async () => "log",
-        appLogsForSession: async () => "log"
+        appLogsForSession: async () => "log",
+        autoStartPreview: async () => undefined
       }
     });
     mock.module("../../projects/launchScaffold.js", {

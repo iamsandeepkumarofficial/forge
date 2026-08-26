@@ -39,7 +39,6 @@ export async function api(
   const res = await fetch(`${env.toolRunnerUrl}${pathname}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${env.pocToken}`,
       "Content-Type": "application/json",
       ...(init?.headers ?? {})
     }

@@ -1,4 +1,4 @@
-import { Folder, Loader2, Upload } from "lucide-react";
+import { Folder, Loader2 } from "lucide-react";
 import { TEMPLATES } from "./empty-state-shared.js";
 
 function GitHubMark({ className }: { className?: string }) {
@@ -16,10 +16,14 @@ function GitHubMark({ className }: { className?: string }) {
 
 type ImportPanelOptions = {
   busy: boolean;
-  loading: "github" | "upload" | null;
+  loading: "github" | "local" | null;
+  desktop: boolean;
+  showPathInput: boolean;
+  localPath: string;
+  onLocalPathChange: (value: string) => void;
   onGithub: () => void;
-  onFolder: () => void;
-  onZip: () => void;
+  onSelectFolder: () => void;
+  onConnectPath: () => void;
 };
 
 function ProviderButtons(options: ImportPanelOptions) {
@@ -63,44 +67,69 @@ function ProviderButtons(options: ImportPanelOptions) {
   );
 }
 
-function LocalUploadSection(options: ImportPanelOptions) {
-  const { busy, loading, onFolder, onZip } = options;
+function LocalFolderSection(options: ImportPanelOptions) {
+  const {
+    busy,
+    loading,
+    desktop,
+    showPathInput,
+    localPath,
+    onLocalPathChange,
+    onSelectFolder,
+    onConnectPath
+  } = options;
   return (
     <div className="mt-4 border-t border-border pt-4">
       <button
         type="button"
         disabled={busy}
-        onClick={onFolder}
+        onClick={onSelectFolder}
         className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm hover:bg-muted/50 disabled:opacity-50"
       >
-        {loading === "upload" ? (
+        {loading === "local" ? (
           <>
             <Loader2 className="size-4 animate-spin" />
-            Uploading…
+            Connecting…
           </>
         ) : (
           <>
-            <Upload className="size-4" />
-            Upload folder or ZIP
+            <Folder className="size-4" />
+            Select folder
           </>
         )}
       </button>
-      <p className="mt-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-start gap-1.5">
-          <Folder className="mt-0.5 size-3.5 shrink-0" />
-          <span>
-            Drop a folder anywhere on this page, or{" "}
-            <button
-              type="button"
-              className="text-primary underline-offset-2 hover:underline"
+      {showPathInput && !desktop && (
+        <form
+          className="mt-3 space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConnectPath();
+          }}
+        >
+          <label className="block text-xs font-medium text-muted-foreground">
+            Absolute folder path
+            <input
+              type="text"
+              value={localPath}
+              onChange={(e) => onLocalPathChange(e.target.value)}
+              placeholder="/Users/you/projects/my-app"
               disabled={busy}
-              onClick={onZip}
-            >
-              choose a ZIP
-            </button>
-            . Large dirs like node_modules are skipped.
-          </span>
-        </span>
+              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busy || !localPath.trim()}
+            className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            Connect
+          </button>
+        </form>
+      )}
+      <p className="mt-2 text-xs text-muted-foreground">
+        {desktop
+          ? "Choose a project folder on this machine. Large dirs like node_modules are skipped when copying."
+          : "Native folder picker requires the desktop app. Paste an absolute path above to connect in the browser."}
       </p>
     </div>
   );
@@ -114,20 +143,8 @@ function ImportGitSection(options: ImportPanelOptions) {
         Select a Git provider to import an existing project from a Git
         repository.
       </p>
-      <ProviderButtons
-        busy={options.busy}
-        loading={options.loading}
-        onGithub={options.onGithub}
-        onFolder={options.onFolder}
-        onZip={options.onZip}
-      />
-      <LocalUploadSection
-        busy={options.busy}
-        loading={options.loading}
-        onGithub={options.onGithub}
-        onFolder={options.onFolder}
-        onZip={options.onZip}
-      />
+      <ProviderButtons {...options} />
+      <LocalFolderSection {...options} />
     </section>
   );
 }
@@ -164,16 +181,9 @@ function CloneTemplateSection() {
 }
 
 export function EmptyStateImportPanels(options: ImportPanelOptions) {
-  const { busy, loading, onGithub, onFolder, onZip } = options;
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <ImportGitSection
-        busy={busy}
-        loading={loading}
-        onGithub={onGithub}
-        onFolder={onFolder}
-        onZip={onZip}
-      />
+      <ImportGitSection {...options} />
       <CloneTemplateSection />
     </div>
   );

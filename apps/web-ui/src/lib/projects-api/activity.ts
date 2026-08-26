@@ -1,4 +1,4 @@
-import { BASE_URL, ConnectProjectError, pocToken } from "./shared.js";
+import { BASE_URL, ConnectProjectError } from "./shared.js";
 
 export type ActivityFilter = "all" | "comments" | "history" | "worklog";
 export interface ActivityEntry {
@@ -24,8 +24,7 @@ export async function getActivity(options: {
   const { projectId, chatId, filter = "all" } = options;
   const params = new URLSearchParams({ filter });
   const response = await fetch(
-    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/activity?${params}`,
-    { headers: { Authorization: `Bearer ${pocToken()}` } }
+    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/activity?${params}`
   );
   if (!response.ok) {
     throw new ConnectProjectError("Failed to fetch activity");

@@ -55,6 +55,7 @@ describe("createAttachmentsRouter", () => {
   before(async () => {
     mock.module("./pocAuth.js", {
       exports: {
+        createLocalUserMiddleware: () => (_r: unknown, _s: unknown, n: () => void) => n(),
         createPocAuth: () => (_r: unknown, _s: unknown, n: () => void) => n()
       }
     });

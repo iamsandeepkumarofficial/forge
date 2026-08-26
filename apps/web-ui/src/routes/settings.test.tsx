@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import {
   SettingsPage,
@@ -33,18 +33,39 @@ describe("settings LLM storage", () => {
 describe("SettingsPage", () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (url.includes("/api/settings/llm")) {
+          if (method === "PUT") {
+            return new Response(init?.body ? String(init.body) : "{}", {
+              status: 200,
+              headers: { "Content-Type": "application/json" }
+            });
+          }
+          return new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
   });
   afterEach(() => {
     localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
-  it("loads saved values and saves on submit", () => {
+  it("loads saved values and saves on submit", async () => {
     saveLlmSettings({
       openaiApiKey: "existing",
       anthropicApiKey: "",
-      openaiCompatibleBaseUrl: "",
+      openaiCompatibleBaseUrl: "https://example.com/v1",
       openaiCompatibleApiKey: "",
-      openaiCompatibleModel: ""
+      openaiCompatibleModel: "m1"
     });
     render(
       <MemoryRouter>
@@ -55,10 +76,21 @@ describe("SettingsPage", () => {
     const openai = document.getElementById(
       "openaiApiKey"
     ) as HTMLInputElement;
-    expect(openai.value).toBe("existing");
+    await waitFor(() => expect(openai.value).toBe("existing"));
     fireEvent.change(openai, { target: { value: "sk-new" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(loadLlmSettings().openaiApiKey).toBe("sk-new");
-    expect(screen.getByText("Saved")).toBeTruthy();
+    fireEvent.submit(openai.closest("form")!);
+    await waitFor(() =>
+      expect(loadLlmSettings().openaiApiKey).toBe("sk-new")
+    );
+    await waitFor(() => {
+      const fetchMock = vi.mocked(fetch);
+      expect(
+        fetchMock.mock.calls.some(
+          (call) =>
+            String(call[0]).includes("/api/settings/llm") &&
+            (call[1]?.method ?? "").toUpperCase() === "PUT"
+        )
+      ).toBe(true);
+    });
   });
 });

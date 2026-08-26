@@ -41,7 +41,7 @@ describe("schema tables", () => {
   });
 
   it("defines project and chat feature enum values", () => {
-    assert.deepEqual(projectSourceEnum.enumValues, ["github", "upload"]);
+    assert.deepEqual(projectSourceEnum.enumValues, ["github", "local"]);
     assert.deepEqual(chatFeatureKindEnum.enumValues, ["ticket", "workbench"]);
     assert.ok(chatFeatureStatusEnum.enumValues.includes("planning"));
     assert.ok(chatFeatureStatusEnum.enumValues.includes("done"));

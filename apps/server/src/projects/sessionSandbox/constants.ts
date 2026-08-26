@@ -8,6 +8,8 @@ export const DEFAULT_SANDBOX_IMAGE = "forge-sandbox:latest";
 export const WORKSPACE_MOUNT = "/workspace";
 export const RESERVED_PORTS = 10;
 export const FIRST_APP_PORT = 3000;
+/** Inclusive upper bound of Docker-published app ports (3000–3009). */
+export const LAST_APP_PORT = FIRST_APP_PORT + RESERVED_PORTS - 1;
 const HOST_PORT_FLOOR = 40000;
 const HOST_PORT_BLOCKS = 250;
 
@@ -20,6 +22,23 @@ export function sessionHostPortBase(sessionId: string): number {
   let h = 0;
   for (const c of sessionId) h = (h * HASH_PRIME + c.charCodeAt(0)) >>> 0;
   return HOST_PORT_FLOOR + (h % HOST_PORT_BLOCKS) * RESERVED_PORTS;
+}
+
+export function isReservedAppPort(port: number): boolean {
+  return (
+    Number.isInteger(port) && port >= FIRST_APP_PORT && port <= LAST_APP_PORT
+  );
+}
+
+/** Next free container port in the published 3000–3009 range, or null if full. */
+export function allocateReservedAppPort(
+  usedPorts: Iterable<number>
+): number | null {
+  const used = new Set(usedPorts);
+  for (let port = FIRST_APP_PORT; port <= LAST_APP_PORT; port++) {
+    if (!used.has(port)) return port;
+  }
+  return null;
 }
 
 export function hostPortForContainerPort(

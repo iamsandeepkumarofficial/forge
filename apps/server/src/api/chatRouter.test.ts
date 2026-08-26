@@ -46,7 +46,8 @@ describe("createChatRouter", () => {
   let createChatRouter;
   before(async () => {
     mock.module("./pocAuth.js", {
-      exports: { createPocAuth: () => (_r, _s, n) => n() }
+      exports: { createLocalUserMiddleware: () => (_r, _s, n) => n(),
+      createPocAuth: () => (_r, _s, n) => n() }
     });
     mock.module("../catalog/chatFeatureRepository.js", {
       exports: {

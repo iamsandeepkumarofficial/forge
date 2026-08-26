@@ -1,4 +1,4 @@
-import { BASE_URL, ConnectProjectError, pocToken } from "./shared.js";
+import { BASE_URL, ConnectProjectError } from "./shared.js";
 
 export type WorkflowNodeState =
   | "done"
@@ -39,8 +39,7 @@ export async function getWorkflow(
   chatId: string
 ): Promise<WorkflowGraph> {
   const response = await fetch(
-    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow`,
-    { headers: { Authorization: `Bearer ${pocToken()}` } }
+    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow`
   );
   if (!response.ok) {
     throw new ConnectProjectError("Failed to fetch workflow");
@@ -67,8 +66,7 @@ export async function getStageMessages(options: {
 }): Promise<StageMessagesResponse> {
   const { projectId, chatId, stageId } = options;
   const response = await fetch(
-    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow/stages/${stageId}/messages`,
-    { headers: { Authorization: `Bearer ${pocToken()}` } }
+    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow/stages/${stageId}/messages`
   );
   if (!response.ok) {
     throw new ConnectProjectError("Failed to fetch stage messages");
@@ -104,8 +102,7 @@ export async function getWorkflowTranscript(
   chatId: string
 ): Promise<WorkflowTranscript> {
   const response = await fetch(
-    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow/transcript`,
-    { headers: { Authorization: `Bearer ${pocToken()}` } }
+    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow/transcript`
   );
   if (!response.ok) {
     throw new ConnectProjectError("Failed to fetch workflow transcript");
@@ -121,8 +118,7 @@ export async function enterManualMode(options: {
   const response = await fetch(
     `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow/stages/${stageId}/manual`,
     {
-      method: "POST",
-      headers: { Authorization: `Bearer ${pocToken()}` }
+      method: "POST"
     }
   );
   if (!response.ok) {
@@ -138,8 +134,7 @@ export async function completeManualStage(options: {
   const response = await fetch(
     `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow/stages/${stageId}/complete`,
     {
-      method: "POST",
-      headers: { Authorization: `Bearer ${pocToken()}` }
+      method: "POST"
     }
   );
   if (!response.ok) {
@@ -155,8 +150,7 @@ export async function retryStage(options: {
   const response = await fetch(
     `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow/stages/${stageId}/retry`,
     {
-      method: "POST",
-      headers: { Authorization: `Bearer ${pocToken()}` }
+      method: "POST"
     }
   );
   if (!response.ok) {
@@ -170,8 +164,7 @@ export async function stopWorkflow(
   const response = await fetch(
     `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/workflow/stop`,
     {
-      method: "POST",
-      headers: { Authorization: `Bearer ${pocToken()}` }
+      method: "POST"
     }
   );
   if (!response.ok) {

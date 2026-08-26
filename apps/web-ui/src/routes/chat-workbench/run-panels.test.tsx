@@ -19,4 +19,25 @@ describe("run-panels", () => {
       expect(screen.getByText(/No web app is running/i)).toBeTruthy();
     });
   });
+
+  it("AppPreviewPane explains missing URL for out-of-range ports", async () => {
+    vi.mocked(fetchApps).mockResolvedValue({
+      exists: true,
+      apps: [
+        {
+          name: "web",
+          type: "web",
+          cwd: ".",
+          command: "yarn dev",
+          port: 4000,
+          running: true
+        }
+      ]
+    });
+    render(<AppPreviewPane sessionId="s1" />);
+    await waitFor(() => {
+      expect(screen.getByText(/no preview URL/i)).toBeTruthy();
+      expect(screen.getByText(/3000–3009/i)).toBeTruthy();
+    });
+  });
 });

@@ -1,7 +1,6 @@
 import {
   BASE_URL,
   ConnectProjectError,
-  pocToken,
   type ChatFeatureType,
   type ChatSummary,
   type DescriptionDocument
@@ -34,8 +33,7 @@ export async function createChat(
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${pocToken()}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           title: options?.title,
@@ -85,12 +83,7 @@ export async function fetchChats(projectId: string): Promise<ChatSummary[]> {
   }
   try {
     const response = await fetch(
-      `${BASE_URL}/api/projects/${projectId}/chats`,
-      {
-        headers: {
-          Authorization: `Bearer ${pocToken()}`
-        }
-      }
+      `${BASE_URL}/api/projects/${projectId}/chats`
     );
     if (!response.ok) {
       const errorText = await response.text();
@@ -132,8 +125,7 @@ export async function fetchChat(
   }
   try {
     const response = await fetch(
-      `${BASE_URL}/api/projects/${projectId}/chats/${chatId}`,
-      { headers: { Authorization: `Bearer ${pocToken()}` } }
+      `${BASE_URL}/api/projects/${projectId}/chats/${chatId}`
     );
     if (!response.ok) {
       const errorText = await response.text();
@@ -186,8 +178,7 @@ export async function updateChat(options: {
       {
         method: "PATCH",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${pocToken()}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify(updates)
       }
@@ -246,10 +237,7 @@ export async function deleteChat(
     const response = await fetch(
       `${BASE_URL}/api/projects/${projectId}/chats/${chatId}`,
       {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${pocToken()}`
-        }
+        method: "DELETE"
       }
     );
     if (!response.ok) {

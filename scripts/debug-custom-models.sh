@@ -9,10 +9,8 @@ set -euo pipefail
 #   - CUSTOM_BASE_URL (defaults to http://127.0.0.1:1234/v1)
 #   - CUSTOM_API_KEY (optional)
 #   - TOOL_RUNNER_URL (defaults to http://127.0.0.1:4000)
-#   - FORGE_POC_TOKEN (required for /api/models route auth)
 #
 # Example env exports:
-#   export FORGE_POC_TOKEN="sandeep-kumar"
 #   export TOOL_RUNNER_URL="http://127.0.0.1:4000"
 #   export CUSTOM_BASE_URL="http://192.168.0.6:1234/v1"
 #   export ORIGIN="http://localhost:5173"
@@ -27,17 +25,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CUSTOM_BASE_URL="${CUSTOM_BASE_URL:-http://127.0.0.1:1234/v1}"
 CUSTOM_API_KEY="${CUSTOM_API_KEY:-}"
 TOOL_RUNNER_URL="${TOOL_RUNNER_URL:-http://127.0.0.1:4000}"
-FORGE_POC_TOKEN="${FORGE_POC_TOKEN:-}"
 ORIGIN="${ORIGIN:-http://localhost:5173}"
 
 MODELS_ENDPOINT="${CUSTOM_BASE_URL%/}/models"
 FORGE_MODELS_ENDPOINT="${TOOL_RUNNER_URL%/}/api/models?provider=custom"
-
-if [[ -z "${FORGE_POC_TOKEN}" ]]; then
-  echo "Missing FORGE_POC_TOKEN env var (needed to call ${FORGE_MODELS_ENDPOINT})."
-  echo "You can export it from your .env before running this script."
-  exit 1
-fi
 
 echo "=== Config ==="
 echo "CUSTOM_BASE_URL: ${CUSTOM_BASE_URL}"
@@ -45,6 +36,7 @@ echo "MODELS_ENDPOINT:  ${MODELS_ENDPOINT}"
 echo "TOOL_RUNNER_URL:  ${TOOL_RUNNER_URL}"
 echo "FORGE endpoint:   ${FORGE_MODELS_ENDPOINT}"
 echo "ORIGIN:           ${ORIGIN}"
+echo "ROOT_DIR:         ${ROOT_DIR}"
 echo
 
 echo "=== 1) LM Studio GET /v1/models ==="
@@ -66,17 +58,10 @@ curl -sS -D - -X OPTIONS "${MODELS_ENDPOINT}" \
 echo
 
 echo "=== 3) Forge server GET /api/models?provider=custom ==="
-curl -sS -D - "${FORGE_MODELS_ENDPOINT}" \
-  -H "Authorization: Bearer ${FORGE_POC_TOKEN}" \
-  -H "X-Forge-User-Email: ${FORGE_WEB_UI_USER_EMAIL:-dev@local.forge}" \
-  -o /dev/null || true
+curl -sS -D - "${FORGE_MODELS_ENDPOINT}" -o /dev/null || true
 
 echo "--- body (first ~60 lines) ---"
-curl -sS "${FORGE_MODELS_ENDPOINT}" \
-  -H "Authorization: Bearer ${FORGE_POC_TOKEN}" \
-  -H "X-Forge-User-Email: ${FORGE_WEB_UI_USER_EMAIL:-dev@local.forge}" \
-  | head -n 60
+curl -sS "${FORGE_MODELS_ENDPOINT}" | head -n 60
 
 echo
 echo "Done."
-

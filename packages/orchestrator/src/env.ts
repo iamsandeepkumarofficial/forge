@@ -37,7 +37,6 @@ export const env = {
   toolRunnerUrl: (
     process.env.TOOL_RUNNER_URL || "http://127.0.0.1:4000"
   ).replace(/\/$/, ""),
-  pocToken: (process.env.FORGE_POC_TOKEN || "").trim(),
   get llmProvider(): LlmProvider {
     return resolveProvider(
       firstEnv("WORKFLOW_LLM_PROVIDER", "SDLC_LLM_PROVIDER")

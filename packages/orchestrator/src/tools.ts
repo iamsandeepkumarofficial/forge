@@ -74,7 +74,6 @@ async function forward(opts: {
   const res = await fetch(`${env.toolRunnerUrl}/internal/tool-execute`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.pocToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(body)
@@ -198,7 +197,12 @@ function previewTools(run: ToolRun): Record<string, Tool> {
         cwd: z.string(),
         command: z.string(),
         type: z.enum(["web", "api", "worker"]),
-        port: z.number().optional()
+        port: z
+          .number()
+          .optional()
+          .describe(
+            "Container listen port. Must be 3000–3009 (only those are published). Prefer 3000 for the first web app."
+          )
       }),
       execute: async (input) =>
         run("upsert_launch_app", input as Record<string, unknown>)

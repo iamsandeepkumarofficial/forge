@@ -17,24 +17,26 @@ describe("DashboardEmptyStateView", () => {
       loading: null,
       error: null,
       setError: vi.fn(),
-      dragOver: false,
-      setDragOver: vi.fn(),
+      desktop: false,
+      showPathInput: true,
+      localPath: "",
+      setLocalPath: vi.fn(),
       setSuggestionSet: vi.fn(),
       busy: false,
       handleBuild: vi.fn(),
       handleGithubSelect: vi.fn(),
-      onDrop: vi.fn()
+      handleSelectFolder: vi.fn(),
+      handleConnectPath: vi.fn()
     };
     render(
       <MemoryRouter>
         <DashboardEmptyStateView
           state={state as never}
           onImportSectionRef={vi.fn()}
-          onChooseZip={vi.fn()}
-          onChooseFolder={vi.fn()}
         />
       </MemoryRouter>
     );
     expect(screen.getByPlaceholderText(/I want to build/i)).toBeTruthy();
+    expect(screen.getByText(/Select folder/i)).toBeTruthy();
   });
 });

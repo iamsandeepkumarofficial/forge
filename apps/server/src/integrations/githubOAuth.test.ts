@@ -12,8 +12,7 @@ const KEYS = [
   "GITHUB_CLIENT_SECRET",
   "FORGE_WEB_UI_ORIGIN",
   "WEB_UI_ORIGIN",
-  "GITHUB_OAUTH_STATE_SECRET",
-  "FORGE_POC_TOKEN"
+  "GITHUB_OAUTH_STATE_SECRET"
 ] as const;
 const saved: Partial<Record<(typeof KEYS)[number], string | undefined>> = {};
 

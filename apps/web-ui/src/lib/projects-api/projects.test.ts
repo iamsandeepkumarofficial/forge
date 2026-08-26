@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   connectProject,
+  connectLocalProject,
   fetchProjects,
   fetchProject,
-  deleteProject,
-  uploadProject
+  deleteProject
 } from "./projects";
 import { ConnectProjectError } from "./shared";
 
@@ -35,6 +35,28 @@ describe("projects API", () => {
     });
   });
 
+  it("connectLocalProject posts localPath", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ projectId: "p-local" })
+    } as Response);
+    const result = await connectLocalProject("/tmp/my-repo");
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:4000/api/projects",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ localPath: "/tmp/my-repo" })
+      })
+    );
+    expect(result.projectId).toBe("p-local");
+  });
+
+  it("connectLocalProject rejects empty paths", async () => {
+    await expect(connectLocalProject("  ")).rejects.toMatchObject({
+      code: "INVALID_LOCAL_PATH"
+    });
+  });
+
   it("fetchProjects GETs the projects list", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
@@ -44,12 +66,7 @@ describe("projects API", () => {
     } as Response);
     const projects = await fetchProjects();
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: expect.stringMatching(/^Bearer/)
-        })
-      })
+      "http://127.0.0.1:4000/api/projects"
     );
     expect(projects).toHaveLength(1);
   });
@@ -67,8 +84,7 @@ describe("projects API", () => {
     } as Response);
     const project = await fetchProject("p1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1",
-      expect.any(Object)
+      "http://127.0.0.1:4000/api/projects/p1"
     );
     expect(project.id).toBe("p1");
   });
@@ -80,26 +96,5 @@ describe("projects API", () => {
       "http://127.0.0.1:4000/api/projects/p1",
       expect.objectContaining({ method: "DELETE" })
     );
-  });
-
-  it("uploadProject rejects non-zip files", async () => {
-    const file = new File(["x"], "notes.txt", { type: "text/plain" });
-    await expect(uploadProject(file)).rejects.toMatchObject({
-      code: "INVALID_FILE_TYPE"
-    });
-  });
-
-  it("uploadProject posts FormData for zip files", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ projectId: "p2" })
-    } as Response);
-    const file = new File(["zip"], "app.zip", { type: "application/zip" });
-    const result = await uploadProject(file);
-    expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/upload",
-      expect.objectContaining({ method: "POST" })
-    );
-    expect(result.projectId).toBe("p2");
   });
 });

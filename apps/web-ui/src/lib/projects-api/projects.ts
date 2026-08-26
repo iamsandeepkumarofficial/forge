@@ -1,18 +1,13 @@
 import {
   BASE_URL,
   ConnectProjectError,
-  formatBytes,
-  N_1024,
-  N_800,
-  pocToken,
   type ProjectSummary
 } from "./shared.js";
 import {
   CONNECT_ERROR_MAP,
   parseApiErrorText,
   rethrowAsConnectError,
-  throwConnectMappedError,
-  uploadErrorMap
+  throwConnectMappedError
 } from "./project-errors.js";
 
 export async function connectProject(githubUrl: string): Promise<{
@@ -32,8 +27,7 @@ export async function connectProject(githubUrl: string): Promise<{
     const response = await fetch(`${BASE_URL}/api/projects/github`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${pocToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ github: githubUrl })
     });
@@ -57,67 +51,48 @@ export async function connectProject(githubUrl: string): Promise<{
   }
 }
 
-export async function uploadProject(file: File): Promise<{
+export async function connectLocalProject(localPath: string): Promise<{
   projectId: string;
 }> {
-  if (!file) {
-    throw new ConnectProjectError("No file selected for upload", {
-      code: "NO_FILE",
-      help: "Please select a ZIP archive file first."
+  const trimmed =
+    typeof localPath === "string" ? localPath.trim() : "";
+  if (!trimmed) {
+    throw new ConnectProjectError("Local folder path is required", {
+      code: "INVALID_LOCAL_PATH",
+      help: "Provide an absolute path to a project folder on this machine."
     });
   }
-  if (file.size > N_800 * N_1024 * N_1024) {
-    throw new ConnectProjectError(
-      `File too large: ${formatBytes(file.size)} exceeds the maximum allowed size of 800MB`,
-      {
-        code: "FILE_TOO_LARGE",
-        help: "Please compress your project into a smaller ZIP archive (max 800MB)."
-      }
-    );
-  }
-  if (!file.name.endsWith(".zip")) {
-    throw new ConnectProjectError(
-      "Invalid file type: only ZIP archives (.zip) are supported",
-      {
-        code: "INVALID_FILE_TYPE",
-        help: "Please compress your project into a ZIP file before uploading."
-      }
-    );
-  }
   try {
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await fetch(`${BASE_URL}/api/projects/upload`, {
+    const response = await fetch(`${BASE_URL}/api/projects`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${pocToken()}`
+        "Content-Type": "application/json"
       },
-      body: formData
+      body: JSON.stringify({ localPath: trimmed })
     });
     if (!response.ok) {
       const errorText = await response.text();
       const parsed = parseApiErrorText({
         errorText,
-        fallbackMessage: "Failed to upload project"
+        fallbackMessage: "Failed to connect local folder"
       });
       throwConnectMappedError({
         ...parsed,
-        map: uploadErrorMap(formatBytes(file.size))
+        map: CONNECT_ERROR_MAP
       });
     }
     return response.json();
   } catch (error) {
-    rethrowAsConnectError({ error, prefix: "Upload failed" });
+    rethrowAsConnectError({
+      error,
+      prefix: "Failed to connect local folder"
+    });
   }
 }
 
 export async function fetchProjects(): Promise<ProjectSummary[]> {
   try {
-    const response = await fetch(`${BASE_URL}/api/projects`, {
-      headers: {
-        Authorization: `Bearer ${pocToken()}`
-      }
-    });
+    const response = await fetch(`${BASE_URL}/api/projects`);
     if (!response.ok) {
       const errorText = await response.text();
       const parsed = parseApiErrorText({
@@ -146,11 +121,7 @@ export async function fetchProject(projectId: string): Promise<ProjectSummary> {
     });
   }
   try {
-    const response = await fetch(`${BASE_URL}/api/projects/${projectId}`, {
-      headers: {
-        Authorization: `Bearer ${pocToken()}`
-      }
-    });
+    const response = await fetch(`${BASE_URL}/api/projects/${projectId}`);
     if (!response.ok) {
       const errorText = await response.text();
       const parsed = parseApiErrorText({
@@ -189,10 +160,7 @@ export async function deleteProject(projectId: string): Promise<void> {
   }
   try {
     const response = await fetch(`${BASE_URL}/api/projects/${projectId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${pocToken()}`
-      }
+      method: "DELETE"
     });
     if (!response.ok) {
       const errorText = await response.text();

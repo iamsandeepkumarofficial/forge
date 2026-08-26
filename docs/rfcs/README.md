@@ -9,6 +9,7 @@ Design decisions for Forge are recorded as RFCs in this directory. Accepted RFCs
 | [0001](./0001-harness-extraction.md) | Harness Extraction | Accepted | Carve a chat-only, locally runnable coding-agent harness (Apache-2.0) from the upstream product: tool-plane, Temporal orchestrator, preview-plane, Docker sandbox, and Tauri desktop. |
 | [0002](./0002-local-desktop-runtime.md) | Local Desktop Runtime | Accepted | Tauri supervisor boot/shutdown sequence, `~/.forge/config.json` for LLM keys, loopback auth, and `*.preview.localhost` previews. |
 | [0003](./0003-workspace-and-repo-connection.md) | Workspace and Repo Connection | Accepted | Flatten projects to workspaces; connect a local folder or git clone; materialize session sandboxes; no GitHub OAuth in v1. |
+| [0004](./0004-single-user-desktop-forge.md) | Single-User Desktop Forge | Accepted | Drop POC token/email auth; copy selected folders to `~/.forge/projects/`; auto-preview on session start; full Tauri supervisor; desktop-first with browser fallback. Amends 0002/0003. |
 
 ## Process
 

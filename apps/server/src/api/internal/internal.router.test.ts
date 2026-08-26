@@ -1,35 +1,8 @@
 import { describe, it, mock, before } from "node:test";
 import assert from "node:assert/strict";
 
-function mockRes() {
-  const state = { statusCode: 200, body: null, ended: false, headers: {} };
-  const res = {
-    status(code) {
-      state.statusCode = code;
-      return res;
-    },
-    json(body) {
-      state.body = body;
-      return res;
-    },
-    end() {
-      state.ended = true;
-      return res;
-    },
-    redirect(url) {
-      state.statusCode = 302;
-      state.body = url;
-      return res;
-    },
-    setHeader() {
-      return res;
-    }
-  };
-  return { res, state };
-}
-
 describe("createInternalRouter", () => {
-  let createInternalRouter;
+  let createInternalRouter: () => { stack: unknown[] };
   before(async () => {
     mock.module("../../catalog/chatFeatureRepository.js", {
       exports: { ChatFeatureRepository: class {} }
@@ -65,12 +38,9 @@ describe("createInternalRouter", () => {
     });
     ({ createInternalRouter } = await import("./internal.router.js"));
   });
-  it("returns a router that rejects missing auth", async () => {
-    const router = createInternalRouter("secret");
-    assert.ok(router.stack.length >= 1);
-    const authLayer = router.stack[0];
-    const { res, state } = mockRes();
-    authLayer.handle({ headers: {} }, res, () => {});
-    assert.equal(state.statusCode, 401);
+  it("returns a router without auth middleware (RFC 0004)", async () => {
+    const router = createInternalRouter();
+    assert.ok(router);
+    assert.equal(typeof createInternalRouter, "function");
   });
 });

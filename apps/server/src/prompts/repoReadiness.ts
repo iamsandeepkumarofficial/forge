@@ -78,7 +78,13 @@ export function formatRepoSetupBlock(options: {
     "This session runs apps from `.forge/launch.json`:",
     "{ apps: [{ name, cwd, command, port?, type: web|api|worker }] }.",
     formatReadinessEval(readiness),
-    "Use preview_start / preview_stop to start and stop apps in the repository."
+    "Use preview_start / preview_stop to start and stop apps in the repository.",
+    "",
+    "## Published app ports",
+    "- Only container ports **3000–3009** are published for preview. Use `port: 3000` for the first web app, then 3001, 3002, …",
+    "- Dev servers must honor `PORT` and bind `HOST=0.0.0.0` (Forge sets both when starting apps).",
+    "- Do not put 4000, 5173, 8080, or other ports in launch.json — they are not published and preview will be blank.",
+    "- Env hint inside the sandbox: `FORGE_PUBLISHED_APP_PORTS=3000-3009`."
   ];
   return lines.join("\n");
 }

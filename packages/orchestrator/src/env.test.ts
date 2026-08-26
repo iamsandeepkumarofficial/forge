@@ -18,7 +18,7 @@ describe("env", () => {
 
   it("exports REPO_ROOT as an absolute path", () => {
     assert.equal(path.isAbsolute(REPO_ROOT), true);
-    assert.match(REPO_ROOT, /factory\.io$/);
+    assert.match(REPO_ROOT, /forge$/);
   });
 
   it("env has defaults and stripped toolRunnerUrl", () => {
@@ -33,6 +33,5 @@ describe("env", () => {
     assert.ok(
       ["anthropic", "openai", "openai-compatible"].includes(env.llmProvider)
     );
-    assert.equal(typeof env.pocToken, "string");
   });
 });

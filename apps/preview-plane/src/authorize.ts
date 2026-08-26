@@ -1,5 +1,4 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { stripBearer } from "./hostnames.js";
 
 const N_401 = 401;
 const N_403 = 403;
@@ -21,34 +20,13 @@ export type RequestAuth = {
   email?: string;
 };
 
+/** Preview gateway is open on loopback (RFC 0004 — no token/email). */
 export function authorizePreviewAccess(
-  input: AuthorizeInput
+  _input: AuthorizeInput
 ): AuthorizeDecision {
-  if (!input.requestToken || input.requestToken !== input.expectedToken) {
-    return { ok: false, status: N_401 };
-  }
-  if (!input.requestEmail) {
-    return { ok: false, status: N_401 };
-  }
-  if (input.ownerEmail && input.ownerEmail !== input.requestEmail) {
-    return { ok: false, status: N_403 };
-  }
-  return { ok: true, email: input.requestEmail };
+  return { ok: true, email: "local@forge" };
 }
 
-export function readRequestAuth(headers: IncomingHttpHeaders): RequestAuth {
-  const rawAuth = headers.authorization;
-  const authorization = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
-  const tokenFromHeader = stripBearer(authorization);
-  const cookieHeader = headers.cookie;
-  const cookie = Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader;
-  const cookieMatch = cookie
-    ? /(?:^|;\s*)forge_token=([^;]+)/.exec(cookie)
-    : null;
-  const rawEmail = headers["x-forge-user-email"];
-  const email = Array.isArray(rawEmail) ? rawEmail[0] : rawEmail;
-  return {
-    token: tokenFromHeader ?? cookieMatch?.[1],
-    email: email?.trim() || undefined
-  };
+export function readRequestAuth(_headers: IncomingHttpHeaders): RequestAuth {
+  return {};
 }

@@ -4,18 +4,16 @@ import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useDashboardEmptyState } from "./use-dashboard-empty-state";
 
+vi.mock("../lib/desktop.js", () => ({
+  isDesktop: () => false,
+  pickFolder: vi.fn()
+}));
+
 vi.mock("../lib/projects-api.js", () => ({
   ConnectProjectError: class extends Error {},
   connectProject: vi.fn(),
-  createChat: vi.fn(),
-  uploadProject: vi.fn()
-}));
-
-vi.mock("../lib/zip-project-files.js", () => ({
-  archiveNameForFolder: vi.fn(),
-  entriesFromDataTransfer: vi.fn(),
-  entriesFromFileList: vi.fn(),
-  zipProjectEntries: vi.fn()
+  connectLocalProject: vi.fn(),
+  createChat: vi.fn()
 }));
 
 function wrapper({ children }: { children: ReactNode }) {

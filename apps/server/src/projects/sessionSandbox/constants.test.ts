@@ -1,11 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  allocateReservedAppPort,
   sessionHostPortBase,
   hostPortForContainerPort,
+  isReservedAppPort,
   sessionVolumeName,
   sandboxContainerName,
   FIRST_APP_PORT,
+  LAST_APP_PORT,
   RESERVED_PORTS,
   DEFAULT_SANDBOX_IMAGE,
   WORKSPACE_MOUNT
@@ -16,6 +19,7 @@ describe("sessionSandbox constants", () => {
     assert.equal(DEFAULT_SANDBOX_IMAGE, "forge-sandbox:latest");
     assert.equal(WORKSPACE_MOUNT, "/workspace");
     assert.equal(FIRST_APP_PORT, 3000);
+    assert.equal(LAST_APP_PORT, 3009);
     assert.equal(RESERVED_PORTS, 10);
   });
 
@@ -36,6 +40,18 @@ describe("sessionSandbox constants", () => {
     assert.equal(hostPortForContainerPort("s1", FIRST_APP_PORT - 1), null);
     assert.equal(
       hostPortForContainerPort("s1", FIRST_APP_PORT + RESERVED_PORTS),
+      null
+    );
+  });
+
+  it("isReservedAppPort and allocateReservedAppPort cover 3000–3009", () => {
+    assert.equal(isReservedAppPort(3000), true);
+    assert.equal(isReservedAppPort(3009), true);
+    assert.equal(isReservedAppPort(4000), false);
+    assert.equal(allocateReservedAppPort([]), 3000);
+    assert.equal(allocateReservedAppPort([3000, 3001]), 3002);
+    assert.equal(
+      allocateReservedAppPort([3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009]),
       null
     );
   });

@@ -1,35 +1,33 @@
-# Forge Desktop (`@forge/desktop`)
+# Forge desktop (Tauri)
 
-WIP Tauri 2 shell that will own local infrastructure lifecycle per
-[RFC 0002](../../docs/rfcs/0002-local-desktop-runtime.md).
+Local supervisor for Forge (RFC 0002 / RFC 0004).
 
-## Prerequisites
+## Dev
 
-- **Rust** toolchain (`rustup`, stable)
-- **Tauri CLI** (`pnpm --filter @forge/desktop exec tauri --version` or
-  `cargo install tauri-cli`)
-- **Docker** (Desktop or compatible engine) — required for compose + sandbox
-- Node / **pnpm** for the monorepo UI and harness packages
-
-Icons and a full `tauri build` are not wired yet; this package is a scaffold.
-
-## Scripts
+From the repo root (after `docker` is available):
 
 ```bash
-pnpm --filter @forge/desktop tauri dev
-pnpm --filter @forge/desktop tauri build
+pnpm desktop
 ```
 
-## Supervisor commands (stubs)
+This loads `@forge/web-ui` at `http://127.0.0.1:5173` in the webview and runs `start_infra` on launch (compose postgres + temporal, sandbox image if needed, server + orchestrator). Preview reverse-proxy runs **in-process** on the tool plane (`*.preview.localhost:8081`).
 
-Rust commands in `src-tauri/src/main.rs` (TODOs):
+Apps must listen on container ports **3000–3009**.
 
-| Command | Intent |
-| ------- | ------ |
-| `preflight_docker` | Detect Docker daemon |
-| `start_infra` | `docker compose up -d`, sandbox image, spawn Node processes + inject `FORGE_POC_TOKEN` |
-| `stop_infra` | Stop harness processes / optional compose stop |
+## Browser fallback
+
+```bash
+docker compose up -d
+pnpm dev
+```
+
+Then open `http://127.0.0.1:5173`. Folder import uses an absolute path input instead of the native picker.
+
+## Supervisor commands
+
+| Command | Behavior |
+| ------- | -------- |
+| `preflight_docker` | `docker info` |
+| `start_infra` | compose up, sandbox build, spawn Node processes |
+| `stop_infra` | kill children; optional `docker compose stop` |
 | `read_config` / `write_config` | `~/.forge/config.json` |
-
-Until these land, run infra with root `docker compose` + `pnpm dev` and use the
-browser UI.

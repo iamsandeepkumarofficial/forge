@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createPocAuth } from "./pocAuth.js";
+import { createLocalUserMiddleware } from "./pocAuth.js";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
 import {
   ChatTurnChunkRepository,
@@ -7,6 +7,10 @@ import {
   SessionMessageRepository
 } from "../catalog/sessionChatRepository.js";
 import { handleModelContextWindow, handleModelsList } from "./modelsRouter.js";
+import {
+  handleGetLlmSettings,
+  handlePutLlmSettings
+} from "./settingsHandlers.js";
 import {
   handleListChatMessages,
   handleStartChat,
@@ -16,11 +20,17 @@ import {
 
 export function createChatRouter(): Router {
   const router = Router();
-  const pocAuth = createPocAuth(process.env.FORGE_POC_TOKEN || "");
+  const pocAuth = createLocalUserMiddleware();
   const features = new ChatFeatureRepository();
   const messages = new SessionMessageRepository();
   const turns = new ChatTurnRepository();
   const chunks = new ChatTurnChunkRepository();
+  router.get("/settings/llm", pocAuth, (req, res) => {
+    return handleGetLlmSettings(req, res);
+  });
+  router.put("/settings/llm", pocAuth, (req, res) => {
+    return handlePutLlmSettings(req, res);
+  });
   router.get("/models", pocAuth, (req, res) => {
     return handleModelsList(req, res);
   });

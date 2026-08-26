@@ -17,17 +17,17 @@ describe("sessionSandbox materialize helpers", () => {
     assert.doesNotThrow(() => assertSafeBranch("feature/ok"));
   });
 
-  it("repoDirForProject uses repo for uploads", () => {
+  it("repoDirForProject uses repo for local", () => {
     assert.equal(
       repoDirForProject({
-        source: "upload",
+        source: "local",
         dedupeKey: "x"
       } as never),
       "repo"
     );
   });
 
-  it("repoDirForProject uses repo for local", () => {
+  it("repoDirForProject uses repo for local with path", () => {
     assert.equal(
       repoDirForProject({
         source: "local",

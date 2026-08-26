@@ -5,11 +5,6 @@ export type ProjectCanonical =
       cloneUrl: string;
     }
   | {
-      kind: "objectStore";
-      bucket: string;
-      key: string;
-    }
-  | {
       kind: "localFolder";
       path: string;
     };
@@ -17,7 +12,7 @@ export type Project = {
   id: string;
   userId: string;
   name: string;
-  source: "github" | "upload" | "local";
+  source: "github" | "local";
   canonical: ProjectCanonical;
   dedupeKey: string;
   status: "available" | "unavailable";
@@ -38,9 +33,8 @@ export type ChatFeature = {
   lastActivityAt: number;
 };
 export type CanonicalLocation = {
-  kind: "github" | "objectStore";
+  kind: "github" | "localFolder";
   ownerRepo?: string;
-  bucket?: string;
-  key?: string;
+  path?: string;
   cloneUrl?: string;
 };

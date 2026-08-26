@@ -37,6 +37,11 @@ describe("chatFeatures createHandlers", () => {
         provisionSessionSandbox: async () => undefined
       }
     });
+    mock.module("../../projects/appRunner.js", {
+      exports: {
+        autoStartPreview: async () => undefined
+      }
+    });
     ({ handleGetChat } = await import("./createHandlers.js"));
   });
 

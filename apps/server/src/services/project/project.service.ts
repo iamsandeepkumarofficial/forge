@@ -1,16 +1,15 @@
-import * as unzipper from "unzipper";
 import * as path from "node:path";
+import fs from "node:fs/promises";
 import { ProjectRepository } from "../../catalog/projectRepository.js";
 import { cloneGithubRepo } from "../codebase/codebase.service.js";
 import { GithubService } from "../github/github.service.js";
-import { putObject, deleteObjectsWithPrefix } from "../storage/objectStore.js";
 import { assertLocalFolderPath } from "../../projects/sessionSandbox/materialize.js";
+import { copyProjectTree } from "./copyProjectTree.js";
+import {
+  ensureProjectsRoot,
+  projectCanonicalDir
+} from "./projectsRoot.js";
 
-const N_1024 = 1024;
-const N_0x03 = 0x03;
-const N_0x04 = 0x04;
-const N_0x4b = 0x4b;
-const N_0x50 = 0x50;
 const N_403 = 403;
 const N_404 = 404;
 const N_500 = 500;
@@ -58,6 +57,9 @@ export class ProjectService {
     };
   }
 
+  /**
+   * Copy the selected folder into ~/.forge/projects/{id}/ as canonical (RFC 0004).
+   */
   async connectLocalFolder(
     localPath: string,
     userId: string,
@@ -71,14 +73,27 @@ export class ProjectService {
     }
     const displayName =
       (typeof name === "string" && name.trim()) || path.basename(abs) || "local";
+    await ensureProjectsRoot();
     const result = await this.projectRepo.createProject({
       userId,
       source: "local",
       dedupeKey,
       name: displayName,
-      canonicalKey: abs,
+      canonicalKey: null,
       status: "available"
     });
+    const dest = projectCanonicalDir(result.id);
+    try {
+      await copyProjectTree(abs, dest);
+      await this.projectRepo.updateCanonicalKey(result.id, dest);
+    } catch (err) {
+      await fs.rm(dest, { recursive: true, force: true }).catch(() => {});
+      await this.projectRepo.deleteProject(result.id);
+      throw new Error(
+        `Failed to copy project into ~/.forge/projects: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
+      );
+    }
     return { projectId: result.id };
   }
 
@@ -90,7 +105,10 @@ export class ProjectService {
       throw new Error("gitUrl is required");
     }
     let slug = gitUrl.trim();
-    if (slug.startsWith("https://github.com/") || slug.startsWith("http://github.com/")) {
+    if (
+      slug.startsWith("https://github.com/") ||
+      slug.startsWith("http://github.com/")
+    ) {
       const match = slug.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
       if (match) {
         slug = `${match[1]}/${match[2]}`;
@@ -99,113 +117,6 @@ export class ProjectService {
     return this.connectGithub(slug, userId);
   }
 
-  async uploadArchive(
-    file: Express.Multer.File,
-    userId: string
-  ): Promise<{
-    projectId: string;
-  }> {
-    if (!file) {
-      throw new Error("No file provided for upload");
-    }
-    const maxSize =
-      parseInt(process.env.PROJECT_UPLOAD_MAX_MB || "800", 10) *
-      N_1024 *
-      N_1024;
-    if (file.size > maxSize) {
-      throw new Error(
-        `File too large: ${this.formatBytes(file.size)} exceeds the maximum allowed size of ${this.formatBytes(maxSize)}`
-      );
-    }
-    if (!file.originalname.endsWith(".zip")) {
-      throw new Error(
-        "Invalid file type: only ZIP archives (.zip) are supported"
-      );
-    }
-    const fileBuffer = Buffer.from(file.buffer);
-    const zipMagic = fileBuffer.subarray(0, 4);
-    const expectedMagic = Buffer.from([N_0x50, N_0x4b, N_0x03, N_0x04]);
-    if (!zipMagic.equals(expectedMagic)) {
-      throw new Error(
-        "Invalid ZIP archive: file appears to be corrupted or not a valid ZIP file"
-      );
-    }
-    const projectName = file.originalname.replace(/\.zip$/i, "");
-    const result = await this.projectRepo.createProject({
-      userId,
-      source: "upload",
-      dedupeKey: `upload-${Date.now()}`,
-      name: projectName || "uploaded-project",
-      canonicalKey: null,
-      status: "available"
-    });
-    const bucket = process.env.OBJECT_STORE_BUCKET || "projects";
-    const repoPrefix = `projects/${result.id}/repo`;
-    try {
-      const directory = await unzipper.Open.buffer(fileBuffer);
-      const relPaths = directory.files
-        .filter((e) => e.type !== "Directory")
-        .map((e) => this.sanitizeArchiveEntryPath(e.path))
-        .filter((p): p is string => p !== null);
-      const strip = this.detectWrapperPrefix(relPaths);
-      for (const entry of directory.files) {
-        if (entry.type === "Directory") continue;
-        const relativePath = this.sanitizeArchiveEntryPath(entry.path);
-        if (!relativePath) continue;
-        if (relativePath.split("/")[0] === "__MACOSX") continue;
-        if (relativePath.split("/").pop() === ".DS_Store") continue;
-        const repoRelative =
-          strip && relativePath.startsWith(strip)
-            ? relativePath.slice(strip.length)
-            : relativePath;
-        if (!repoRelative) continue;
-        const entryBuffer = await entry.buffer();
-        await putObject({
-          bucket,
-          key: `${repoPrefix}/${repoRelative}`,
-          body: entryBuffer
-        });
-      }
-      await this.projectRepo.updateCanonicalKey(result.id, repoPrefix);
-    } catch (err: unknown) {
-      await deleteObjectsWithPrefix(bucket, repoPrefix).catch(() => {});
-      await this.projectRepo.deleteProject(result.id);
-      throw new Error(
-        `Failed to store archive: ${err instanceof Error ? err.message : "Unknown storage error"}`,
-        { cause: err }
-      );
-    }
-    return {
-      projectId: result.id
-    };
-  }
-  private detectWrapperPrefix(relPaths: string[]): string {
-    const meaningful = relPaths.filter((p) => p.split("/")[0] !== "__MACOSX");
-    const tops = new Set(meaningful.map((p) => p.split("/")[0]));
-    if (tops.size !== 1) return "";
-    const only = [...tops][0]!;
-    if (!meaningful.some((p) => p.startsWith(`${only}/`))) return "";
-    return `${only}/`;
-  }
-  private sanitizeArchiveEntryPath(entryPath: string): string | null {
-    const normalized = entryPath.replace(/\\/g, "/");
-    const segments = normalized.split("/").filter((seg) => seg.length > 0);
-    if (
-      segments.length === 0 ||
-      segments.some((seg) => seg === "..") ||
-      normalized.startsWith("/")
-    ) {
-      return null;
-    }
-    return segments.join("/");
-  }
-  private formatBytes(bytes: number): string {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  }
   async listProjects(userId: string): Promise<
     Array<{
       id: string;
@@ -255,10 +166,15 @@ export class ProjectService {
       );
     }
   }
-  async deleteProject(id: string, userId: string): Promise<void> {
+  async deleteProject(id: string, _userId: string): Promise<void> {
     const project = await this.projectRepo.getById(id);
-    if (!project || project.userId !== userId) {
+    if (!project) {
       throw new Error("Project not found");
+    }
+    if (project.source === "local" && project.canonicalKey) {
+      await fs
+        .rm(project.canonicalKey, { recursive: true, force: true })
+        .catch(() => {});
     }
     await this.projectRepo.deleteProject(id);
   }

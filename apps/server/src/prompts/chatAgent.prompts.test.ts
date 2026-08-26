@@ -23,6 +23,7 @@ describe("composeChatAgentSystemPrompt", () => {
     assert.match(prompt, /\.forge\/launch\.json/);
     assert.match(prompt, /Eval: not agent-ready/);
     assert.match(prompt, /preview_start \/ preview_stop/);
+    assert.match(prompt, /3000–3009/);
     assert.doesNotMatch(prompt, /Hard citation rule/);
     assert.doesNotMatch(prompt, /create_subtask/);
     assert.doesNotMatch(prompt, /Playwright skill or run Playwright/);

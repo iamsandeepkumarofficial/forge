@@ -11,7 +11,6 @@ import {
 describe("tool-runner", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
-    vi.stubEnv("VITE_FORGE_POC_TOKEN", "tok");
   });
 
   it("runnerUrl defaults to local runner", () => {

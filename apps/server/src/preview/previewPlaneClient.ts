@@ -27,9 +27,7 @@ function previewPlaneBase(): string | undefined {
 }
 
 function internalHeaders(): Record<string, string> {
-  const token = process.env.FORGE_POC_TOKEN ?? "";
   return {
-    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json"
   };
 }

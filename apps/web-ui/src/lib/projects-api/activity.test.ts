@@ -17,19 +17,14 @@ describe("getActivity", () => {
     );
   });
 
-  it("requests activity with filter query and auth header", async () => {
+  it("requests activity with filter query", async () => {
     const result = await getActivity({
       projectId: "p1",
       chatId: "c1",
       filter: "history"
     });
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1/chats/c1/activity?filter=history",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: expect.stringMatching(/^Bearer/)
-        })
-      })
+      "http://127.0.0.1:4000/api/projects/p1/chats/c1/activity?filter=history"
     );
     expect(result.filter).toBe("history");
   });

@@ -4,13 +4,6 @@ export function runnerUrl(): string {
     "http://127.0.0.1:4000"
   );
 }
-export function pocToken(): string {
-  return import.meta.env.VITE_FORGE_POC_TOKEN || "";
-}
-export function userEmailHeader(): Record<string, string> {
-  const email = import.meta.env.VITE_FORGE_USER_EMAIL?.trim();
-  return email ? { "X-Forge-User-Email": email } : {};
-}
 export type RunnerReposResponse = {
   managedRoot: string;
   repos: string[];
@@ -20,22 +13,13 @@ export type GithubConnectResponse = {
   alreadyExisted: boolean;
 };
 function authHeaders(): HeadersInit {
-  const tok = pocToken();
-  return {
-    Authorization: `Bearer ${tok}`,
-    "Content-Type": "application/json"
-  };
+  return { "Content-Type": "application/json" };
 }
 export async function fetchRunnerRepos(
   signal?: AbortSignal
 ): Promise<RunnerReposResponse> {
-  const tok = pocToken();
-  if (!tok) {
-    throw new Error("VITE_FORGE_POC_TOKEN is not set");
-  }
   const res = await fetch(`${runnerUrl()}/internal/repos`, {
     method: "GET",
-    headers: { Authorization: `Bearer ${tok}` },
     signal
   });
   const data = (await res.json()) as RunnerReposResponse & {
@@ -52,10 +36,6 @@ export async function connectGithubRepo(options: {
   signal?: AbortSignal;
 }): Promise<GithubConnectResponse> {
   const { slug, shallow, signal } = options;
-  const tok = pocToken();
-  if (!tok) {
-    throw new Error("VITE_FORGE_POC_TOKEN is not set");
-  }
   const res = await fetch(`${runnerUrl()}/internal/repos/github`, {
     method: "POST",
     headers: authHeaders(),
@@ -87,10 +67,6 @@ export async function prepareSessionWorkspace(
 ): Promise<{
   sessionRoot: string;
 }> {
-  const tok = pocToken();
-  if (!tok) {
-    throw new Error("VITE_FORGE_POC_TOKEN is not set");
-  }
   const res = await fetch(`${runnerUrl()}/internal/prepare`, {
     method: "POST",
     headers: authHeaders(),
@@ -113,13 +89,9 @@ export async function fetchSessionChanges(
   sessionRoot: string;
   repos: SessionRepoChanges[];
 }> {
-  const tok = pocToken();
-  if (!tok) {
-    throw new Error("VITE_FORGE_POC_TOKEN is not set");
-  }
   const res = await fetch(
     `${runnerUrl()}/internal/changes?sessionId=${encodeURIComponent(sessionId)}`,
-    { headers: { Authorization: `Bearer ${tok}` }, signal }
+    { signal }
   );
   const data = (await res.json()) as {
     sessionRoot?: string;
@@ -141,16 +113,11 @@ export async function fetchFileDiff(options: {
   signal?: AbortSignal;
 }): Promise<string> {
   const { sessionId, repo, filePath, signal } = options;
-  const tok = pocToken();
-  if (!tok) {
-    throw new Error("VITE_FORGE_POC_TOKEN is not set");
-  }
   const u = new URL(`${runnerUrl()}/internal/changes/file-diff`);
   u.searchParams.set("sessionId", sessionId);
   u.searchParams.set("repo", repo);
   u.searchParams.set("path", filePath);
   const res = await fetch(u.toString(), {
-    headers: { Authorization: `Bearer ${tok}` },
     signal
   });
   if (!res.ok) {
@@ -170,10 +137,6 @@ export async function executeTool(options: {
   metadata?: Record<string, unknown>;
 }> {
   const { sessionId, toolName, args, signal } = options;
-  const tok = pocToken();
-  if (!tok) {
-    throw new Error("VITE_FORGE_POC_TOKEN is not set");
-  }
   const res = await fetch(`${runnerUrl()}/internal/tool-execute`, {
     method: "POST",
     headers: authHeaders(),
@@ -239,12 +202,9 @@ export type AppStatus = ForgeApp & {
   hostPort?: number;
 };
 async function appsRequest<T>(path: string, init: RequestInit): Promise<T> {
-  const tok = pocToken();
-  if (!tok) throw new Error("VITE_FORGE_POC_TOKEN is not set");
   const res = await fetch(`${runnerUrl()}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${tok}`,
       "Content-Type": "application/json",
       ...(init.headers ?? {})
     }
@@ -316,13 +276,10 @@ export async function fetchAppLogs(options: {
   signal?: AbortSignal;
 }): Promise<string> {
   const { sessionId, name, signal } = options;
-  const tok = pocToken();
-  if (!tok) throw new Error("VITE_FORGE_POC_TOKEN is not set");
   const u = new URL(`${runnerUrl()}/internal/apps/logs`);
   u.searchParams.set("sessionId", sessionId);
   u.searchParams.set("name", name);
   const res = await fetch(u.toString(), {
-    headers: { Authorization: `Bearer ${tok}` },
     signal
   });
   if (!res.ok) throw new Error((await res.text()).trim() || String(res.status));
@@ -332,12 +289,9 @@ export async function fetchAllAppLogs(
   sessionId: string,
   signal?: AbortSignal
 ): Promise<Record<string, string>> {
-  const tok = pocToken();
-  if (!tok) throw new Error("VITE_FORGE_POC_TOKEN is not set");
   const u = new URL(`${runnerUrl()}/internal/apps/logs`);
   u.searchParams.set("sessionId", sessionId);
   const res = await fetch(u.toString(), {
-    headers: { Authorization: `Bearer ${tok}` },
     signal
   });
   if (!res.ok) throw new Error((await res.text()).trim() || String(res.status));
@@ -349,13 +303,8 @@ export async function fetchAllAppLogs(
   return body.logs && typeof body.logs === "object" ? body.logs : {};
 }
 export async function downloadRepoArchive(sessionId: string): Promise<void> {
-  const tok = pocToken();
-  if (!tok) throw new Error("VITE_FORGE_POC_TOKEN is not set");
   const res = await fetch(
-    `${runnerUrl()}/internal/download?sessionId=${encodeURIComponent(sessionId)}`,
-    {
-      headers: { Authorization: `Bearer ${tok}` }
-    }
+    `${runnerUrl()}/internal/download?sessionId=${encodeURIComponent(sessionId)}`
   );
   if (!res.ok) throw new Error((await res.text()).trim() || String(res.status));
   const blob = await res.blob();

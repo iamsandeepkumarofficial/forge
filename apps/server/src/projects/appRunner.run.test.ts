@@ -52,6 +52,7 @@ describe("runApp readiness", { concurrency: false }, () => {
         },
         waitUntilJobRunning: async () => jobRunning,
         waitUntilTcpListening: async () => tcpListening,
+        waitUntilHostTcpListening: async () => true,
         isBackgroundJobRunning: async () => jobRunning,
         readBackgroundJobLogs: async () => "boot failed"
       }
@@ -59,8 +60,18 @@ describe("runApp readiness", { concurrency: false }, () => {
     mock.module("./sessionSandbox.js", {
       exports: {
         hostPortForContainerPort: () => 13000,
+        sessionHostPortBase: () => 13000,
         FIRST_APP_PORT: 3000,
-        RESERVED_PORTS: 20
+        LAST_APP_PORT: 3009,
+        RESERVED_PORTS: 10,
+        isReservedAppPort: (port: number) => port >= 3000 && port <= 3009,
+        allocateReservedAppPort: (used: Iterable<number>) => {
+          const taken = new Set(used);
+          for (let p = 3000; p <= 3009; p++) {
+            if (!taken.has(p)) return p;
+          }
+          return null;
+        }
       }
     });
     mock.module("./sandboxRuntime/resolve.js", {

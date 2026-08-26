@@ -1,4 +1,4 @@
-import { pocToken, runnerUrl } from "../tool-runner.js";
+import { runnerUrl } from "../tool-runner.js";
 
 export const N_100 = 100;
 export const N_1024 = 1024;
@@ -6,7 +6,6 @@ export const N_204 = 204;
 export const N_800 = 800;
 
 export const BASE_URL = runnerUrl();
-export { pocToken };
 
 export class ConnectProjectError extends Error {
   code?: string;

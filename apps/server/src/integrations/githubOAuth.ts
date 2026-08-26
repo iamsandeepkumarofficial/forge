@@ -42,9 +42,7 @@ function requireOAuthConfig(): {
 }
 function stateSecret(): string {
   return (
-    process.env.GITHUB_OAUTH_STATE_SECRET?.trim() ||
-    process.env.FORGE_POC_TOKEN?.trim() ||
-    "forge-dev-oauth-state"
+    process.env.GITHUB_OAUTH_STATE_SECRET?.trim() || "forge-dev-oauth-state"
   );
 }
 export function isGithubOAuthConfigured(): boolean {

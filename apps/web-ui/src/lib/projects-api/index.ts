@@ -8,7 +8,7 @@ export {
 } from "./shared.js";
 export {
   connectProject,
-  uploadProject,
+  connectLocalProject,
   fetchProjects,
   fetchProject,
   deleteProject

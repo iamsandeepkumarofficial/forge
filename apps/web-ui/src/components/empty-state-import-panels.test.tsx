@@ -8,12 +8,20 @@ describe("EmptyStateImportPanels", () => {
       <EmptyStateImportPanels
         busy={false}
         loading={null}
+        desktop={false}
+        showPathInput
+        localPath=""
+        onLocalPathChange={vi.fn()}
         onGithub={vi.fn()}
-        onFolder={vi.fn()}
-        onZip={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onConnectPath={vi.fn()}
       />
     );
     expect(screen.getByText(/Continue with GitHub/i)).toBeTruthy();
+    expect(screen.getByText(/Select folder/i)).toBeTruthy();
     expect(screen.getByText(/Clone Template/i)).toBeTruthy();
+    expect(
+      screen.getByText(/Native folder picker requires the desktop app/i)
+    ).toBeTruthy();
   });
 });

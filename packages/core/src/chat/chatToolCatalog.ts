@@ -90,7 +90,7 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "preview_start",
     toolName: "Preview start",
     description:
-      "Start a `.forge/launch.json` app in this sandbox. Name must already be listed. Succeeds only after the process is up and its port is listening; otherwise returns failure with logs.",
+      "Start a `.forge/launch.json` app in this sandbox. Name must already be listed. Succeeds only after the process is up and its published port (3000–3009) is listening; otherwise returns failure with logs.",
     exampleUsecases: [
       "Starting a declared web/api app to get its preview URL."
     ],
@@ -110,13 +110,14 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "upsert_launch_app",
     toolName: "Upsert launch app",
     description:
-      "Add or update one app in `.forge/launch.json` when missing or incomplete (no user confirmation required).",
+      "Add or update one app in `.forge/launch.json` when missing or incomplete (no user confirmation required). For web/api apps set port in 3000–3009 (prefer 3000 for the first app).",
     exampleUsecases: [
       "Launch.json missing or app not listed; then preview_start that name."
     ],
     negativeUsecases: [
       "Do not use this to edit source files.",
-      "Ask mode cannot call this — switch modes first."
+      "Ask mode cannot call this — switch modes first.",
+      "Do not use ports outside 3000–3009 (e.g. 4000, 5173) — they are not published."
     ]
   },
   {

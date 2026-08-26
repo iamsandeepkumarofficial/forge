@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "dev.forge.desktop",
   "build": {
-    "beforeDevCommand": "",
-    "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "",
-    "frontendDist": "../"
+    "beforeDevCommand": "pnpm --filter @forge/web-ui exec vite --host 127.0.0.1 --port 5173",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "pnpm --filter @forge/web-ui build",
+    "frontendDist": "../../web-ui/dist"
   },
   "app": {
     "windows": [
@@ -25,6 +25,17 @@
   "bundle": {
     "active": false,
     "targets": "all",
-    "icon": []
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ]
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
   }
 }

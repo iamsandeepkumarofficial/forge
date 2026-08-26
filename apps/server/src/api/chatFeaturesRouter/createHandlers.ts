@@ -9,6 +9,7 @@ import {
   DescriptionValidationError
 } from "../../catalog/descriptionDocument.js";
 import { provisionSessionSandbox } from "../../projects/sessionSandbox.js";
+import { autoStartPreview } from "../../projects/appRunner.js";
 import {
   chatFeatureService,
   chatRepo,
@@ -132,11 +133,13 @@ export async function handleCreateChat(
       description: validation.description,
       workflowId: typeof workflowId === "string" ? workflowId : undefined
     });
-    void provisionSessionSandbox(chat.sessionId).catch((err) => {
-      console.warn(
-        `[chat ${chat.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`
-      );
-    });
+    void provisionSessionSandbox(chat.sessionId)
+      .then(() => autoStartPreview(chat.sessionId))
+      .catch((err) => {
+        console.warn(
+          `[chat ${chat.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
     res.json(chat);
   } catch (error: unknown) {
     if (error instanceof ChatFeatureValidationError) {
@@ -192,11 +195,13 @@ export async function handleCreateWorkbench(
       userId,
       title
     });
-    void provisionSessionSandbox(session.sessionId).catch((err) => {
-      console.warn(
-        `[workbench ${session.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`
-      );
-    });
+    void provisionSessionSandbox(session.sessionId)
+      .then(() => autoStartPreview(session.sessionId))
+      .catch((err) => {
+        console.warn(
+          `[workbench ${session.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
     res.status(N_201).json(session);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

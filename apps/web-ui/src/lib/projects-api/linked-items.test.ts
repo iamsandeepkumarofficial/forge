@@ -25,8 +25,7 @@ describe("linked-items API", () => {
     } as Response);
     const items = await listLinkedItems("p1", "c1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1/chats/c1/linked-items",
-      expect.any(Object)
+      "http://127.0.0.1:4000/api/projects/p1/chats/c1/linked-items"
     );
     expect(items[0]?.label).toBe("Jira");
   });

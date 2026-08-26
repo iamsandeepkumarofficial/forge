@@ -4,8 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Home } from "./home";
 
 vi.mock("../lib/tool-runner.js", () => ({
-  runnerUrl: () => "http://127.0.0.1:4000",
-  pocToken: () => "tok"
+  runnerUrl: () => "http://127.0.0.1:4000"
 }));
 vi.mock("../lib/projects-api.js", () => ({
   deleteProject: vi.fn()

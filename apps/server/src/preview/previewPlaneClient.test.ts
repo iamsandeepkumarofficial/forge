@@ -9,7 +9,6 @@ import { SandboxRuntimeError } from "../projects/sandboxRuntime/types.js";
 describe("previewPlaneClient", () => {
   afterEach(() => {
     delete process.env.PREVIEW_PLANE_URL;
-    delete process.env.FORGE_POC_TOKEN;
   });
 
   it("no-ops register when PREVIEW_PLANE_URL is unset", async () => {
@@ -23,7 +22,6 @@ describe("previewPlaneClient", () => {
 
   it("posts register when preview-plane is configured", async () => {
     process.env.PREVIEW_PLANE_URL = "http://preview.internal";
-    process.env.FORGE_POC_TOKEN = "tok";
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (input, init) => {
       assert.equal(
@@ -53,7 +51,6 @@ describe("previewPlaneClient", () => {
 
   it("throws preview_route_failed on non-ok register", async () => {
     process.env.PREVIEW_PLANE_URL = "http://preview.internal";
-    process.env.FORGE_POC_TOKEN = "tok";
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => new Response("nope", { status: 500 });
     try {
@@ -75,7 +72,6 @@ describe("previewPlaneClient", () => {
 
   it("revokes when configured", async () => {
     process.env.PREVIEW_PLANE_URL = "http://preview.internal";
-    process.env.FORGE_POC_TOKEN = "tok";
     const originalFetch = globalThis.fetch;
     let deleted = "";
     globalThis.fetch = async (input, init) => {

@@ -6,7 +6,7 @@ import {
   type RequestHandler
 } from "express";
 import multer from "multer";
-import { createPocAuth, type AuthedRequest } from "./pocAuth.js";
+import { createLocalUserMiddleware, type AuthedRequest } from "./pocAuth.js";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
 import { AttachmentRepository } from "../catalog/attachmentRepository.js";
 import {
@@ -27,7 +27,7 @@ const N_404 = 404;
 
 const chatRepo = new ChatFeatureRepository();
 const attachmentRepo = new AttachmentRepository();
-const pocAuth = createPocAuth(process.env.FORGE_POC_TOKEN || "");
+const pocAuth = createLocalUserMiddleware();
 const uploadSingle = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_ATTACHMENT_BYTES }

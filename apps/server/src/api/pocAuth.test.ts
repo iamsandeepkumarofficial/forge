@@ -1,71 +1,40 @@
-import { describe, it, mock, before } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it, mock, beforeEach } from "node:test";
 
-function mockRes() {
-  const state = { statusCode: 200, body: null, ended: false, headers: {} };
-  const res = {
-    status(code) {
-      state.statusCode = code;
-      return res;
-    },
-    json(body) {
-      state.body = body;
-      return res;
-    },
-    end() {
-      state.ended = true;
-      return res;
-    },
-    redirect(url) {
-      state.statusCode = 302;
-      state.body = url;
-      return res;
-    },
-    setHeader() {
-      return res;
-    }
-  };
-  return { res, state };
-}
+describe("createLocalUserMiddleware", () => {
+  let createLocalUserMiddleware: typeof import("./pocAuth.js").createLocalUserMiddleware;
+  let resetLocalUserCache: typeof import("../catalog/localUser.js").resetLocalUserCache;
 
-describe("createPocAuth", () => {
-  let createPocAuth;
-  before(async () => {
-    mock.module("../catalog/repository.js", {
-      exports: {
-        CatalogRepository: class {
-          async getOrCreateUser(email) {
-            return { id: "u1", email };
-          }
-        }
+  beforeEach(async () => {
+    mock.reset();
+    mock.module("../catalog/localUser.js", {
+      namedExports: {
+        getLocalUser: async () => ({
+          id: "u1",
+          email: "local@forge",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }),
+        resetLocalUserCache: () => {},
+        LOCAL_USER_EMAIL: "local@forge"
       }
     });
-    ({ createPocAuth } = await import("./pocAuth.js"));
+    ({ createLocalUserMiddleware } = await import("./pocAuth.js"));
+    ({ resetLocalUserCache } = await import("../catalog/localUser.js"));
+    resetLocalUserCache();
   });
-  it("rejects missing bearer", async () => {
-    const auth = createPocAuth("tok");
-    const { res, state } = mockRes();
-    await auth({ headers: {} }, res, () => {});
-    assert.equal(state.statusCode, 401);
-  });
-  it("rejects bad token", async () => {
-    const auth = createPocAuth("tok");
-    const { res, state } = mockRes();
-    await auth({ headers: { authorization: "Bearer nope" } }, res, () => {});
-    assert.equal(state.statusCode, 403);
-  });
+
   it("sets forgeUser and calls next", async () => {
-    const auth = createPocAuth("tok");
-    const { res, state } = mockRes();
-    const req = {
-      headers: { authorization: "Bearer tok", "x-forge-user-email": "a@b.c" }
+    const auth = createLocalUserMiddleware();
+    const req = { headers: {} } as {
+      headers: Record<string, string>;
+      forgeUser?: { email: string };
     };
-    let next = false;
-    await auth(req, res, () => {
-      next = true;
+    let nextCalled = false;
+    await auth(req as never, {} as never, () => {
+      nextCalled = true;
     });
-    assert.equal(next, true);
-    assert.equal(req.forgeUser.email, "a@b.c");
-    assert.equal(state.statusCode, 200);
+    assert.equal(nextCalled, true);
+    assert.equal(req.forgeUser?.email, "local@forge");
   });
 });

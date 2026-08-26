@@ -45,12 +45,14 @@ describe("chatToolCatalog", () => {
   it("upsert_launch_app does not require user agreement", () => {
     const item = getChatToolCatalogItem("upsert_launch_app");
     assert.match(item?.description ?? "", /no user confirmation/);
+    assert.match(item?.description ?? "", /3000–3009/);
     assert.doesNotMatch(item?.description ?? "", /agreed/);
   });
 
   it("preview_start requires port listening", () => {
     const item = getChatToolCatalogItem("preview_start");
-    assert.match(item?.description ?? "", /port is listening/);
+    assert.match(item?.description ?? "", /listening/);
+    assert.match(item?.description ?? "", /3000–3009/);
   });
 
   it("web tools require citation", () => {

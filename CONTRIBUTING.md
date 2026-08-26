@@ -39,10 +39,10 @@ Monorepo managed with **pnpm** and **Turborepo**.
 
 | Path | Role |
 | ---- | ---- |
-| `apps/server` | Tool-plane HTTP API, sandbox lifecycle, tools |
+| `apps/server` | Tool-plane HTTP API, sandbox lifecycle, tools, in-process preview proxy |
 | `apps/web-ui` | Chat workbench (React) |
-| `apps/preview-plane` | Local preview reverse proxy (`*.preview.localhost`) |
-| `apps/desktop` | Tauri supervisor (planned / scaffold) |
+| `apps/preview-plane` | Optional standalone preview proxy (`PREVIEW_IN_PROCESS=0` / k8s) |
+| `apps/desktop` | Tauri supervisor |
 | `packages/orchestrator` | Temporal worker and chat turn workflows |
 | `packages/core` | Shared backend domain logic |
 | `packages/db` | Schema and migrations |

@@ -52,6 +52,7 @@ export async function startBackgroundJob(options: {
     LOG: jobLogFile({ kind: options.kind, name: options.name }),
     CMD: options.command,
     HOST: "0.0.0.0",
+    FORGE_PUBLISHED_APP_PORTS: "3000-3009",
     ...options.extraEnv
   };
   await dockerExec({
@@ -175,6 +176,37 @@ export async function waitUntilTcpListening(options: {
     if (i + 1 < tries && intervalMs > 0) {
       await sleepMs(intervalMs);
     }
+  }
+  return false;
+}
+
+/** Host-side check: Docker Desktop sometimes drops published port proxies. */
+export async function isHostTcpListening(port: number): Promise<boolean> {
+  const net = await import("node:net");
+  return await new Promise((resolve) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port });
+    const done = (ok: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(N_500);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+  });
+}
+
+export async function waitUntilHostTcpListening(options: {
+  port: number;
+  tries?: number;
+  intervalMs?: number;
+}): Promise<boolean> {
+  const tries = options.tries ?? Math.min(TCP_READY_TRIES, N_60);
+  const intervalMs = options.intervalMs ?? TCP_READY_INTERVAL_MS;
+  for (let i = 0; i < tries; i += 1) {
+    if (await isHostTcpListening(options.port)) return true;
+    if (i + 1 < tries && intervalMs > 0) await sleepMs(intervalMs);
   }
   return false;
 }

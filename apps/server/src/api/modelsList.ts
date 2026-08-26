@@ -1,4 +1,5 @@
 import type { ChatLlmProvider } from "./modelContextWindow.js";
+import { resolveOpenAiCompatibleRuntime } from "../settings/forgeLlmConfig.js";
 
 const N_400 = 400;
 
@@ -24,14 +25,6 @@ function normalizeOpenAICompatibleV1Base(raw: string): string {
   return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
 }
 
-function firstEnv(...keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = process.env[key]?.trim();
-    if (value) return value;
-  }
-  return undefined;
-}
-
 async function fetchOpenAiCompatibleModels(options: {
   baseUrl: string;
   apiKey?: string;
@@ -52,35 +45,55 @@ async function fetchOpenAiCompatibleModels(options: {
   return (await res.json()) as ModelsListBody;
 }
 
+function withConfiguredModel(
+  body: ModelsListBody,
+  model?: string
+): ModelsListBody {
+  const id = model?.trim();
+  if (!id) return body;
+  if (body.data.some((m) => m.id === id)) return body;
+  return {
+    ...body,
+    data: [{ id, object: "model" }, ...body.data]
+  };
+}
+
 async function listOpenAiCompatibleModels(): Promise<ModelsListBody> {
-  const rawBase = firstEnv(
-    "OPENAI_COMPATIBLE_BASE_URL",
-    "CUSTOM_BASE_URL",
-    "SDLC_LLM_BASE_URL",
-    "OLLAMA_BASE_URL"
-  );
-  if (!rawBase) {
+  const runtime = await resolveOpenAiCompatibleRuntime();
+  if (!runtime.baseUrl) {
     return {
       object: "list",
-      data: [],
+      data: runtime.model
+        ? [{ id: runtime.model, object: "model" }]
+        : [],
       error:
-        "OPENAI_COMPATIBLE_BASE_URL is not set (also accepts CUSTOM_BASE_URL / SDLC_LLM_BASE_URL)"
+        "Set an OpenAI-compatible base URL in Settings (or OPENAI_COMPATIBLE_BASE_URL in .env)"
     };
   }
-  return fetchOpenAiCompatibleModels({
-    baseUrl: rawBase,
-    apiKey: firstEnv(
-      "OPENAI_COMPATIBLE_API_KEY",
-      "CUSTOM_API_KEY",
-      "SDLC_LLM_API_KEY",
-      "OLLAMA_API_KEY"
-    ),
-    errorPrefix: "OpenAI-compatible /models"
-  });
+  try {
+    const listed = await fetchOpenAiCompatibleModels({
+      baseUrl: runtime.baseUrl,
+      apiKey: runtime.apiKey,
+      errorPrefix: "OpenAI-compatible /models"
+    });
+    return withConfiguredModel(listed, runtime.model);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return withConfiguredModel(
+      {
+        object: "list",
+        data: [],
+        error: `OpenAI-compatible /models unreachable: ${message}`
+      },
+      runtime.model
+    );
+  }
 }
 
 async function listOpenAiModels(): Promise<ModelsListBody> {
-  const key = process.env.OPENAI_API_KEY?.trim();
+  const { readForgeLlmConfig } = await import("../settings/forgeLlmConfig.js");
+  const llm = await readForgeLlmConfig();
+  const key = llm.openaiApiKey?.trim() || process.env.OPENAI_API_KEY?.trim();
   if (!key) {
     return { object: "list", data: [], error: "OPENAI_API_KEY is not set" };
   }

@@ -3,24 +3,20 @@ import { Link, useNavigate } from "react-router-dom";
 import { ConnectProjectDialog } from "../components/connect-project-dialog.js";
 import { DashboardEmptyState } from "../components/dashboard-empty-state.js";
 import { ProjectCard } from "../components/project-card.js";
-import { runnerUrl, pocToken } from "../lib/tool-runner.js";
+import { runnerUrl } from "../lib/tool-runner.js";
 import { deleteProject } from "../lib/projects-api.js";
 
 type ProjectRow = {
   id: string;
   name: string;
-  source: "github" | "upload";
+  source: "github" | "local" | "upload";
   status: "available" | "unavailable";
   lastActivityAt?: number | string;
 };
 
 async function fetchProjectRows(): Promise<ProjectRow[]> {
   const baseUrl = runnerUrl();
-  const token = pocToken();
-  if (!token) throw new Error("FORGE_POC_TOKEN is not configured");
-  const response = await fetch(`${baseUrl}/api/projects`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const response = await fetch(`${baseUrl}/api/projects`);
   if (!response.ok) {
     const errorText = await response.text();
     console.error("Failed to fetch projects:", response.status, errorText);
@@ -117,8 +113,8 @@ function WorkspaceGrid(options: {
         </div>
       </div>
       <p className="mb-6 text-sm text-muted-foreground">
-        Desktop: Connect local folder or git URL via the Forge desktop app.
-        Web can still connect a GitHub repo or upload for now.
+        Select a local folder (native picker in the desktop app, or absolute
+        path in the browser) or connect a GitHub repository.
       </p>
       {showDialog && (
         <ConnectProjectDialog

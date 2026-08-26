@@ -3,10 +3,14 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DashboardEmptyState } from "./dashboard-empty-state";
 
+vi.mock("../lib/desktop.js", () => ({
+  isDesktop: () => false,
+  pickFolder: vi.fn()
+}));
 vi.mock("../lib/projects-api.js", () => ({
   connectProject: vi.fn(),
+  connectLocalProject: vi.fn(),
   createChat: vi.fn(),
-  uploadProject: vi.fn(),
   ConnectProjectError: class extends Error {}
 }));
 vi.mock("./github-repo-picker.js", () => ({

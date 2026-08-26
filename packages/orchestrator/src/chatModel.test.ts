@@ -29,7 +29,7 @@ describe("chatModel", () => {
     assert.equal(coerceChatProvider("anthropic"), "anthropic");
   });
 
-  it("resolveChatLanguageModel requires anthropic key", () => {
+  it("resolveChatLanguageModel requires anthropic key", async () => {
     const prevA = process.env.ANTHROPIC_API_KEY;
     const prevS = process.env.SDLC_LLM_API_KEY;
     const prevW = process.env.WORKFLOW_LLM_API_KEY;
@@ -37,7 +37,7 @@ describe("chatModel", () => {
     delete process.env.SDLC_LLM_API_KEY;
     delete process.env.WORKFLOW_LLM_API_KEY;
     try {
-      assert.throws(
+      await assert.rejects(
         () => resolveChatLanguageModel("anthropic"),
         /ANTHROPIC_API_KEY/
       );
@@ -51,7 +51,7 @@ describe("chatModel", () => {
     }
   });
 
-  it("resolveChatLanguageModel requires openai key", () => {
+  it("resolveChatLanguageModel requires openai key", async () => {
     const prevO = process.env.OPENAI_API_KEY;
     const prevS = process.env.SDLC_LLM_API_KEY;
     const prevW = process.env.WORKFLOW_LLM_API_KEY;
@@ -59,7 +59,10 @@ describe("chatModel", () => {
     delete process.env.SDLC_LLM_API_KEY;
     delete process.env.WORKFLOW_LLM_API_KEY;
     try {
-      assert.throws(() => resolveChatLanguageModel("openai"), /OPENAI_API_KEY/);
+      await assert.rejects(
+        () => resolveChatLanguageModel("openai"),
+        /OPENAI_API_KEY/
+      );
     } finally {
       if (prevO === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = prevO;
@@ -70,7 +73,7 @@ describe("chatModel", () => {
     }
   });
 
-  it("resolveChatLanguageModel requires openai-compatible base url", () => {
+  it("resolveChatLanguageModel requires openai-compatible base url", async () => {
     const keys = [
       "OPENAI_COMPATIBLE_BASE_URL",
       "CUSTOM_BASE_URL",
@@ -84,17 +87,17 @@ describe("chatModel", () => {
     const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
     for (const k of keys) delete process.env[k];
     try {
-      assert.throws(
+      await assert.rejects(
         () => resolveChatLanguageModel("openai-compatible", "m"),
-        /OPENAI_COMPATIBLE_BASE_URL/
+        /OpenAI-compatible base URL|OPENAI_COMPATIBLE_BASE_URL/
       );
       process.env.OPENAI_COMPATIBLE_BASE_URL = "http://127.0.0.1:1234";
-      const model = resolveChatLanguageModel(
+      const model = await resolveChatLanguageModel(
         "openai-compatible",
         "local-model"
       );
       assert.ok(model);
-      const legacy = resolveChatLanguageModel("custom", "local-model");
+      const legacy = await resolveChatLanguageModel("custom", "local-model");
       assert.ok(legacy);
     } finally {
       for (const k of keys) {
@@ -104,11 +107,11 @@ describe("chatModel", () => {
     }
   });
 
-  it("resolveChatLanguageModel builds anthropic model with key", () => {
+  it("resolveChatLanguageModel builds anthropic model with key", async () => {
     const prevA = process.env.ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = "test-key";
     try {
-      const model = resolveChatLanguageModel(
+      const model = await resolveChatLanguageModel(
         "anthropic",
         "claude-3-7-sonnet-latest"
       );

@@ -1,4 +1,4 @@
-import { BASE_URL, ConnectProjectError, N_204, pocToken } from "./shared.js";
+import { BASE_URL, ConnectProjectError, N_204 } from "./shared.js";
 
 export interface LinkedItem {
   id: string;
@@ -13,8 +13,7 @@ export async function listLinkedItems(
   chatId: string
 ): Promise<LinkedItem[]> {
   const response = await fetch(
-    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/linked-items`,
-    { headers: { Authorization: `Bearer ${pocToken()}` } }
+    `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/linked-items`
   );
   if (!response.ok) {
     throw new ConnectProjectError("Failed to list linked items");
@@ -35,8 +34,7 @@ export async function createLinkedItem(options: {
     {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${pocToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify(item)
     }
@@ -63,8 +61,7 @@ export async function deleteLinkedItem(options: {
   const response = await fetch(
     `${BASE_URL}/api/projects/${projectId}/chats/${chatId}/linked-items/${linkedItemId}`,
     {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${pocToken()}` }
+      method: "DELETE"
     }
   );
   if (!response.ok && response.status !== N_204) {

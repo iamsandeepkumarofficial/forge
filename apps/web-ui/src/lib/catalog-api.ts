@@ -9,23 +9,10 @@ function catalogBaseUrl(): string {
     "http://127.0.0.1:4000"
   );
 }
-function pocToken(): string {
-  return import.meta.env.VITE_FORGE_POC_TOKEN || "";
-}
-function userEmailHeader(): Record<string, string> {
-  const email = import.meta.env.VITE_FORGE_USER_EMAIL?.trim();
-  return email ? { "X-Forge-User-Email": email } : {};
-}
 function catalogHeaders(): HeadersInit {
-  const tok = pocToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...userEmailHeader()
+  return {
+    "Content-Type": "application/json"
   };
-  if (tok) {
-    headers.Authorization = `Bearer ${tok}`;
-  }
-  return headers;
 }
 async function readError(res: Response): Promise<string> {
   try {

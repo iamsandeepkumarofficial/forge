@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { errorMessage, maybeCreateChat } from "./dashboard-empty-uploads";
+import { errorMessage, maybeCreateChat } from "./dashboard-empty-connect";
 
 vi.mock("../lib/projects-api.js", () => ({
   ConnectProjectError: class extends Error {
@@ -10,18 +10,11 @@ vi.mock("../lib/projects-api.js", () => ({
     }
   },
   connectProject: vi.fn(),
-  createChat: vi.fn(async () => ({ id: "c1" })),
-  uploadProject: vi.fn()
+  connectLocalProject: vi.fn(),
+  createChat: vi.fn(async () => ({ id: "c1" }))
 }));
 
-vi.mock("../lib/zip-project-files.js", () => ({
-  archiveNameForFolder: (n: string) => `${n}.zip`,
-  entriesFromDataTransfer: vi.fn(),
-  entriesFromFileList: vi.fn(),
-  zipProjectEntries: vi.fn()
-}));
-
-describe("dashboard-empty-uploads", () => {
+describe("dashboard-empty-connect", () => {
   it("errorMessage formats plain errors", () => {
     expect(errorMessage(new Error("boom"))).toBe("boom");
   });

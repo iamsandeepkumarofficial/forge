@@ -2,11 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { resolveSandbox } from "./sandboxExec.js";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
 import { ProjectRepository } from "../catalog/projectRepository.js";
-import {
-  EXCLUDES,
-  promoteGithubBranch,
-  promoteObjectStoreArchive
-} from "./codeArchive/promote.js";
+import { EXCLUDES, promoteGithubBranch } from "./codeArchive/promote.js";
 
 export async function spawnRepoTarGz(sessionId: string): Promise<{
   child: ChildProcessWithoutNullStreams;
@@ -29,7 +25,7 @@ export async function spawnRepoTarGz(sessionId: string): Promise<{
 }
 
 export async function promoteToCanonical(sessionId: string): Promise<{
-  target: "github" | "objectStore";
+  target: "github" | "local";
   branch?: string;
   files?: number;
 }> {
@@ -49,10 +45,6 @@ export async function promoteToCanonical(sessionId: string): Promise<{
       branch: chat.branchName
     });
   }
-  if (!project.canonicalKey) throw new Error("Project has no canonical prefix");
-  return promoteObjectStoreArchive({
-    containerName,
-    workingDir,
-    repoPrefix: project.canonicalKey
-  });
+  // Local projects are bind-mounted to ~/.forge/projects/{id} — already canonical.
+  return { target: "local" };
 }

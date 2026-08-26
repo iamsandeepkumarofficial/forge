@@ -27,8 +27,7 @@ describe("workflow API", () => {
     } as Response);
     const graph = await getWorkflow("p1", "c1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1/chats/c1/workflow",
-      expect.any(Object)
+      "http://127.0.0.1:4000/api/projects/p1/chats/c1/workflow"
     );
     expect(graph.workflow.status).toBe("running");
   });
@@ -45,8 +44,7 @@ describe("workflow API", () => {
     } as Response);
     await getStageMessages({ projectId: "p1", chatId: "c1", stageId: "s1" });
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1/chats/c1/workflow/stages/s1/messages",
-      expect.any(Object)
+      "http://127.0.0.1:4000/api/projects/p1/chats/c1/workflow/stages/s1/messages"
     );
   });
 

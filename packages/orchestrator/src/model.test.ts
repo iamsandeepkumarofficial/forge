@@ -30,13 +30,13 @@ describe("model", () => {
     assert.equal(config.name, "gpt-4o-mini");
   });
 
-  it("resolveModel throws without anthropic key", () => {
+  it("resolveModel throws without anthropic key", async () => {
     const prevApi = process.env.SDLC_LLM_API_KEY;
     const prevAnth = process.env.ANTHROPIC_API_KEY;
     delete process.env.SDLC_LLM_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     try {
-      assert.throws(
+      await assert.rejects(
         () =>
           resolveModel({
             provider: "anthropic",
@@ -52,13 +52,13 @@ describe("model", () => {
     }
   });
 
-  it("resolveModel throws without openai key", () => {
+  it("resolveModel throws without openai key", async () => {
     const prevApi = process.env.SDLC_LLM_API_KEY;
     const prevOpen = process.env.OPENAI_API_KEY;
     delete process.env.SDLC_LLM_API_KEY;
     delete process.env.OPENAI_API_KEY;
     try {
-      assert.throws(
+      await assert.rejects(
         () => resolveModel({ provider: "openai", name: "gpt-4o-mini" }),
         /OPENAI_API_KEY/
       );
@@ -70,7 +70,7 @@ describe("model", () => {
     }
   });
 
-  it("resolveModel throws without baseUrl for openai-compatible", () => {
+  it("resolveModel throws without baseUrl for openai-compatible", async () => {
     const keys = [
       "OPENAI_COMPATIBLE_BASE_URL",
       "CUSTOM_BASE_URL",
@@ -80,14 +80,14 @@ describe("model", () => {
     const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
     for (const k of keys) delete process.env[k];
     try {
-      assert.throws(
+      await assert.rejects(
         () =>
           resolveModel({
             provider: "openai-compatible",
             name: "llama3",
             baseUrl: undefined
           }),
-        /OPENAI_COMPATIBLE_BASE_URL/
+        /OpenAI-compatible base URL|OPENAI_COMPATIBLE_BASE_URL/
       );
     } finally {
       for (const k of keys) {
@@ -97,8 +97,8 @@ describe("model", () => {
     }
   });
 
-  it("resolveModel builds openai-compatible client with baseUrl", () => {
-    const model = resolveModel({
+  it("resolveModel builds openai-compatible client with baseUrl", async () => {
+    const model = await resolveModel({
       provider: "openai-compatible",
       name: "llama3",
       baseUrl: "http://127.0.0.1:11434/v1/"

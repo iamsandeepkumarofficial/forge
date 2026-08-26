@@ -1,4 +1,4 @@
-import { runnerUrl, pocToken, userEmailHeader } from "./tool-runner.js";
+import { runnerUrl } from "./tool-runner.js";
 
 const N_5 = 5;
 const N_6 = 6;
@@ -41,9 +41,7 @@ export type UiChatMessage = {
 };
 function authHeaders(): HeadersInit {
   return {
-    Authorization: `Bearer ${pocToken()}`,
-    "Content-Type": "application/json",
-    ...userEmailHeader()
+    "Content-Type": "application/json"
   };
 }
 export async function fetchModels(provider: LlmProvider): Promise<string[]> {
@@ -189,9 +187,7 @@ export async function consumeTurnStream(options: {
     : `${runnerUrl()}${streamUrl}`;
   const res = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${pocToken()}`,
-      Accept: "text/event-stream",
-      ...userEmailHeader()
+      Accept: "text/event-stream"
     },
     signal
   });

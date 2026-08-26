@@ -265,7 +265,7 @@ export async function runLlmStep(input: {
     systemPrompt: baseSystem,
     at: Date.now()
   });
-  const model = resolveChatLanguageModel(provider, input.model);
+  const model = await resolveChatLanguageModel(provider, input.model);
   const toolsForModel = toolsWithoutExecute(
     buildChatTools({
       sessionId: input.sessionId,

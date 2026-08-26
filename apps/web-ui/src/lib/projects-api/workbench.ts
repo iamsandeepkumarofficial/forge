@@ -1,4 +1,4 @@
-import { BASE_URL, ConnectProjectError, pocToken } from "./shared.js";
+import { BASE_URL, ConnectProjectError } from "./shared.js";
 
 export type ChatFeatureKind = "ticket" | "workbench";
 export interface ProjectWorkbenchSession {
@@ -21,8 +21,7 @@ export async function createWorkbenchSession(
     {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${pocToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ title })
     }
@@ -36,8 +35,7 @@ export async function fetchWorkbenchSessions(
   projectId: string
 ): Promise<ProjectWorkbenchSession[]> {
   const response = await fetch(
-    `${BASE_URL}/api/projects/${projectId}/workbench-sessions`,
-    { headers: { Authorization: `Bearer ${pocToken()}` } }
+    `${BASE_URL}/api/projects/${projectId}/workbench-sessions`
   );
   if (!response.ok) {
     throw new ConnectProjectError("Failed to fetch workbench sessions");

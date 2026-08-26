@@ -1,7 +1,6 @@
 import {
   BASE_URL,
   ConnectProjectError,
-  pocToken,
   type SessionStatus
 } from "./shared.js";
 import { parseApiErrorText } from "./project-errors.js";
@@ -17,8 +16,7 @@ export async function startSession(sessionId: string): Promise<SessionStatus> {
     const response = await fetch(`${BASE_URL}/internal/session/start`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${pocToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ sessionId })
     });
@@ -64,12 +62,7 @@ export async function getSessionStatus(
   }
   try {
     const response = await fetch(
-      `${BASE_URL}/internal/session/status?sessionId=${encodeURIComponent(sessionId)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${pocToken()}`
-        }
-      }
+      `${BASE_URL}/internal/session/status?sessionId=${encodeURIComponent(sessionId)}`
     );
     if (!response.ok) {
       const errorText = await response.text();
@@ -120,8 +113,7 @@ export async function pushToSession(
     const response = await fetch(`${BASE_URL}/internal/session/push`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${pocToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ chatId, content })
     });
