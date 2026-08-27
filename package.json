@@ -35,12 +35,5 @@
   },
   "dependencies": {
     "uuid": "^14.0.1"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@swc/core",
-      "protobufjs",
-      "@temporalio/core-bridge"
-    ]
   }
 }
