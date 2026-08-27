@@ -13,31 +13,20 @@ vi.mock("../lib/projects-api.js", () => ({
   createChat: vi.fn(),
   ConnectProjectError: class extends Error {}
 }));
-vi.mock("./github-repo-picker.js", () => ({
-  GithubRepoPicker: () => null
-}));
 
 describe("DashboardEmptyState", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders build prompt and import panels", () => {
+  it("renders build prompt, local folder import, and templates", () => {
     render(
       <MemoryRouter>
         <DashboardEmptyState onConnected={vi.fn()} />
       </MemoryRouter>
     );
-    expect(screen.getByText("Import Git Repository")).toBeTruthy();
+    expect(screen.getByText("Select a project folder")).toBeTruthy();
     expect(screen.getByText(/Contact Form|Landing Page|REST API/)).toBeTruthy();
-  });
-
-  it("shows templates section", () => {
-    render(
-      <MemoryRouter>
-        <DashboardEmptyState onConnected={vi.fn()} />
-      </MemoryRouter>
-    );
     expect(screen.getByText("Chat Template")).toBeTruthy();
     expect(screen.getByText("Agent Pipeline")).toBeTruthy();
   });
