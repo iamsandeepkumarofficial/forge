@@ -54,18 +54,7 @@ export async function assertLocalFolderPath(folderPath: string): Promise<string>
 export async function isRepoInitialized(
   containerName: string
 ): Promise<boolean> {
-  try {
-    await execFileAsync("docker", [
-      "exec",
-      containerName,
-      "sh",
-      "-c",
-      `[ -d "${WORKSPACE_MOUNT}/.git" ] && [ -s "${WORKSPACE_MOUNT}/.git/HEAD" ]`
-    ]);
-    return true;
-  } catch {
-    return false;
-  }
+  return isRepoInitializedAt(containerName, WORKSPACE_MOUNT);
 }
 
 export function cloneGithubWorkspaceScript(): string {
@@ -103,12 +92,13 @@ export async function isRepoInitializedAt(
   mountPath: string
 ): Promise<boolean> {
   try {
+    // Accept both a real .git directory and a worktree .git file (RFC 0005).
     await execFileAsync("docker", [
       "exec",
       containerName,
       "sh",
       "-c",
-      `[ -d "${mountPath}/.git" ] && [ -s "${mountPath}/.git/HEAD" ]`
+      `git -C "${mountPath}" rev-parse --is-inside-work-tree >/dev/null 2>&1`
     ]);
     return true;
   } catch {

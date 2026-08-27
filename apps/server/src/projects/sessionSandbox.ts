@@ -28,6 +28,11 @@ import {
   type LocalFolderSource
 } from "./sessionSandbox/materialize.js";
 import type { BindMount } from "./sandboxRuntime/types.js";
+import {
+  canonicalGitContainerPath,
+  ensureSessionWorktree,
+  removeSessionWorktree
+} from "./localWorktree.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -122,8 +127,20 @@ async function provisionProjectScopedSandbox(options: {
 
   if (localPath) {
     const hostPath = await assertLocalFolderPath(localPath);
+    const wt = await ensureSessionWorktree({
+      canonicalKey: hostPath,
+      projectId: project.id,
+      sessionId,
+      branchName: chat.branchName
+    });
     const handle = await getSandboxRuntime().createSession(sessionId, {
-      bindMounts: [{ hostPath, containerPath: WORKSPACE_MOUNT }]
+      bindMounts: [
+        { hostPath: wt.workDir, containerPath: WORKSPACE_MOUNT },
+        {
+          hostPath: wt.gitCanonicalHostPath,
+          containerPath: canonicalGitContainerPath(project.id)
+        }
+      ]
     });
     if (handle.runtime !== "docker") {
       throw new Error(
@@ -215,9 +232,19 @@ async function provisionWorkspaceScopedSandbox(options: {
     const localPath = resolveLocalFolderPath(project);
     if (localPath) {
       const hostPath = await assertLocalFolderPath(localPath);
+      const wt = await ensureSessionWorktree({
+        canonicalKey: hostPath,
+        projectId: project.id,
+        sessionId,
+        branchName: chat.branchName
+      });
       bindMounts.push({
-        hostPath,
+        hostPath: wt.workDir,
         containerPath: `${WORKSPACE_MOUNT}/${member.repoName}`
+      });
+      bindMounts.push({
+        hostPath: wt.gitCanonicalHostPath,
+        containerPath: canonicalGitContainerPath(project.id)
       });
     } else if (project.source === "github") {
       githubMembers.push({ member, project });
@@ -260,18 +287,6 @@ async function provisionWorkspaceScopedSandbox(options: {
       token,
       repoName: member.repoName
     });
-  }
-
-  for (const { member, project } of memberProjects) {
-    if (project.source !== "local") continue;
-    const target = `${WORKSPACE_MOUNT}/${member.repoName}`;
-    await execFileAsync("docker", [
-      "exec",
-      containerName,
-      "sh",
-      "-c",
-      `cd "${target}" && git checkout -B "${chat.branchName}" 2>/dev/null || true`
-    ]).catch(() => {});
   }
 
   for (const { member } of memberProjects) {
@@ -378,6 +393,47 @@ export async function getSessionSandboxStatus(
 }
 
 export async function destroySessionSandbox(sessionId: string): Promise<void> {
+  try {
+    await pruneLocalSessionWorktrees(sessionId);
+  } catch (err) {
+    console.warn(
+      `[sessionSandbox] worktree prune failed for ${sessionId}:`,
+      err instanceof Error ? err.message : err
+    );
+  }
   const { getSandboxRuntime } = await import("./sandboxRuntime/resolve.js");
   await getSandboxRuntime().destroySession(sessionId);
+}
+
+async function pruneLocalSessionWorktrees(sessionId: string): Promise<void> {
+  const chatRepo = new ChatFeatureRepository();
+  const projectRepo = new ProjectRepository();
+  const chat = await chatRepo.getBySessionId(sessionId);
+  if (!chat) return;
+
+  if (chat.workspaceId) {
+    const workspaceRepo = new WorkspaceRepository();
+    const members = await workspaceRepo.listMembers(chat.workspaceId);
+    for (const member of members) {
+      const project = await projectRepo.getById(member.projectId);
+      if (!project || project.source !== "local" || !project.canonicalKey) {
+        continue;
+      }
+      await removeSessionWorktree({
+        canonicalKey: project.canonicalKey,
+        projectId: project.id,
+        sessionId
+      });
+    }
+    return;
+  }
+
+  if (!chat.projectId) return;
+  const project = await projectRepo.getById(chat.projectId);
+  if (!project || project.source !== "local" || !project.canonicalKey) return;
+  await removeSessionWorktree({
+    canonicalKey: project.canonicalKey,
+    projectId: project.id,
+    sessionId
+  });
 }

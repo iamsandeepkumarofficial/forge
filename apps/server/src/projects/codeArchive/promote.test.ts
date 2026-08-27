@@ -15,6 +15,11 @@ describe("codeArchive promote helpers", () => {
         dockerExec: async () => ({ code: 0, stdout: "", stderr: "" })
       }
     });
+    mock.module("../localWorktree.js", {
+      exports: {
+        mergeSessionBranchIntoCanonical: async () => undefined
+      }
+    });
     mock.module("../../services/storage/objectStore.js", {
       exports: {
         deleteObjectsWithPrefix: async () => undefined,
