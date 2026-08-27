@@ -85,6 +85,20 @@
       "when": 1785845000000,
       "tag": "0011_local_folder_source",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785850000000,
+      "tag": "0012_drop_upload_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785855000000,
+      "tag": "0013_workspaces",
+      "breakpoints": true
     }
   ]
 }

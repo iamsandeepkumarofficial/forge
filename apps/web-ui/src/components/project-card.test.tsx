@@ -18,7 +18,7 @@ describe("ProjectCard", () => {
     });
   });
 
-  it("renders name, source, and status", () => {
+  it("renders name and source without available tag", () => {
     render(
       <ProjectCard
         projectId="p1"
@@ -31,7 +31,7 @@ describe("ProjectCard", () => {
     );
     expect(screen.getByText("Forge")).toBeTruthy();
     expect(screen.getByText(/GitHub/)).toBeTruthy();
-    expect(screen.getByText("Available")).toBeTruthy();
+    expect(screen.queryByText("Available")).toBeNull();
   });
 
   it("calls onOpen when the card is clicked", () => {
@@ -46,11 +46,11 @@ describe("ProjectCard", () => {
         onDelete={vi.fn()}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: /Forge/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Open project Forge" }));
     expect(onOpen).toHaveBeenCalled();
   });
 
-  it("refreshes via fetchProject without opening", async () => {
+  it("refreshes via menu without opening", async () => {
     const onOpen = vi.fn();
     render(
       <ProjectCard
@@ -62,7 +62,8 @@ describe("ProjectCard", () => {
         onDelete={vi.fn()}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByLabelText("Actions for Forge"));
+    fireEvent.click(screen.getByText("Refresh"));
     await waitFor(() => {
       expect(fetchProject).toHaveBeenCalledWith("p1");
     });

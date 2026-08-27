@@ -33,6 +33,11 @@ export async function promoteToCanonical(sessionId: string): Promise<{
   const projectRepo = new ProjectRepository();
   const chat = await chatRepo.getBySessionId(sessionId);
   if (!chat) throw new Error(`No chat/feature found for session: ${sessionId}`);
+  if (!chat.projectId) {
+    throw new Error(
+      "promoteToCanonical is not yet supported for workspace-scoped sessions"
+    );
+  }
   const project = await projectRepo.getById(chat.projectId);
   if (!project)
     throw new Error(`Project not found for chat session: ${sessionId}`);

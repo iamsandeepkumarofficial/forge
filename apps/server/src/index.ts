@@ -9,6 +9,7 @@ import { createProjectsRouter } from "./api/projectsRouter.js";
 import { createChatFeaturesRouter } from "./api/chatFeaturesRouter.js";
 import { createAttachmentsRouter } from "./api/attachmentsRouter.js";
 import { createChatRouter } from "./api/chatRouter.js";
+import { createWorkspacesRouter } from "./api/workspacesRouter.js";
 import { startInProcessPreview } from "./preview/startInProcessPreview.js";
 
 const N_120 = 120;
@@ -43,6 +44,7 @@ app.use("/api", createChatRouter());
 app.use("/api/projects", localUser, createChatFeaturesRouter());
 app.use("/api/projects", localUser, createAttachmentsRouter());
 app.use("/api/projects", localUser, createProjectsRouter());
+app.use("/api/workspaces", localUser, createWorkspacesRouter());
 app.use(
   "/internal",
   rateLimit({

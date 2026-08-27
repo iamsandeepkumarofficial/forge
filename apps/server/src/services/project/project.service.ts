@@ -133,7 +133,8 @@ export class ProjectService {
         name: p.name,
         source: p.source,
         status: p.status,
-        createdAt: p.createdAt.toISOString()
+        createdAt: p.createdAt.toISOString(),
+        lastActivityAt: p.lastActivityAt.toISOString()
       }));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

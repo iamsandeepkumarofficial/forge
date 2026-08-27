@@ -131,13 +131,93 @@ export const projects = pgTable(
     )
   })
 );
+
+/** Ordered path-prefix rules for the workspace single-origin preview gateway. */
+export type WorkspaceRoute = {
+  pathPrefix: string;
+  /** Member repoName that receives matching requests. */
+  target: string;
+  /** When true, strip pathPrefix before proxying (default false). */
+  stripPrefix?: boolean;
+};
+
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    /** Gateway route map; specific prefixes before catch-all `/`. */
+    routes: jsonb("routes").$type<WorkspaceRoute[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => ({
+    userIndex: index("workspaces_user_id_idx").on(table.userId)
+  })
+);
+
+export const workspaceProjects = pgTable(
+  "workspace_projects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Mount directory name under /workspace/{repoName}. */
+    repoName: varchar("repo_name", { length: 255 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    /** Other member repoNames this member depends on (startup order). */
+    dependsOn: jsonb("depends_on").$type<string[]>().notNull().default([]),
+    /**
+     * Env templates resolved at provision time.
+     * Placeholders: {{svc.internalUrl}}, {{svc.publicUrl}}.
+     */
+    env: jsonb("env")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => ({
+    workspaceProjectUnique: unique(
+      "workspace_projects_workspace_id_project_id_unique"
+    ).on(table.workspaceId, table.projectId),
+    workspaceRepoNameUnique: unique(
+      "workspace_projects_workspace_id_repo_name_unique"
+    ).on(table.workspaceId, table.repoName),
+    workspaceIdIndex: index("workspace_projects_workspace_id_idx").on(
+      table.workspaceId
+    ),
+    projectIdIndex: index("workspace_projects_project_id_idx").on(
+      table.projectId
+    )
+  })
+);
+
 export const chatFeatures = pgTable(
   "chat_features",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Set for project-scoped chats; null when workspace-scoped. */
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "cascade"
+    }),
+    /** Set for workspace-scoped chats; null when project-scoped. */
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade"
+    }),
     userId: uuid("user_id").notNull(),
     title: varchar("title", { length: 255 }).notNull(),
     kind: chatFeatureKindEnum("kind").notNull().default("ticket"),
@@ -172,10 +252,16 @@ export const chatFeatures = pgTable(
       table.projectId,
       table.branchName
     ),
+    workspaceBranchUnique: unique(
+      "chat_features_workspace_id_branch_unique"
+    ).on(table.workspaceId, table.branchName),
     parentIdIndex: index("chat_features_parent_id_idx").on(table.parentId),
     projectKindActivityIndex: index(
       "chat_features_project_kind_activity_idx"
-    ).on(table.projectId, table.kind, table.lastActivityAt)
+    ).on(table.projectId, table.kind, table.lastActivityAt),
+    workspaceKindActivityIndex: index(
+      "chat_features_workspace_kind_activity_idx"
+    ).on(table.workspaceId, table.kind, table.lastActivityAt)
   })
 );
 export const documentSourceEnum = pgEnum("document_source", ["user", "agent"]);
@@ -398,6 +484,10 @@ export type UiState = typeof uiState.$inferSelect;
 export type UiStateInsert = typeof uiState.$inferInsert;
 export type Project = typeof projects.$inferSelect;
 export type ProjectInsert = typeof projects.$inferInsert;
+export type Workspace = typeof workspaces.$inferSelect;
+export type WorkspaceInsert = typeof workspaces.$inferInsert;
+export type WorkspaceProject = typeof workspaceProjects.$inferSelect;
+export type WorkspaceProjectInsert = typeof workspaceProjects.$inferInsert;
 export type ChatFeature = typeof chatFeatures.$inferSelect;
 export type ChatFeatureInsert = typeof chatFeatures.$inferInsert;
 export type ChatFeatureKind = (typeof chatFeatureKindEnum.enumValues)[number];
@@ -426,6 +516,8 @@ export const allTables = {
   conversations,
   uiState,
   projects,
+  workspaces,
+  workspaceProjects,
   chatFeatures,
   documents,
   chatComments,

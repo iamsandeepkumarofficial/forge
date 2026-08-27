@@ -13,6 +13,11 @@ type RegisterBody = {
   backendService?: string;
   hostname?: string;
   ownerEmail?: string;
+  pathRoutes?: Array<{
+    pathPrefix?: string;
+    backendService?: string;
+    stripPrefix?: boolean;
+  }>;
 };
 
 export type PreviewRoutesOptions = {
@@ -31,6 +36,30 @@ function defaultHostname(input: {
     return `s-${input.sessionId}.${input.base}`;
   }
   return `p${input.port}-s-${input.sessionId}.${input.base}`;
+}
+
+function normalizePathRoutes(
+  raw: RegisterBody["pathRoutes"]
+): Array<{ pathPrefix: string; backendService: string; stripPrefix?: boolean }> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{
+    pathPrefix: string;
+    backendService: string;
+    stripPrefix?: boolean;
+  }> = [];
+  for (const r of raw) {
+    const pathPrefix =
+      typeof r?.pathPrefix === "string" ? r.pathPrefix.trim() : "";
+    const backendService =
+      typeof r?.backendService === "string" ? r.backendService.trim() : "";
+    if (!pathPrefix.startsWith("/") || !backendService) continue;
+    out.push({
+      pathPrefix,
+      backendService,
+      ...(r.stripPrefix === true ? { stripPrefix: true } : {})
+    });
+  }
+  return out;
 }
 
 export function previewInternalRouter(options: PreviewRoutesOptions): Router {
@@ -72,12 +101,14 @@ function handleRegister(input: {
       port: body.port,
       base: input.options.previewBaseDomain
     });
+  const pathRoutes = normalizePathRoutes(body.pathRoutes);
   input.options.store.upsert({
     sessionId: body.sessionId,
     port: body.port,
     hostname,
     backendService: body.backendService,
-    ownerEmail: body.ownerEmail
+    ownerEmail: body.ownerEmail,
+    ...(pathRoutes.length > 0 ? { pathRoutes } : {})
   });
   input.res.status(N_200).json({
     hostname,

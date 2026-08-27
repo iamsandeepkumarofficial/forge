@@ -80,6 +80,42 @@ export function cloneGithubWorkspaceScript(): string {
   ].join("; ");
 }
 
+/** Clone into /workspace/{repoName} for multi-repo workspace sessions. */
+export function cloneGithubIntoSubdirScript(repoName: string): string {
+  assertSafeRepoDirectoryName(repoName);
+  const target = `${WORKSPACE_MOUNT}/${repoName}`;
+  return [
+    "set -e",
+    `mkdir -p "${WORKSPACE_MOUNT}"`,
+    `rm -rf "${target}"`,
+    "rm -rf /tmp/forge-src",
+    'git clone "$REPO_URL" /tmp/forge-src',
+    `mkdir -p "${target}"`,
+    `cp -a /tmp/forge-src/. "${target}/"`,
+    "rm -rf /tmp/forge-src",
+    `cd "${target}"`,
+    'git checkout -B "$BRANCH"'
+  ].join("; ");
+}
+
+export async function isRepoInitializedAt(
+  containerName: string,
+  mountPath: string
+): Promise<boolean> {
+  try {
+    await execFileAsync("docker", [
+      "exec",
+      containerName,
+      "sh",
+      "-c",
+      `[ -d "${mountPath}/.git" ] && [ -s "${mountPath}/.git/HEAD" ]`
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function githubCloneUrl(project: Project, token?: string): string {
   const parsed = parseGithubSlug(project.dedupeKey);
   if (!parsed) {
@@ -94,9 +130,14 @@ export async function cloneGithubIntoVolume(options: {
   project: Project;
   branch: string;
   token?: string;
+  /** When set, clone into /workspace/{repoName} instead of /workspace. */
+  repoName?: string;
 }): Promise<void> {
-  const { containerName, project, branch, token } = options;
+  const { containerName, project, branch, token, repoName } = options;
   const url = githubCloneUrl(project, token);
+  const script = repoName
+    ? cloneGithubIntoSubdirScript(repoName)
+    : cloneGithubWorkspaceScript();
   await docker([
     "exec",
     "-e",
@@ -106,7 +147,7 @@ export async function cloneGithubIntoVolume(options: {
     containerName,
     "sh",
     "-c",
-    cloneGithubWorkspaceScript()
+    script
   ]);
 }
 

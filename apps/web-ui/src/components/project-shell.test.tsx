@@ -37,5 +37,6 @@ describe("ProjectShell", () => {
     expect(screen.queryByRole("link", { name: "Board" })).toBeNull();
     expect(screen.getByText("Chats body")).toBeTruthy();
     expect(screen.getByRole("button", { name: /New chat/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Collapse sidebar/i })).toBeTruthy();
   });
 });

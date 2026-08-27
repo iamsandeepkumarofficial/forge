@@ -9,13 +9,17 @@ import {
   documents,
   projectSourceEnum,
   projects,
-  users
+  users,
+  workspaceProjects,
+  workspaces
 } from "./schema.js";
 
 describe("schema tables", () => {
   it("exposes expected table names", () => {
     assert.equal(getTableName(users), "users");
     assert.equal(getTableName(projects), "projects");
+    assert.equal(getTableName(workspaces), "workspaces");
+    assert.equal(getTableName(workspaceProjects), "workspace_projects");
     assert.equal(getTableName(chatFeatures), "chat_features");
     assert.equal(getTableName(documents), "documents");
   });
@@ -36,7 +40,9 @@ describe("schema tables", () => {
       "sessionMessages",
       "uiState",
       "userGithubAccounts",
-      "users"
+      "users",
+      "workspaceProjects",
+      "workspaces"
     ]);
   });
 
@@ -54,5 +60,10 @@ describe("schema tables", () => {
     assert.ok(projects.source);
     assert.ok(chatFeatures.branchName);
     assert.ok(chatFeatures.workflowId);
+    assert.ok(chatFeatures.workspaceId);
+    assert.ok(workspaces.routes);
+    assert.ok(workspaceProjects.repoName);
+    assert.ok(workspaceProjects.dependsOn);
+    assert.ok(workspaceProjects.env);
   });
 });
