@@ -1,20 +1,11 @@
+import { NavLink, Outlet, Link, useParams } from "react-router-dom";
 import {
-  NavLink,
-  Outlet,
-  Link,
-  useParams,
-  useNavigate,
-  useLocation
-} from "react-router-dom";
-import { useEffect, useState } from "react";
-import {
+  ArrowLeft,
   MessageSquare,
-  MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
   Settings
 } from "lucide-react";
-import { fetchProject } from "../lib/projects-api.js";
 import { useCollapsibleSidebar } from "../hooks/use-collapsible-sidebar.js";
 import { ForgeMarkLink } from "./forge-mark.js";
 import { cn } from "@/lib/utils";
@@ -30,21 +21,12 @@ function SidebarIconButton(options: {
   collapsed: boolean;
   onClick?: () => void;
   href?: string;
-  active?: boolean;
-  primary?: boolean;
   children: React.ReactNode;
 }) {
-  const { label, collapsed, onClick, href, active, primary, children } = options;
+  const { label, collapsed, onClick, href, children } = options;
   const className = cn(
-    "inline-flex items-center rounded-lg text-sm font-medium transition-colors",
-    collapsed ? "size-9 justify-center" : "w-full gap-2 px-3 py-2",
-    primary
-      ? active
-        ? "bg-primary text-primary-foreground"
-        : "bg-primary text-primary-foreground hover:opacity-90"
-      : active
-        ? "bg-primary text-primary-foreground"
-        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+    "inline-flex items-center rounded-lg text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+    collapsed ? "size-9 justify-center" : "w-full gap-2 px-3 py-2"
   );
   if (href) {
     return (
@@ -75,68 +57,37 @@ function SidebarIconButton(options: {
 
 export function ProjectShell() {
   const { projectId } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
   const { collapsed, toggle } = useCollapsibleSidebar(SIDEBAR_KEY);
-  const [projectName, setProjectName] = useState<string | null>(null);
-  useEffect(() => {
-    if (!projectId) return;
-    void fetchProject(projectId)
-      .then((p) => setProjectName(typeof p?.name === "string" ? p.name : null))
-      .catch(() => setProjectName(null));
-  }, [projectId]);
   if (!projectId) {
     return <div className="p-8 text-muted-foreground">Missing workspace</div>;
   }
-  const onNewChat =
-    location.pathname.endsWith(`/projects/${projectId}/chats`) &&
-    new URLSearchParams(location.search).get("new") === "1";
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-svh overflow-hidden bg-background text-foreground">
       <aside
         className={cn(
-          "flex shrink-0 flex-col border-r border-border transition-[width] duration-200",
+          "flex h-full shrink-0 flex-col bg-sidebar text-sidebar-foreground shadow-md transition-[width] duration-200",
           collapsed ? "w-14" : "w-56"
         )}
       >
         <div
           className={cn(
-            "border-b border-border",
-            collapsed ? "flex flex-col items-center gap-2 p-2" : "space-y-2 p-4"
+            collapsed
+              ? "flex flex-col items-center gap-2 p-2"
+              : "px-3 py-4"
           )}
         >
           <ForgeMarkLink
             to="/"
             size="sm"
             showWordmark={!collapsed}
-            className={cn(
-              collapsed ? "size-9 justify-center" : undefined
-            )}
+            className={cn(collapsed ? "size-9 justify-center" : undefined)}
           />
-          {!collapsed && (
-            <h1
-              className="truncate text-base font-semibold"
-              title={projectName ?? undefined}
-            >
-              {projectName ?? "Project"}
-            </h1>
-          )}
         </div>
-        <div className={cn("border-b border-border", collapsed ? "p-1.5" : "p-2")}>
-          <SidebarIconButton
-            label="New chat"
-            collapsed={collapsed}
-            primary
-            active={onNewChat}
-            onClick={() => navigate(`/projects/${projectId}/chats?new=1`)}
-          >
-            <MessageSquarePlus className="size-4 shrink-0" />
-          </SidebarIconButton>
-        </div>
+
         <nav
           className={cn(
             "flex flex-1 flex-col gap-0.5",
-            collapsed ? "items-center p-1.5" : "p-2"
+            collapsed ? "items-center px-1.5 pb-2" : "px-3 pb-2"
           )}
         >
           {NAV.map((item) => {
@@ -150,24 +101,38 @@ export function ProjectShell() {
                 title={collapsed ? item.label : undefined}
                 className={({ isActive }) =>
                   cn(
-                    "inline-flex items-center rounded-lg text-sm transition-colors",
-                    collapsed ? "size-9 justify-center" : "gap-2 px-3 py-2",
+                    "inline-flex items-center rounded-lg text-sm font-medium transition-colors",
+                    collapsed
+                      ? "size-9 justify-center"
+                      : "w-full gap-2 px-3 py-2",
                     isActive
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-accent text-accent-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )
                 }
               >
-                <Icon className="size-4 shrink-0" />
-                {!collapsed && item.label}
+                {({ isActive }) => (
+                  <>
+                    <Icon
+                      className={cn(
+                        "size-4 shrink-0",
+                        isActive && "text-primary"
+                      )}
+                    />
+                    {!collapsed && item.label}
+                  </>
+                )}
               </NavLink>
             );
           })}
         </nav>
+
         <div
           className={cn(
-            "border-t border-border",
-            collapsed ? "flex flex-col items-center gap-1 p-1.5" : "space-y-1 p-2"
+            "mt-auto space-y-1",
+            collapsed
+              ? "flex flex-col items-center px-1.5 pb-2"
+              : "px-3 pb-3"
           )}
         >
           <SidebarIconButton
@@ -184,7 +149,9 @@ export function ProjectShell() {
             onClick={toggle}
             className={cn(
               "inline-flex items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground",
-              collapsed ? "size-9 justify-center" : "w-full gap-2 px-3 py-2 text-sm"
+              collapsed
+                ? "size-9 justify-center"
+                : "w-full gap-2 px-3 py-2 text-sm"
             )}
           >
             {collapsed ? (
@@ -198,8 +165,20 @@ export function ProjectShell() {
           </button>
         </div>
       </aside>
-      <main className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <Outlet />
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center px-6 py-3">
+          <Link
+            to="/"
+            aria-label="Back to projects"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-4 shrink-0" />
+            Projects
+          </Link>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

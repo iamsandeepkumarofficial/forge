@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
@@ -14,6 +15,8 @@ import {
   type DashboardStats,
   type HeatmapCell
 } from "../lib/dashboard-insights.js";
+
+const ATTENTION_PREVIEW_COUNT = 3;
 
 const HEATMAP_LEVEL_CLASS: Record<0 | 1 | 2 | 3 | 4, string> = {
   0: "bg-muted/80",
@@ -96,6 +99,7 @@ function ActivityHeatmap(options: { weeks: HeatmapCell[][] }) {
 }
 
 function AttentionList(options: { items: AttentionItem[] }) {
+  const [expanded, setExpanded] = useState(false);
   if (options.items.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -103,23 +107,49 @@ function AttentionList(options: { items: AttentionItem[] }) {
       </p>
     );
   }
+  const visible = expanded
+    ? options.items
+    : options.items.slice(0, ATTENTION_PREVIEW_COUNT);
+  const hiddenCount = options.items.length - visible.length;
   return (
-    <ul className="space-y-2">
-      {options.items.map((item) => (
-        <li
-          key={item.id}
-          className="flex items-start gap-3 rounded-lg border border-border bg-background/80 px-3 py-2.5"
+    <div className="space-y-2">
+      <ul className="space-y-2">
+        {visible.map((item) => (
+          <li
+            key={item.id}
+            className="flex items-start gap-3 rounded-lg border border-border bg-background/80 px-3 py-2.5"
+          >
+            <AlertCircle
+              className={`mt-0.5 size-4 shrink-0 ${item.tone === "warning" ? "text-amber-500" : "text-primary"}`}
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{item.title}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {item.detail}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
         >
-          <AlertCircle
-            className={`mt-0.5 size-4 shrink-0 ${item.tone === "warning" ? "text-amber-500" : "text-primary"}`}
-          />
-          <div className="min-w-0">
-            <p className="text-sm font-medium">{item.title}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
-          </div>
-        </li>
-      ))}
-    </ul>
+          Show {hiddenCount} more
+        </button>
+      )}
+      {expanded && options.items.length > ATTENTION_PREVIEW_COUNT && (
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          Show less
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -188,7 +218,7 @@ export function DashboardOverview(options: {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
           <h3 className="text-sm font-semibold">Activity</h3>
           <p className="mt-1 text-xs text-muted-foreground">

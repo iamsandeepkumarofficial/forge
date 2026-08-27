@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  fetchProject,
   fetchWorkbenchSessions,
   type ProjectWorkbenchSession
 } from "../lib/projects-api.js";
@@ -12,8 +13,15 @@ import {
 } from "./chats-page-actions.js";
 import { useChatsModelState } from "./use-chats-model-state.js";
 
+export type ChatsProjectMeta = {
+  id: string;
+  name: string;
+  status: "available" | "unavailable";
+};
+
 function useChatsSessions(projectId: string | undefined) {
   const [sessions, setSessions] = useState<ProjectWorkbenchSession[]>([]);
+  const [project, setProject] = useState<ChatsProjectMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState(projectId);
@@ -26,10 +34,26 @@ function useChatsSessions(projectId: string | undefined) {
     let cancelled = false;
     void (async () => {
       try {
-        const rows = await fetchWorkbenchSessions(projectId);
+        const [rows, projectRow] = await Promise.all([
+          fetchWorkbenchSessions(projectId),
+          fetchProject(projectId).catch(() => null)
+        ]);
         if (!cancelled) {
           setSessions(rows);
           setError(null);
+          if (projectRow && typeof projectRow.name === "string") {
+            const status =
+              projectRow.status === "unavailable"
+                ? "unavailable"
+                : "available";
+            setProject({
+              id: projectRow.id,
+              name: projectRow.name,
+              status
+            });
+          } else {
+            setProject(null);
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -43,7 +67,15 @@ function useChatsSessions(projectId: string | undefined) {
       cancelled = true;
     };
   }, [projectId]);
-  return { sessions, setSessions, loading, setLoading, error, setError };
+  return {
+    sessions,
+    setSessions,
+    project,
+    loading,
+    setLoading,
+    error,
+    setError
+  };
 }
 
 export function useChatsPage() {
@@ -51,8 +83,15 @@ export function useChatsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const forceNew = searchParams.get("new") === "1";
-  const { sessions, setSessions, loading, setLoading, error, setError } =
-    useChatsSessions(projectId);
+  const {
+    sessions,
+    setSessions,
+    project,
+    loading,
+    setLoading,
+    error,
+    setError
+  } = useChatsSessions(projectId);
   const [prompt, setPrompt] = useState("");
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -68,6 +107,7 @@ export function useChatsPage() {
   }, [showComposer]);
   return {
     projectId,
+    project,
     sessions,
     prompt,
     setPrompt,

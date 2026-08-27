@@ -37,7 +37,7 @@ describe("dashboard-insights", () => {
     expect(weeks[0]).toHaveLength(7);
   });
 
-  it("creates attention items for unavailable projects and empty chats", () => {
+  it("creates attention items for unavailable projects, not empty-chat tips", () => {
     const now = Date.parse("2026-08-27T00:00:00");
     const items = buildAttentionItems({
       projects: [
@@ -50,7 +50,36 @@ describe("dashboard-insights", () => {
     });
     expect(items.some((item) => item.title.includes("unavailable"))).toBe(true);
     expect(items.some((item) => item.title.includes("Start a chat"))).toBe(
-      true
+      false
+    );
+  });
+
+  it("limits stale resume tips to one", () => {
+    const now = Date.parse("2026-08-27T00:00:00");
+    const stale = new Date(now - 20 * 86_400_000).toISOString();
+    const items = buildAttentionItems({
+      projects: [{ id: "p1", name: "App", status: "available" }],
+      workspaces: [],
+      sessions: [
+        {
+          id: "s1",
+          projectId: "p1",
+          projectName: "App",
+          title: "Old one",
+          lastActivityAt: stale
+        },
+        {
+          id: "s2",
+          projectId: "p1",
+          projectName: "App",
+          title: "Old two",
+          lastActivityAt: stale
+        }
+      ],
+      now
+    });
+    expect(items.filter((item) => item.id.startsWith("session-stale-"))).toHaveLength(
+      1
     );
   });
 

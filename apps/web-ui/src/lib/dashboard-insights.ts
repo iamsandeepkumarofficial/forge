@@ -118,6 +118,8 @@ export function buildDashboardStats(options: {
 }
 
 const STALE_DAYS = 14;
+/** Soft tips like "start a chat" are omitted; only warnings + at most one resume. */
+const MAX_RESUME_TIPS = 1;
 
 export function buildAttentionItems(options: {
   projects: Array<{
@@ -141,12 +143,13 @@ export function buildAttentionItems(options: {
   now?: number;
 }): AttentionItem[] {
   const now = options.now ?? Date.now();
-  const items: AttentionItem[] = [];
+  const warnings: AttentionItem[] = [];
+  const resumes: AttentionItem[] = [];
   const staleCutoff = now - STALE_DAYS * MS_DAY;
 
   for (const project of options.projects) {
     if (project.status === "unavailable") {
-      items.push({
+      warnings.push({
         id: `project-unavailable-${project.id}`,
         tone: "warning",
         title: `${project.name} is unavailable`,
@@ -155,36 +158,10 @@ export function buildAttentionItems(options: {
     }
   }
 
-  for (const project of options.projects) {
-    const projectSessions = options.sessions.filter(
-      (s) => s.projectId === project.id
-    );
-    if (projectSessions.length === 0 && project.status === "available") {
-      items.push({
-        id: `project-empty-${project.id}`,
-        tone: "info",
-        title: `Start a chat in ${project.name}`,
-        detail: "No sessions yet — open the project and create your first chat."
-      });
-    }
-  }
-
-  for (const session of options.sessions) {
-    const last = parseTimestamp(session.lastActivityAt);
-    if (last != null && last < staleCutoff) {
-      items.push({
-        id: `session-stale-${session.id}`,
-        tone: "info",
-        title: `Resume "${session.title}"`,
-        detail: `Last active in ${session.projectName} over ${STALE_DAYS} days ago.`
-      });
-    }
-  }
-
   for (const workspace of options.workspaces) {
     const routeCount = workspace.routes?.length ?? 0;
     if (routeCount === 0 && workspace.lastActivityAt) {
-      items.push({
+      warnings.push({
         id: `workspace-routes-${workspace.id}`,
         tone: "warning",
         title: `Configure routes for ${workspace.name}`,
@@ -193,7 +170,20 @@ export function buildAttentionItems(options: {
     }
   }
 
-  return items.slice(0, 6);
+  for (const session of options.sessions) {
+    if (resumes.length >= MAX_RESUME_TIPS) break;
+    const last = parseTimestamp(session.lastActivityAt);
+    if (last != null && last < staleCutoff) {
+      resumes.push({
+        id: `session-stale-${session.id}`,
+        tone: "info",
+        title: `Resume "${session.title}"`,
+        detail: `Last active in ${session.projectName} over ${STALE_DAYS} days ago.`
+      });
+    }
+  }
+
+  return [...warnings, ...resumes];
 }
 
 export function formatRelativeTime(timestamp: number, now = Date.now()): string {

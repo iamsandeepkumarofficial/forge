@@ -4,7 +4,13 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { useChatsPage } from "./use-chats-page";
 
 vi.mock("../lib/projects-api.js", () => ({
-  fetchWorkbenchSessions: vi.fn(async () => [])
+  fetchWorkbenchSessions: vi.fn(async () => []),
+  fetchProject: vi.fn(async () => ({
+    id: "p1",
+    name: "Forge App",
+    source: "github",
+    status: "available"
+  }))
 }));
 
 vi.mock("./use-chats-model-state.js", () => ({
