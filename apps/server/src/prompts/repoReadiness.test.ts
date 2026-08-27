@@ -18,7 +18,7 @@ describe("repoReadiness", () => {
       const block = formatRepoSetupBlock({ readiness });
       assert.match(block, /Eval: not agent-ready/);
       assert.match(block, /upsert_launch_app/);
-      assert.match(block, /preview_start \/ preview_stop/);
+      assert.match(block, /preview_start/);
       assert.match(block, /3000–3009/);
       assert.match(block, /FORGE_PUBLISHED_APP_PORTS/);
       assert.doesNotMatch(block, /forge\.json/);

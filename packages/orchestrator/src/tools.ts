@@ -194,9 +194,17 @@ function previewTools(run: ToolRun): Record<string, Tool> {
       description: formatToolDescription("upsert_launch_app"),
       inputSchema: z.object({
         name: z.string(),
-        cwd: z.string(),
+        cwd: z.string().describe(
+          "App working directory. In workspaces, start with the member repo (e.g. bp-frontend or bp-frontend/apps/web)."
+        ),
         command: z.string(),
         type: z.enum(["web", "api", "worker"]),
+        repo: z
+          .string()
+          .optional()
+          .describe(
+            "Workspace member repo name (optional if cwd starts with the member name)."
+          ),
         port: z
           .number()
           .optional()

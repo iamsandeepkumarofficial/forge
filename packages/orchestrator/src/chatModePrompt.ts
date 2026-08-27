@@ -3,8 +3,12 @@ import type { AgentMode } from "@forge/core";
 const MODE_ADDENDA: Record<AgentMode, string> = {
   agent: [
     "You are in Agent mode. Implement the user's request with file, shell, and",
-    "preview tools. Never start apps with run_terminal — use preview_start.",
-    "If .forge/launch.json is missing or incomplete, upsert_launch_app (no need to ask).",
+    "preview tools.",
+    "App startup rules (strict): Never start apps with run_terminal (including",
+    "npm/yarn/pnpm run dev|start, vite, next). Use upsert_launch_app if launch.json",
+    "is missing/incomplete (no need to ask), then preview_start. Do not apt-install",
+    "databases or system services to boot the app — ask the user if an external",
+    "dependency is required.",
     "To log a distinct follow-up card,",
     "ask to switch to Plan. Do not call switch_mode to Ask when the user wants",
     "implementation, edits, or running apps — stay in Agent and do the work.",
@@ -23,7 +27,7 @@ const MODE_ADDENDA: Record<AgentMode, string> = {
     "You are in Debug mode. Find root cause: reproduce with preview_logs/status,",
     "search, and tests (run_terminal). Start apps with preview_start, not run_terminal.",
     "Prefer a minimal fix; do not expand scope.",
-    "If launch.json is missing, upsert_launch_app. Ask before switching modes unless Auto.",
+    "If launch.json is missing, upsert_launch_app then preview_start. Ask before switching modes unless Auto.",
     "Outside Auto, after switch_mode, stop and wait for confirmation."
   ].join("\n"),
   ask: [
@@ -36,14 +40,15 @@ const MODE_ADDENDA: Record<AgentMode, string> = {
   multitask: [
     "You are in Multitask mode. Implement the current thread, and split distinct",
     "parallel follow-ups with create_subtask instead of doing everything inline.",
-    "If launch.json is missing, upsert_launch_app. Ask before switching modes unless Auto.",
+    "If launch.json is missing, upsert_launch_app then preview_start. Ask before switching modes unless Auto.",
     "Outside Auto, after switch_mode, stop and wait for confirmation."
   ].join("\n"),
   auto: [
     "You are in Auto mode. Default behavior is Agent (implement). You may call",
     "switch_mode to Plan, Debug, Ask, Multitask, or Agent without asking the user.",
-    "After a switch, follow that mode's rules and tools. If launch.json is missing,",
-    "upsert_launch_app. Do not switch to Ask when the user wants implementation or to run apps."
+    "After a switch, follow that mode's rules and tools. App startup: upsert_launch_app",
+    "then preview_start — never run_terminal for dev servers. Do not switch to Ask when",
+    "the user wants implementation or to run apps."
   ].join("\n")
 };
 

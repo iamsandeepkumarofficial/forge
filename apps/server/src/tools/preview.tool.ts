@@ -79,6 +79,9 @@ function parseUpsertApp(args: Record<string, unknown>): ForgeApp | string {
   if (typeof args.port === "number" && Number.isFinite(args.port)) {
     app.port = Math.floor(args.port);
   }
+  if (typeof args.repo === "string" && args.repo.trim()) {
+    app.repo = args.repo.trim();
+  }
   return app;
 }
 
