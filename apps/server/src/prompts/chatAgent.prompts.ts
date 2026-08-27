@@ -4,7 +4,7 @@ import {
   formatSkillsPromptBlock,
   loadSkillIndexForPrompt
 } from "../tools/skillIndex.js";
-import { formatRepoSetupBlock, loadLaunchReadiness } from "./repoReadiness.js";
+import { formatRepoSetupBlock, loadLaunchReadiness, loadWorkspaceLaunchReadiness } from "./repoReadiness.js";
 
 const N_65536 = 65536;
 const N_2000000 = 2000000;
@@ -75,20 +75,21 @@ function sandboxFilesystemBlock(paths: ChatAgentPromptPaths): string {
   const root = paths.workingDir || paths.sessionRoot;
   const worktrees = paths.worktrees;
   const names = worktrees ? Object.keys(worktrees).sort() : [];
-  if (names.length > 1) {
-    const lines = names.map((n) => `- \`${n}\` → \`${worktrees![n]}\``);
+  if (names.length > 0) {
+    const lines = names.map((n) => `- \`${n}/\` → \`${worktrees![n]}\` (git root)`);
     return [
-      "## Sandbox filesystem (authoritative — do not invent other roots)",
-      `- Session root: \`${root}\`. This workspace mounts multiple repositories:`,
+      "## Working repositories (authoritative)",
+      `- Session root: \`${root}\`. This is a **workspace** with ${names.length} mounted repo${names.length === 1 ? "" : "s"}:`,
       ...lines,
-      `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` and must start with a member repo name (example: \`frontend/package.json\`, \`backend/src/main.py\`). Never use host paths (\`/Users/…\`, \`/home/…\`).`,
-      `- \`run_terminal\` default cwd is \`${root}\`. Pass \`workingDirectory\` as a member repo (e.g. \`frontend\`) or subdirectory.`,
-      `- Each member has its own git root. Make coordinated cross-repo edits when the feature requires it; keep changes scoped to the repos that need them.`,
-      `- Launch config may live under each member's \`.forge/launch.json\`.`
+      `- All source lives under these member folders. There is **no** project at \`${root}\` itself — do not create \`${root}/.forge/launch.json\` or treat \`${root}\` as a git repo.`,
+      `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` and **must start with a member repo name** (example: \`${names[0]}/package.json\`). Never use host paths (\`/Users/…\`, \`/home/…\`).`,
+      `- \`run_terminal\` default cwd is \`${root}\`. Always pass \`workingDirectory\` as a member repo (e.g. \`${names[0]}\`) or a subdirectory under it.`,
+      `- Each member has its own git root and its own \`.forge/launch.json\` (path: \`${names[0]}/.forge/launch.json\`).`,
+      "- Coordinated cross-repo edits are fine; keep changes scoped to the repos that need them."
     ].join("\n");
   }
   return [
-    "## Sandbox filesystem (authoritative — do not invent other roots)",
+    "## Working repository (authoritative)",
     `- Workspace and git root: \`${root}\`. The repository is mounted here directly — there is no extra repo folder.`,
     `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` (example: \`package.json\`, \`src/app.ts\`). Never use host paths (\`/Users/…\`, \`/home/…\`), never prefix with a repo folder name, never use absolute paths outside this sandbox.`,
     `- \`run_terminal\` default cwd is \`${root}\`. Pass \`workingDirectory\` only for a subdirectory (e.g. \`apps/web\`). Long installs/tests: \`background: true\`, then poll \`action: "logs"\`. Dev servers: preview_start.`,
@@ -100,18 +101,40 @@ function sandboxFilesystemBlock(paths: ChatAgentPromptPaths): string {
 export function composeChatAgentSystemPrompt(
   paths: ChatAgentPromptPaths
 ): string {
-  const agentsMd = loadAgentsMd(paths.workingDir);
+  const worktrees = paths.worktrees;
+  const memberNames = worktrees ? Object.keys(worktrees).sort() : [];
+  const isWorkspace = memberNames.length > 0;
+
+  const agentsMd = isWorkspace
+    ? memberNames
+        .map((name) => {
+          const body = loadAgentsMd(worktrees![name]!);
+          return body ? `### ${name}\n${body}` : "";
+        })
+        .filter(Boolean)
+        .join("\n\n")
+    : loadAgentsMd(paths.workingDir);
+
+  const skillsRoot = isWorkspace
+    ? (worktrees![memberNames[0]!] ?? paths.workingDir)
+    : paths.workingDir;
   const skills = loadSkillIndexForPrompt({
     sessionId: paths.sessionId,
-    workingDir: paths.workingDir
+    workingDir: skillsRoot
   });
+
+  const readiness = isWorkspace
+    ? loadWorkspaceLaunchReadiness(worktrees!)
+    : loadLaunchReadiness(paths.workingDir);
+
   const parts = [
     ...BASE_INSTRUCTIONS,
     "",
     sandboxFilesystemBlock(paths),
     "",
     formatRepoSetupBlock({
-      readiness: loadLaunchReadiness(paths.workingDir)
+      readiness,
+      memberRepos: isWorkspace ? memberNames : undefined
     })
   ];
   if (agentsMd) {
