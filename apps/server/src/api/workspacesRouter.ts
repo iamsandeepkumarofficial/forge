@@ -260,7 +260,7 @@ export function createWorkspacesRouter(): Router {
       await workspaceService.getWorkspaceDetail(workspaceId, userId);
       const title =
         typeof req.body?.title === "string" ? req.body.title : undefined;
-      const chat = await chatFeatureService.create({
+      const chat = await chatFeatureService.createWorkbench({
         workspaceId,
         userId,
         title

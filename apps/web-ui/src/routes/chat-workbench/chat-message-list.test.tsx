@@ -6,9 +6,6 @@ import { ChatMessageList } from "./chat-message-list";
 vi.mock("../../components/assistant-markdown.js", () => ({
   AssistantMarkdown: ({ text }: { text: string }) => <div>{text}</div>
 }));
-vi.mock("../../components/stage-pipeline-transcript.js", () => ({
-  StagePipelineTranscript: () => <div>Pipeline</div>
-}));
 vi.mock("../../components/tool-calls.js", () => ({
   ToolCalls: () => <div>Tools</div>
 }));
