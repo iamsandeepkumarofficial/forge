@@ -4,28 +4,44 @@ import * as schema from "./schema.js";
 let pool: Pool | null = null;
 let db: ReturnType<typeof drizzle> | null = null;
 export async function connectPostgres(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (pool) {
-      resolve();
-      return;
-    }
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      reject(new Error("DATABASE_URL environment variable is not set"));
-      return;
-    }
-    pool = new Pool({
-      connectionString,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000
-    });
-    pool.on("error", (err) => {
-      console.error("Unexpected database error:", err);
-    });
-    db = drizzle(pool, { schema });
-    resolve();
+  if (pool) {
+    return;
+  }
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL environment variable is not set");
+  }
+  const nextPool = new Pool({
+    connectionString,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000
   });
+  nextPool.on("error", (err) => {
+    console.error("Unexpected database error:", err);
+  });
+  try {
+    // Fail fast — Pool construction alone does not open a socket.
+    await nextPool.query("select 1");
+  } catch (err) {
+    await nextPool.end().catch(() => {});
+    const nested =
+      err instanceof AggregateError
+        ? err.errors
+            .map((e) => (e instanceof Error ? e.message : String(e)))
+            .filter(Boolean)
+            .join("; ")
+        : "";
+    const message =
+      (err instanceof Error ? err.message.trim() : "") ||
+      nested ||
+      (err instanceof Error && "code" in err
+        ? String((err as { code?: string }).code)
+        : "connection failed");
+    throw new Error(`PostgreSQL connect failed: ${message}`, { cause: err });
+  }
+  pool = nextPool;
+  db = drizzle(pool, { schema });
 }
 export function getDb() {
   if (!db) {

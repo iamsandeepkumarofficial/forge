@@ -19,6 +19,17 @@ describe("project-errors", () => {
     expect(parsed.helpText).toBe("try again");
   });
 
+  it("parseApiErrorText uses help when error string is empty", () => {
+    const parsed = parseApiErrorText({
+      errorText: JSON.stringify({
+        error: "",
+        help: "Check DATABASE_URL and that Postgres is up"
+      }),
+      fallbackMessage: "Failed to connect local folder"
+    });
+    expect(parsed.errorMessage).toMatch(/DATABASE_URL/);
+  });
+
   it("throwConnectMappedError uses the connect map", () => {
     expect(() =>
       throwConnectMappedError({
