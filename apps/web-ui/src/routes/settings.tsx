@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandThemePicker } from "@/components/brand-theme-picker";
+import { ForgeMarkLink } from "@/components/forge-mark";
+import { ModeToggle } from "@/components/mode-toggle";
 import { runnerUrl } from "@/lib/tool-runner.js";
 
 export const LLM_SETTINGS_KEY = "forge.settings.llm";
@@ -158,14 +160,26 @@ export function SettingsPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-xl space-y-8 px-6 py-10">
-        <div className="space-y-2">
-          <Link
-            to="/"
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← Workspaces
-          </Link>
+        <div className="space-y-3">
+          <ForgeMarkLink to="/" size="sm" />
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        </div>
+
+        <section className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold">Appearance</h2>
+              <p className="text-xs text-muted-foreground">
+                Pick the forge's heat. Light &amp; dark both supported.
+              </p>
+            </div>
+            <ModeToggle />
+          </div>
+          <BrandThemePicker />
+        </section>
+
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold">Models</h2>
           <p className="text-sm text-muted-foreground">
             Must be saved to{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
