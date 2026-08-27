@@ -32,10 +32,13 @@ function mountToolsPrepareRoutes(
       return;
     }
     try {
-      const { repoDir, workingDir, sessionRoot } =
+      const { repoDir, workingDir, sessionRoot, worktrees } =
         await resolveSandbox(sessionId);
       ensurePackagedSkillsInSession(workingDir);
-      res.json({ sessionRoot, worktrees: { [repoDir]: workingDir } });
+      res.json({
+        sessionRoot,
+        worktrees: worktrees ?? { [repoDir]: workingDir }
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(N_500).json({ error: message });
@@ -50,13 +53,14 @@ function mountToolsPrepareRoutes(
     }
     try {
       await ensureLaunchConfig(sessionId).catch(() => undefined);
-      const { workingDir, repoDir, sessionRoot } =
+      const { workingDir, repoDir, sessionRoot, worktrees } =
         await getSessionRepoInfo(sessionId);
       const prompt = composeChatAgentSystemPrompt({
         sessionRoot,
         repoDir,
         workingDir,
-        sessionId
+        sessionId,
+        worktrees
       });
       res.type("text/plain; charset=utf-8").send(prompt);
     } catch (err) {

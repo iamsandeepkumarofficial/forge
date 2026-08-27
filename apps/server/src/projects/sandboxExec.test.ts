@@ -30,4 +30,20 @@ describe("sandboxExec path helpers", () => {
   it("treats empty relative as workspace root", () => {
     assert.equal(resolveWorkspacePath(""), "/workspace/");
   });
+
+  it("validates first segment against knownRepos when provided", () => {
+    assert.equal(
+      resolveWorkspacePath("frontend/src/a.ts", {
+        knownRepos: ["frontend", "backend"]
+      }),
+      "/workspace/frontend/src/a.ts"
+    );
+    assert.throws(
+      () =>
+        resolveWorkspacePath("other/x", {
+          knownRepos: ["frontend", "backend"]
+        }),
+      /member repo/
+    );
+  });
 });

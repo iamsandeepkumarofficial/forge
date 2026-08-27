@@ -5,12 +5,22 @@ import {
   useEffect,
   type ReactNode
 } from "react";
+import {
+  FileText,
+  GitCompareArrows,
+  MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Play
+} from "lucide-react";
 import { ChatPane } from "./chat-pane.js";
 import { ChangesTab, FileTabPane, FilesTab } from "./files-panels.js";
 import { AppPreviewPane } from "./run-panels.js";
 import { RunSidebar } from "./run-sidebar.js";
 import { BottomTerminal } from "./bottom-terminal.js";
 import { SPLIT_KEY } from "./storage.js";
+import { useCollapsibleSidebar } from "../../hooks/use-collapsible-sidebar.js";
+import { cn } from "@/lib/utils";
 import type { FileTab, LeftTab } from "./types.js";
 
 const N_100 = 100;
@@ -39,30 +49,101 @@ function RightTabButton(options: {
   );
 }
 
-function TabBar<T extends string>(options: {
-  tabs: [T, string][];
-  active: T;
-  onChange: (t: T) => void;
+const LEFT_TABS: {
+  key: LeftTab;
+  label: string;
+  icon: typeof MessageSquare;
+}[] = [
+  { key: "chat", label: "Chat", icon: MessageSquare },
+  { key: "files", label: "Files", icon: FileText },
+  { key: "changes", label: "Changes", icon: GitCompareArrows },
+  { key: "run", label: "Run", icon: Play }
+];
+
+const WORKBENCH_LEFT_KEY = "forge:workbench-left-collapsed";
+
+function TabBar(options: {
+  active: LeftTab;
+  collapsed: boolean;
+  onChange: (t: LeftTab) => void;
+  onToggleCollapse: () => void;
 }) {
-  const { tabs, active, onChange } = options;
+  const { active, collapsed, onChange, onToggleCollapse } = options;
+  if (collapsed) {
+    return (
+      <div className="flex h-full shrink-0 flex-col items-center gap-1 border-r bg-muted py-2">
+        {LEFT_TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            type="button"
+            aria-label={label}
+            title={label}
+            onClick={() => onChange(key)}
+            className={cn(
+              "inline-flex size-9 items-center justify-center rounded-md",
+              active === key
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-background hover:text-foreground"
+            )}
+          >
+            <Icon className="size-4" />
+          </button>
+        ))}
+        <div className="mt-auto">
+          <button
+            type="button"
+            aria-label="Expand panel"
+            title="Expand panel"
+            onClick={onToggleCollapse}
+            className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
+          >
+            <PanelLeftOpen className="size-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="flex shrink-0 border-b bg-muted">
-      {tabs.map(([key, label]) => (
+    <div className="flex shrink-0 items-center border-b bg-muted">
+      {LEFT_TABS.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
           type="button"
+          aria-label={label}
           onClick={() => onChange(key)}
-          className={`px-3 py-1.5 text-xs ${active === key ? "font-semibold border-b-2 border-primary -mb-px" : "text-muted-foreground"}`}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs",
+            active === key
+              ? "-mb-px border-b-2 border-primary font-semibold"
+              : "text-muted-foreground"
+          )}
         >
+          <Icon className="size-3.5" />
           {label}
         </button>
       ))}
+      <div className="ml-auto pr-1">
+        <button
+          type="button"
+          aria-label="Collapse panel"
+          title="Collapse panel"
+          onClick={onToggleCollapse}
+          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
+        >
+          <PanelLeftClose className="size-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
 
-function ResizableSplit(options: { left: ReactNode; right: ReactNode }) {
-  const { left, right } = options;
+function ResizableSplit(options: {
+  left: ReactNode;
+  right: ReactNode;
+  leftCollapsed: boolean;
+  leftRail?: ReactNode;
+}) {
+  const { left, right, leftCollapsed, leftRail } = options;
   const [leftPct, setLeftPct] = useState<number>(() => {
     const v = Number(localStorage.getItem(SPLIT_KEY));
     return Number.isFinite(v) && v >= N_20 && v <= N_70 ? v : N_38;
@@ -101,14 +182,20 @@ function ResizableSplit(options: { left: ReactNode; right: ReactNode }) {
   };
   return (
     <div ref={containerRef} className="flex h-full min-h-0">
-      <div style={{ width: `${leftPct}%` }} className="min-w-0 border-r">
-        {left}
-      </div>
-      <div
-        onPointerDown={start}
-        className="w-1 shrink-0 cursor-col-resize bg-muted hover:bg-primary"
-        title="Drag to resize"
-      />
+      {leftCollapsed ? (
+        <div className="w-12 shrink-0">{leftRail}</div>
+      ) : (
+        <>
+          <div style={{ width: `${leftPct}%` }} className="min-w-0 border-r">
+            {left}
+          </div>
+          <div
+            onPointerDown={start}
+            className="w-1 shrink-0 cursor-col-resize bg-muted hover:bg-primary"
+            title="Drag to resize"
+          />
+        </>
+      )}
       <div className="min-w-0 flex-1">{right}</div>
     </div>
   );
@@ -126,44 +213,45 @@ function WorkbenchLeft(options: {
   openDiff: (repo: string, path: string) => void;
   setRepo: (repo: string) => void;
   onShowPreview: () => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  onSelectTab: (t: LeftTab) => void;
 }) {
   const o = options;
   return (
     <div className="flex h-full flex-col">
       <TabBar
-        tabs={[
-          ["chat", "Chat"],
-          ["files", "Files"],
-          ["changes", "Changes"],
-          ["run", "Run"]
-        ]}
         active={o.leftTab}
-        onChange={o.setLeftTab}
+        collapsed={o.collapsed}
+        onChange={o.onSelectTab}
+        onToggleCollapse={o.onToggleCollapse}
       />
-      <div className="min-h-0 flex-1">
-        <div className={o.leftTab === "chat" ? "h-full" : "hidden"}>
-          <ChatPane
-            sessionId={o.sessionId}
-            projectId={o.projectId}
-            chatId={o.chatId}
-            sessionKind={o.sessionKind}
-            initialPrompt={o.initialPrompt}
-          />
+      {!o.collapsed && (
+        <div className="min-h-0 flex-1">
+          <div className={o.leftTab === "chat" ? "h-full" : "hidden"}>
+            <ChatPane
+              sessionId={o.sessionId}
+              projectId={o.projectId}
+              chatId={o.chatId}
+              sessionKind={o.sessionKind}
+              initialPrompt={o.initialPrompt}
+            />
+          </div>
+          <div className={o.leftTab === "files" ? "h-full" : "hidden"}>
+            <FilesTab sessionId={o.sessionId} onOpen={o.openFile} />
+          </div>
+          <div className={o.leftTab === "changes" ? "h-full" : "hidden"}>
+            <ChangesTab
+              sessionId={o.sessionId}
+              onRepo={o.setRepo}
+              onOpen={o.openDiff}
+            />
+          </div>
+          <div className={o.leftTab === "run" ? "h-full" : "hidden"}>
+            <RunSidebar sessionId={o.sessionId} onShowPreview={o.onShowPreview} />
+          </div>
         </div>
-        <div className={o.leftTab === "files" ? "h-full" : "hidden"}>
-          <FilesTab sessionId={o.sessionId} onOpen={o.openFile} />
-        </div>
-        <div className={o.leftTab === "changes" ? "h-full" : "hidden"}>
-          <ChangesTab
-            sessionId={o.sessionId}
-            onRepo={o.setRepo}
-            onOpen={o.openDiff}
-          />
-        </div>
-        <div className={o.leftTab === "run" ? "h-full" : "hidden"}>
-          <RunSidebar sessionId={o.sessionId} onShowPreview={o.onShowPreview} />
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -243,6 +331,8 @@ export function Workbench(options: {
   initialPrompt?: string;
 }) {
   const { sessionId, projectId, chatId, sessionKind, initialPrompt } = options;
+  const { collapsed, toggle, setCollapsed } =
+    useCollapsibleSidebar(WORKBENCH_LEFT_KEY);
   const [leftTab, setLeftTab] = useState<LeftTab>("chat");
   const [, setRepo] = useState<string>("");
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
@@ -267,8 +357,22 @@ export function Workbench(options: {
     setActiveRight((cur) => (cur === id ? "preview" : cur));
   };
   const activeFileTab = fileTabs.find((t) => t.id === activeRight);
+  const selectLeftTab = (tab: LeftTab) => {
+    setLeftTab(tab);
+    if (collapsed) setCollapsed(false);
+  };
+  const leftRail = (
+    <TabBar
+      active={leftTab}
+      collapsed
+      onChange={selectLeftTab}
+      onToggleCollapse={toggle}
+    />
+  );
   return (
     <ResizableSplit
+      leftCollapsed={collapsed}
+      leftRail={leftRail}
       left={
         <WorkbenchLeft
           sessionId={sessionId}
@@ -282,6 +386,9 @@ export function Workbench(options: {
           openDiff={openDiff}
           setRepo={setRepo}
           onShowPreview={() => setActiveRight("preview")}
+          collapsed={collapsed}
+          onToggleCollapse={toggle}
+          onSelectTab={selectLeftTab}
         />
       }
       right={

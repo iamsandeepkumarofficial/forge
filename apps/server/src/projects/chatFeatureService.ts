@@ -8,7 +8,8 @@ export const SINGLE_LEVEL_PARENT_ERROR =
   "Only single-level parent/child is allowed";
 export class ChatFeatureValidationError extends Error {}
 export interface CreateChatFeatureInput {
-  projectId: string;
+  projectId?: string | null;
+  workspaceId?: string | null;
   userId: string;
   title?: string;
   type?: string;
@@ -53,6 +54,13 @@ export class ChatFeatureService {
     }
   }
   async create(input: CreateChatFeatureInput): Promise<ChatFeature> {
+    const projectId = input.projectId?.trim() || null;
+    const workspaceId = input.workspaceId?.trim() || null;
+    if ((projectId == null) === (workspaceId == null)) {
+      throw new ChatFeatureValidationError(
+        "Exactly one of projectId or workspaceId is required"
+      );
+    }
     const type: ChatFeatureTypeValue =
       input.type && (VALID_TYPES as readonly string[]).includes(input.type)
         ? (input.type as ChatFeatureTypeValue)
@@ -63,8 +71,13 @@ export class ChatFeatureService {
         ? input.priority
         : "medium";
     if (input.parentId) {
+      if (!projectId) {
+        throw new ChatFeatureValidationError(
+          "Parent/child chats are only supported for project-scoped chats"
+        );
+      }
       const parent = await this.chatRepo.getById(input.parentId);
-      if (!parent || parent.projectId !== input.projectId) {
+      if (!parent || parent.projectId !== projectId) {
         throw new ChatFeatureValidationError(
           "Parent chat/feature not found in this project"
         );
@@ -77,8 +90,10 @@ export class ChatFeatureService {
       typeof input.workflowId === "string" && input.workflowId.trim()
         ? input.workflowId.trim()
         : DEFAULT_WORKFLOW_ID;
+    const stamp = Date.now();
     return this.chatRepo.createChatFeature({
-      projectId: input.projectId,
+      projectId,
+      workspaceId,
       userId: input.userId,
       title: input.title?.trim() || "New Chat",
       kind: "ticket",
@@ -92,19 +107,28 @@ export class ChatFeatureService {
         unknown
       > | null,
       order: 0,
-      branchName: `chat-${Date.now()}`,
-      sessionId: `session-${Date.now()}`,
+      branchName: `chat-${stamp}`,
+      sessionId: `session-${stamp}`,
       workflowId
     });
   }
   async createWorkbench(input: {
-    projectId: string;
+    projectId?: string | null;
+    workspaceId?: string | null;
     userId: string;
     title?: string;
   }): Promise<ChatFeature> {
+    const projectId = input.projectId?.trim() || null;
+    const workspaceId = input.workspaceId?.trim() || null;
+    if ((projectId == null) === (workspaceId == null)) {
+      throw new ChatFeatureValidationError(
+        "Exactly one of projectId or workspaceId is required"
+      );
+    }
     const stamp = Date.now();
     return this.chatRepo.createChatFeature({
-      projectId: input.projectId,
+      projectId,
+      workspaceId,
       userId: input.userId,
       title: input.title?.trim() || "Workbench",
       kind: "workbench",

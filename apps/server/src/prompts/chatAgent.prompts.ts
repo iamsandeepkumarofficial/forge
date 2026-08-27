@@ -14,6 +14,8 @@ export type ChatAgentPromptPaths = {
   repoDir: string;
   workingDir: string;
   sessionId?: string;
+  /** Multi-repo workspace sessions: repoName -> absolute mount path. */
+  worktrees?: Record<string, string>;
 };
 
 const BASE_INSTRUCTIONS = [
@@ -71,6 +73,20 @@ function loadAgentsMd(workingDir: string): string {
 
 function sandboxFilesystemBlock(paths: ChatAgentPromptPaths): string {
   const root = paths.workingDir || paths.sessionRoot;
+  const worktrees = paths.worktrees;
+  const names = worktrees ? Object.keys(worktrees).sort() : [];
+  if (names.length > 1) {
+    const lines = names.map((n) => `- \`${n}\` → \`${worktrees![n]}\``);
+    return [
+      "## Sandbox filesystem (authoritative — do not invent other roots)",
+      `- Session root: \`${root}\`. This workspace mounts multiple repositories:`,
+      ...lines,
+      `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` and must start with a member repo name (example: \`frontend/package.json\`, \`backend/src/main.py\`). Never use host paths (\`/Users/…\`, \`/home/…\`).`,
+      `- \`run_terminal\` default cwd is \`${root}\`. Pass \`workingDirectory\` as a member repo (e.g. \`frontend\`) or subdirectory.`,
+      `- Each member has its own git root. Make coordinated cross-repo edits when the feature requires it; keep changes scoped to the repos that need them.`,
+      `- Launch config may live under each member's \`.forge/launch.json\`.`
+    ].join("\n");
+  }
   return [
     "## Sandbox filesystem (authoritative — do not invent other roots)",
     `- Workspace and git root: \`${root}\`. The repository is mounted here directly — there is no extra repo folder.`,
