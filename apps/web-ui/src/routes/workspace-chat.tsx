@@ -6,8 +6,9 @@ import { Workbench } from "./chat-workbench/workbench-layout.js";
 
 /**
  * Workspace-scoped chat workbench. Session tools (files, apps, terminal)
- * work against the multi-repo sandbox. Some project-only board APIs may
- * no-op when projectId is empty.
+ * work against this chat’s own multi-repo sandbox (session-scoped apps;
+ * local members share ~/.forge/projects/{id} across sessions).
+ * Project-only board APIs no-op when projectId is empty.
  */
 export function WorkspaceChatWorkbench() {
   const params = useParams();
@@ -54,10 +55,10 @@ export function WorkspaceChatWorkbench() {
       <div className="flex min-w-0 shrink-0 items-center gap-3 border-b px-4 py-2">
         <button
           type="button"
-          onClick={() => navigate(`/workspaces/${workspaceId}`)}
+          onClick={() => navigate(`/workspaces/${workspaceId}/chats`)}
           className="shrink-0 text-sm text-muted-foreground hover:underline"
         >
-          ← Workspace
+          ← Chats
         </button>
         <h1 className="truncate font-semibold">
           {loadingChat ? "Loading…" : (chat?.title ?? "Workspace chat")}
@@ -69,7 +70,7 @@ export function WorkspaceChatWorkbench() {
             sessionId={sessionId}
             projectId=""
             chatId={chatId}
-            sessionKind={chat?.kind ?? "ticket"}
+            sessionKind={chat?.kind ?? "workbench"}
           />
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FolderPlus, Layers, Plus, Settings } from "lucide-react";
+import { FolderPlus, Layers, Settings } from "lucide-react";
 import { ConnectProjectDialog } from "../components/connect-project-dialog.js";
+import { CreateWorkspaceDialog } from "../components/create-workspace-dialog.js";
 import { DashboardEmptyState } from "../components/dashboard-empty-state.js";
 import { DashboardOverview } from "../components/dashboard-overview.js";
 import { ForgeMark } from "../components/forge-mark.js";
@@ -11,7 +12,6 @@ import { useDashboardInsights } from "../hooks/use-dashboard-insights.js";
 import { runnerUrl } from "../lib/tool-runner.js";
 import { deleteProject } from "../lib/projects-api.js";
 import {
-  createWorkspace,
   deleteWorkspace,
   listWorkspaces,
   type WorkspaceSummary
@@ -43,6 +43,7 @@ export function Home() {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
+  const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(false);
   const loadProjects = async () => {
     setLoading(true);
     try {
@@ -94,76 +95,71 @@ export function Home() {
     return <DashboardEmptyState onConnected={() => void loadProjects()} />;
   }
   return (
-    <HomeGrid
-      projects={projects}
-      workspaces={workspaces}
-      showDialog={showDialog}
-      onShowDialog={setShowDialog}
-      onConnected={() => void loadProjects()}
-      onOpen={(id) => void navigate(`/projects/${id}/chats`)}
-      onDelete={(id) => void handleDelete(id)}
-      onOpenWorkspace={(id) => void navigate(`/workspaces/${id}`)}
-      onCreateWorkspace={() => {
-        void (async () => {
-          const name = window.prompt("Workspace name", "My workspace");
-          if (!name?.trim()) return;
-          try {
-            const ws = await createWorkspace(name.trim());
-            await loadProjects();
+    <>
+      <HomeGrid
+        projects={projects}
+        workspaces={workspaces}
+        showDialog={showDialog}
+        onShowDialog={setShowDialog}
+        onConnected={() => void loadProjects()}
+        onOpen={(id) => void navigate(`/projects/${id}/chats`)}
+        onDelete={(id) => void handleDelete(id)}
+        onOpenWorkspace={(id) => void navigate(`/workspaces/${id}`)}
+        onCreateWorkspace={() => setShowWorkspaceDialog(true)}
+        onDeleteWorkspace={(id) => {
+          void (async () => {
+            try {
+              await deleteWorkspace(id);
+              await loadProjects();
+            } catch (err) {
+              console.error("Failed to delete workspace:", err);
+            }
+          })();
+        }}
+      />
+      {showWorkspaceDialog && (
+        <CreateWorkspaceDialog
+          onClose={() => setShowWorkspaceDialog(false)}
+          onCreated={(ws) => {
+            setShowWorkspaceDialog(false);
+            void loadProjects();
             navigate(`/workspaces/${ws.id}`);
-          } catch (err) {
-            console.error("Failed to create workspace:", err);
-            alert(err instanceof Error ? err.message : String(err));
-          }
-        })();
-      }}
-      onDeleteWorkspace={(id) => {
-        void (async () => {
-          try {
-            await deleteWorkspace(id);
-            await loadProjects();
-          } catch (err) {
-            console.error("Failed to delete workspace:", err);
-          }
-        })();
-      }}
-    />
+          }}
+        />
+      )}
+    </>
   );
 }
 
-function SectionIconButton(options: {
+function CreateCard(options: {
   label: string;
+  title: string;
+  subtitle: string;
   onClick: () => void;
   children: React.ReactNode;
 }) {
-  const { label, onClick, children } = options;
+  const { label, title, subtitle, onClick, children } = options;
   return (
     <button
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="inline-flex size-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+      className="group relative flex aspect-square w-full flex-col rounded-xl border border-dashed bg-muted/20 p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted/40"
     >
-      {children}
-    </button>
-  );
-}
-
-function EmptyWorkspaceCard(options: { onCreate: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={options.onCreate}
-      className="flex aspect-square flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-muted/20 p-6 text-center transition-colors hover:border-primary/40 hover:bg-muted/40"
-    >
-      <span className="inline-flex size-14 items-center justify-center rounded-2xl border border-dashed border-border bg-background text-muted-foreground">
-        <Layers className="size-7" />
-      </span>
-      <div>
-        <p className="text-sm font-medium">Create a workspace</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Group services for one feature chat
-        </p>
+      <div className="flex h-full flex-col">
+        <div className="flex flex-1 items-center justify-center">
+          <span className="inline-flex size-14 items-center justify-center rounded-2xl border border-dashed border-border bg-background text-muted-foreground">
+            {children}
+          </span>
+        </div>
+        <div>
+          <h3 className="truncate text-sm font-semibold leading-snug">
+            {title}
+          </h3>
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            {subtitle}
+          </p>
+        </div>
       </div>
     </button>
   );
@@ -227,14 +223,7 @@ function HomeGrid(options: {
         )}
 
         <section className="mb-10">
-          <div className="mb-4 flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Workspaces</h2>
-            {workspaces.length > 0 && (
-              <SectionIconButton label="New workspace" onClick={onCreateWorkspace}>
-                <Plus className="size-4" />
-              </SectionIconButton>
-            )}
-          </div>
+          <h2 className="mb-4 text-lg font-semibold">Workspaces</h2>
           <div className={cardGrid}>
             {workspaces.map((ws) => (
               <WorkspaceCard
@@ -245,22 +234,19 @@ function HomeGrid(options: {
                 onDelete={() => onDeleteWorkspace(ws.id)}
               />
             ))}
-            {workspaces.length === 0 && (
-              <EmptyWorkspaceCard onCreate={onCreateWorkspace} />
-            )}
+            <CreateCard
+              label="Create a workspace"
+              title="New workspace"
+              subtitle="Group services for one feature chat"
+              onClick={onCreateWorkspace}
+            >
+              <Layers className="size-7" />
+            </CreateCard>
           </div>
         </section>
 
         <section>
-          <div className="mb-4 flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Projects</h2>
-            <SectionIconButton
-              label="Connect project"
-              onClick={() => onShowDialog(true)}
-            >
-              <FolderPlus className="size-4" />
-            </SectionIconButton>
-          </div>
+          <h2 className="mb-4 text-lg font-semibold">Projects</h2>
           <div className={cardGrid}>
             {projects.map((project) => (
               <ProjectCard
@@ -280,6 +266,14 @@ function HomeGrid(options: {
                 onDelete={() => onDelete(project.id)}
               />
             ))}
+            <CreateCard
+              label="Connect a project"
+              title="Connect project"
+              subtitle="Add a local folder or GitHub repo"
+              onClick={() => onShowDialog(true)}
+            >
+              <FolderPlus className="size-7" />
+            </CreateCard>
           </div>
         </section>
       </div>

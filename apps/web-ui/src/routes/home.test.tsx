@@ -79,10 +79,9 @@ describe("Home", () => {
     );
     await waitFor(() => {
       expect(screen.getByText("Full stack")).toBeTruthy();
-      expect(screen.getByLabelText("Connect project")).toBeTruthy();
-      expect(screen.getByLabelText("New workspace")).toBeTruthy();
+      expect(screen.getByLabelText("Connect a project")).toBeTruthy();
+      expect(screen.getByLabelText("Create a workspace")).toBeTruthy();
       expect(screen.getAllByText("Forge").length).toBeGreaterThan(0);
     });
-    expect(screen.queryByText("Connect project")).toBeNull();
   });
 });
