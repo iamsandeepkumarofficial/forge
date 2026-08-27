@@ -1,59 +1,48 @@
 import { useState } from "react";
+import { Folder, Loader2 } from "lucide-react";
 import { isDesktop, pickFolder } from "../lib/desktop.js";
-import { connectLocalProject, connectProject } from "../lib/projects-api.js";
-import { GithubRepoPicker } from "./github-repo-picker.js";
+import { connectLocalProject } from "../lib/projects-api.js";
 
 function ConnectProjectForm(options: {
   loading: boolean;
-  connectingSlug: string | null;
   error: string | null;
   desktop: boolean;
   showPathInput: boolean;
   localPath: string;
   onLocalPath: (path: string) => void;
   onClose: () => void;
-  onShowGithub: () => void;
   onSelectFolder: () => void;
   onConnectPath: (e: React.FormEvent) => void;
 }) {
   const {
     loading,
-    connectingSlug,
     error,
     desktop,
     showPathInput,
     localPath,
     onLocalPath,
     onClose,
-    onShowGithub,
     onSelectFolder,
     onConnectPath
   } = options;
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-background rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4">Connect a workspace</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="w-full max-w-md rounded-lg bg-background p-6">
+        <h2 className="mb-4 text-xl font-semibold">Connect a project</h2>
         <div className="mb-4 space-y-2">
           <button
             type="button"
-            disabled={loading || Boolean(connectingSlug)}
-            onClick={onShowGithub}
-            className="w-full rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background disabled:opacity-50"
-          >
-            Continue with GitHub
-          </button>
-          <p className="text-xs text-muted-foreground">
-            Authorize GitHub, then pick a repository from your account.
-          </p>
-        </div>
-        <div className="mb-4 space-y-2">
-          <button
-            type="button"
-            disabled={loading || Boolean(connectingSlug)}
+            disabled={loading}
             onClick={onSelectFolder}
-            className="w-full rounded-lg border border-dashed border-border px-4 py-2.5 text-sm font-medium hover:bg-muted/50 disabled:opacity-50"
+            aria-label="Select folder"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-2.5 text-sm font-medium hover:bg-muted/50 disabled:opacity-50"
           >
-            {loading ? "Connecting..." : "Select folder"}
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Folder className="size-4" />
+            )}
+            Select folder
           </button>
           {showPathInput && !desktop && (
             <form onSubmit={onConnectPath} className="space-y-2">
@@ -71,9 +60,14 @@ function ConnectProjectForm(options: {
               <button
                 type="submit"
                 disabled={loading || !localPath.trim()}
-                className="w-full rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                aria-label="Connect folder"
+                className="inline-flex w-full items-center justify-center rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >
-                {loading ? "Connecting..." : "Connect"}
+                {loading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Folder className="size-4" />
+                )}
               </button>
             </form>
           )}
@@ -83,7 +77,7 @@ function ConnectProjectForm(options: {
               : "Native folder picker requires the desktop app."}
           </p>
         </div>
-        {error && <p className="text-destructive mb-4 text-sm">{error}</p>}
+        {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -110,8 +104,6 @@ export function ConnectProjectDialog({
   const [localPath, setLocalPath] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showGithubPicker, setShowGithubPicker] = useState(false);
-  const [connectingSlug, setConnectingSlug] = useState<string | null>(null);
 
   const finish = () => {
     onConnected();
@@ -156,46 +148,17 @@ export function ConnectProjectDialog({
     }
   };
 
-  const handleGithubSelect = async (fullName: string) => {
-    setConnectingSlug(fullName);
-    setError(null);
-    try {
-      await connectProject(fullName);
-      setShowGithubPicker(false);
-      finish();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setConnectingSlug(null);
-    }
-  };
-
   return (
-    <>
-      <ConnectProjectForm
-        loading={loading}
-        connectingSlug={connectingSlug}
-        error={error}
-        desktop={desktop}
-        showPathInput={showPathInput}
-        localPath={localPath}
-        onLocalPath={setLocalPath}
-        onClose={onClose}
-        onShowGithub={() => {
-          setError(null);
-          setShowGithubPicker(true);
-        }}
-        onSelectFolder={() => void handleSelectFolder()}
-        onConnectPath={(e) => void handleConnectPath(e)}
-      />
-      <GithubRepoPicker
-        open={showGithubPicker}
-        onClose={() => {
-          if (!connectingSlug) setShowGithubPicker(false);
-        }}
-        onSelect={handleGithubSelect}
-        connectingSlug={connectingSlug}
-      />
-    </>
+    <ConnectProjectForm
+      loading={loading}
+      error={error}
+      desktop={desktop}
+      showPathInput={showPathInput}
+      localPath={localPath}
+      onLocalPath={setLocalPath}
+      onClose={onClose}
+      onSelectFolder={() => void handleSelectFolder()}
+      onConnectPath={(e) => void handleConnectPath(e)}
+    />
   );
 }
