@@ -36,23 +36,6 @@ export {
   deleteLinkedItem
 } from "./linked-items.js";
 export {
-  type WorkflowNodeState,
-  type WorkflowLifecycleStatus,
-  type WorkflowNode,
-  type WorkflowGraph,
-  type StageMessage,
-  type StageMessagesResponse,
-  type WorkflowTranscriptStage,
-  type WorkflowTranscript,
-  getWorkflow,
-  getStageMessages,
-  getWorkflowTranscript,
-  enterManualMode,
-  completeManualStage,
-  retryStage,
-  stopWorkflow
-} from "./workflow.js";
-export {
   type ChatFeatureKind,
   type ProjectWorkbenchSession,
   createWorkbenchSession,
