@@ -31,7 +31,8 @@ import type { BindMount } from "./sandboxRuntime/types.js";
 import {
   canonicalGitContainerPath,
   ensureSessionWorktree,
-  removeSessionWorktree
+  removeSessionWorktree,
+  worktreeWorkDir
 } from "./localWorktree.js";
 
 const execFileAsync = promisify(execFile);
@@ -315,8 +316,15 @@ export interface SessionRepoInfo {
   repoDir: string;
   workingDir: string;
   sessionRoot: string;
-  /** Present for workspace-scoped sessions: map of repoName -> mount path. */
+  /** Present for workspace-scoped sessions: map of repoName -> container mount path. */
   worktrees?: Record<string, string>;
+  /**
+   * Host filesystem paths for local project worktrees (RFC 0005).
+   * Used by system-prompt composition to read launch.json / AGENTS.md on the host.
+   */
+  hostWorktrees?: Record<string, string>;
+  /** Host path for project-scoped local session worktree. */
+  hostWorkingDir?: string;
 }
 
 export async function getSessionRepoInfo(
@@ -333,15 +341,21 @@ export async function getSessionRepoInfo(
     const workspaceRepo = new WorkspaceRepository();
     const members = await workspaceRepo.listMembers(chat.workspaceId);
     const worktrees: Record<string, string> = {};
+    const hostWorktrees: Record<string, string> = {};
     for (const m of members) {
       worktrees[m.repoName] = `${WORKSPACE_MOUNT}/${m.repoName}`;
+      const project = await projectRepo.getById(m.projectId);
+      if (project?.source === "local" && project.canonicalKey) {
+        hostWorktrees[m.repoName] = worktreeWorkDir(project.id, sessionId);
+      }
     }
     return {
       containerName: sandboxContainerName(sessionId),
       repoDir: members[0]?.repoName || "repo",
       workingDir: WORKSPACE_MOUNT,
       sessionRoot: WORKSPACE_MOUNT,
-      worktrees
+      worktrees,
+      ...(Object.keys(hostWorktrees).length > 0 ? { hostWorktrees } : {})
     };
   }
 
@@ -355,11 +369,16 @@ export async function getSessionRepoInfo(
     throw new Error(`Project not found for chat session: ${sessionId}`);
   }
   const repoDir = repoDirForProject(project);
+  const hostWorkingDir =
+    project.source === "local" && project.canonicalKey
+      ? worktreeWorkDir(project.id, sessionId)
+      : undefined;
   return {
     containerName: sandboxContainerName(sessionId),
     repoDir,
     workingDir: WORKSPACE_MOUNT,
-    sessionRoot: WORKSPACE_MOUNT
+    sessionRoot: WORKSPACE_MOUNT,
+    ...(hostWorkingDir ? { hostWorkingDir } : {})
   };
 }
 

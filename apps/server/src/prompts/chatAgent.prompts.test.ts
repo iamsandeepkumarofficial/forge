@@ -17,12 +17,13 @@ describe("composeChatAgentSystemPrompt", () => {
       prompt,
       /You are Forge, a coding and project-management agent/
     );
+    assert.match(prompt, /Working repository \(authoritative\)/);
     assert.match(prompt, /Workspace and git root: `\/workspace`/);
     assert.doesNotMatch(prompt, /Repository folder name/);
     assert.doesNotMatch(prompt, /repo\/package\.json/);
     assert.match(prompt, /\.forge\/launch\.json/);
     assert.match(prompt, /Eval: not agent-ready/);
-    assert.match(prompt, /preview_start \/ preview_stop/);
+    assert.match(prompt, /preview_start/);
     assert.match(prompt, /3000–3009/);
     assert.doesNotMatch(prompt, /Hard citation rule/);
     assert.doesNotMatch(prompt, /create_subtask/);
@@ -30,6 +31,24 @@ describe("composeChatAgentSystemPrompt", () => {
     assert.doesNotMatch(prompt, /FORGE_GLOBAL_RULES/);
     assert.doesNotMatch(prompt, /Repository specifications/);
     assert.doesNotMatch(prompt, /_\(No /);
+  });
+
+  it("lists workspace member repos in the system prompt", () => {
+    const prompt = composeChatAgentSystemPrompt({
+      sessionRoot: "/workspace",
+      repoDir: "bp-frontend",
+      workingDir: "/workspace",
+      worktrees: {
+        "bp-frontend": "/workspace/bp-frontend",
+        "bp-backend": "/workspace/bp-backend"
+      }
+    });
+    assert.match(prompt, /Working repositories \(authoritative\)/);
+    assert.match(prompt, /`bp-frontend\/` → `\/workspace\/bp-frontend`/);
+    assert.match(prompt, /`bp-backend\/` → `\/workspace\/bp-backend`/);
+    assert.match(prompt, /must start with a member repo name/);
+    assert.match(prompt, /Never write launch config at the session root/);
+    assert.doesNotMatch(prompt, /There is exactly one connected repository/);
   });
 
   it("omits AGENTS.md section when absent and ignores specs/", async () => {
