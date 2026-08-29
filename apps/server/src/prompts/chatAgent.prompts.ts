@@ -14,8 +14,11 @@ export type ChatAgentPromptPaths = {
   repoDir: string;
   workingDir: string;
   sessionId?: string;
-  /** Multi-repo workspace sessions: repoName -> absolute mount path. */
+  /** Multi-repo workspace sessions: repoName -> container mount path (for prompt text). */
   worktrees?: Record<string, string>;
+  /** Host paths for reading launch.json / AGENTS.md (local worktrees). */
+  hostWorktrees?: Record<string, string>;
+  hostWorkingDir?: string;
 };
 
 const BASE_INSTRUCTIONS = [
@@ -105,27 +108,35 @@ export function composeChatAgentSystemPrompt(
   const memberNames = worktrees ? Object.keys(worktrees).sort() : [];
   const isWorkspace = memberNames.length > 0;
 
+  const hostTrees = paths.hostWorktrees;
+  const readRootFor = (repo: string): string =>
+    hostTrees?.[repo] ?? worktrees?.[repo] ?? paths.workingDir;
+
   const agentsMd = isWorkspace
     ? memberNames
         .map((name) => {
-          const body = loadAgentsMd(worktrees![name]!);
+          const body = loadAgentsMd(readRootFor(name));
           return body ? `### ${name}\n${body}` : "";
         })
         .filter(Boolean)
         .join("\n\n")
-    : loadAgentsMd(paths.workingDir);
+    : loadAgentsMd(paths.hostWorkingDir ?? paths.workingDir);
 
   const skillsRoot = isWorkspace
-    ? (worktrees![memberNames[0]!] ?? paths.workingDir)
-    : paths.workingDir;
+    ? readRootFor(memberNames[0]!)
+    : (paths.hostWorkingDir ?? paths.workingDir);
   const skills = loadSkillIndexForPrompt({
     sessionId: paths.sessionId,
     workingDir: skillsRoot
   });
 
   const readiness = isWorkspace
-    ? loadWorkspaceLaunchReadiness(worktrees!)
-    : loadLaunchReadiness(paths.workingDir);
+    ? loadWorkspaceLaunchReadiness(
+        Object.fromEntries(
+          memberNames.map((name) => [name, readRootFor(name)])
+        )
+      )
+    : loadLaunchReadiness(paths.hostWorkingDir ?? paths.workingDir);
 
   const parts = [
     ...BASE_INSTRUCTIONS,

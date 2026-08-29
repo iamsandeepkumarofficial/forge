@@ -147,51 +147,80 @@ export async function removeWorkspaceProject(
   return (await res.json()) as WorkspaceDetail;
 }
 
+export type WorkspaceChat = {
+  id: string;
+  sessionId: string;
+  title: string;
+  kind?: "ticket" | "workbench";
+  branchName?: string;
+  lastActivityAt?: string;
+  createdAt?: string;
+};
+
+function asIso(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  return undefined;
+}
+
+function normalizeWorkspaceChat(raw: Record<string, unknown>): WorkspaceChat {
+  return {
+    id: String(raw.id ?? ""),
+    sessionId: String(raw.sessionId ?? ""),
+    title: typeof raw.title === "string" ? raw.title : "Chat",
+    kind:
+      raw.kind === "ticket" || raw.kind === "workbench" ? raw.kind : undefined,
+    branchName:
+      typeof raw.branchName === "string" ? raw.branchName : undefined,
+    lastActivityAt: asIso(raw.lastActivityAt),
+    createdAt: asIso(raw.createdAt)
+  };
+}
+
 export async function createWorkspaceChat(
   workspaceId: string,
   title?: string
-): Promise<{ id: string; sessionId: string; title: string }> {
+): Promise<WorkspaceChat> {
   const res = await fetch(`${BASE_URL}/api/workspaces/${workspaceId}/chats`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(title ? { title } : {})
   });
   if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as {
-    id: string;
-    sessionId: string;
-    title: string;
-  };
+  return normalizeWorkspaceChat((await res.json()) as Record<string, unknown>);
 }
 
 export async function listWorkspaceChats(
   workspaceId: string
-): Promise<Array<{ id: string; sessionId: string; title: string }>> {
+): Promise<WorkspaceChat[]> {
   const res = await fetch(`${BASE_URL}/api/workspaces/${workspaceId}/chats`);
   if (!res.ok) throw new Error(await readError(res));
-  const body = (await res.json()) as {
-    chats: Array<{ id: string; sessionId: string; title: string }>;
-  };
-  return body.chats ?? [];
+  const body = (await res.json()) as { chats?: unknown[] };
+  return (body.chats ?? []).map((row) =>
+    normalizeWorkspaceChat((row ?? {}) as Record<string, unknown>)
+  );
 }
 
 export async function fetchWorkspaceChat(
   workspaceId: string,
   chatId: string
-): Promise<{
-  id: string;
-  sessionId: string;
-  title: string;
-  kind?: "ticket" | "workbench";
-}> {
+): Promise<WorkspaceChat> {
   const res = await fetch(
     `${BASE_URL}/api/workspaces/${workspaceId}/chats/${chatId}`
   );
   if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as {
-    id: string;
-    sessionId: string;
-    title: string;
-    kind?: "ticket" | "workbench";
-  };
+  return normalizeWorkspaceChat((await res.json()) as Record<string, unknown>);
+}
+
+export async function deleteWorkspaceChat(
+  workspaceId: string,
+  chatId: string
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/chats/${chatId}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) throw new Error(await readError(res));
 }

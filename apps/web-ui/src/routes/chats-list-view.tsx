@@ -3,6 +3,7 @@ import {
   GitBranch,
   Loader2,
   MessageSquarePlus,
+  MoreVertical,
   Search,
   Trash2
 } from "lucide-react";
@@ -14,6 +15,12 @@ import {
 import type { ProjectWorkbenchSession } from "../lib/projects-api.js";
 import type { ChatsPageState } from "./use-chats-page.js";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 
 function sortByActivity(
   sessions: ProjectWorkbenchSession[]
@@ -231,7 +238,10 @@ export function ChatsListView({ state }: { state: ChatsPageState }) {
       ) : (
         <ul className="divide-y divide-border overflow-y-auto rounded-xl border border-border">
           {filtered.map((session) => (
-            <li key={session.id} className="flex items-center gap-2 px-4 py-3">
+            <li
+              key={session.id}
+              className="group flex items-center gap-2 px-4 py-3"
+            >
               <button
                 type="button"
                 onClick={() => openSession(session.id)}
@@ -246,19 +256,35 @@ export function ChatsListView({ state }: { state: ChatsPageState }) {
                   createdAt={session.createdAt}
                 />
               </button>
-              <button
-                type="button"
-                onClick={() => void handleDelete(session.id, session.title)}
-                disabled={deletingId === session.id}
-                className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                title="Delete chat"
-              >
-                {deletingId === session.id ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Trash2 className="size-4" />
-                )}
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label={`Actions for ${session.title}`}
+                  disabled={deletingId === session.id}
+                  className={cn(
+                    "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground",
+                    "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100",
+                    deletingId === session.id && "opacity-100"
+                  )}
+                >
+                  {deletingId === session.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <MoreVertical className="size-4" />
+                  )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={deletingId === session.id}
+                    onClick={() =>
+                      void handleDelete(session.id, session.title)
+                    }
+                  >
+                    <Trash2 className="size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </li>
           ))}
         </ul>

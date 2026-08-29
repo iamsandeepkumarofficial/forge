@@ -142,7 +142,8 @@ export function formatRepoSetupBlock(options: {
     "- Only container ports **3000–3009** are published for preview. Use `port: 3000` for the first web app, then 3001, 3002, …",
     "- Dev servers must honor `PORT` and bind `HOST=0.0.0.0` (Forge sets both when starting apps).",
     "- Do not put 4000, 5173, 8080, or other ports in launch.json — they are not published and preview will be blank.",
-    "- Env hint inside the sandbox: `FORGE_PUBLISHED_APP_PORTS=3000-3009`."
+    "- Env hint inside the sandbox: `FORGE_PUBLISHED_APP_PORTS=3000-3009`.",
+    "- Launch config written in this session stays in the session worktree until the user promotes from the workbench — do not assume other chats see it."
   ];
   return lines.join("\n");
 }

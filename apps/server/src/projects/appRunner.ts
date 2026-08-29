@@ -26,7 +26,6 @@ import {
   waitUntilTcpListening
 } from "./backgroundJob.js";
 import { normalizeLaunchCwd, resolveLaunchAppDir, safeRelDir } from "./launchCwd.js";
-import { commitAndMergeLaunchJson } from "./promoteLaunchConfig.js";
 
 export type AppType = "web" | "api" | "worker";
 export interface ForgeApp {
@@ -173,21 +172,17 @@ export async function writeForgeConfig(
         content: JSON.stringify({ apps: localApps }, null, 2) + "\n"
       });
     }
-    // Ignore unscoped when members were written — never invent /workspace/.forge.
-    return;
-  }
-
-  if (worktrees && Object.keys(worktrees).length > 0 && unscoped.length > 0) {
+  } else if (worktrees && Object.keys(worktrees).length > 0 && unscoped.length > 0) {
     throw new Error(
       `Cannot write launch.json at session root in a workspace. Tag apps with repo (${Object.keys(worktrees).sort().join(", ")}).`
     );
+  } else {
+    await writeFileToSandbox({
+      container: containerName,
+      absPath: `${workingDir}/${LAUNCH_FILE}`,
+      content: JSON.stringify({ apps: unscoped }, null, 2) + "\n"
+    });
   }
-
-  await writeFileToSandbox({
-    container: containerName,
-    absPath: `${workingDir}/${LAUNCH_FILE}`,
-    content: JSON.stringify({ apps: unscoped }, null, 2) + "\n"
-  });
 }
 
 function unqualifyApp(app: ForgeApp, repo: string): ForgeApp {
@@ -226,7 +221,7 @@ export async function upsertLaunchApp(
   sessionId: string,
   app: ForgeApp
 ): Promise<ForgeConfig> {
-  const { repoDir, worktrees, containerName } = await ctx(sessionId);
+  const { repoDir, worktrees } = await ctx(sessionId);
   const memberRepos = worktrees ? Object.keys(worktrees).sort() : [];
   const isWorkspace = memberRepos.length > 0;
 
@@ -288,18 +283,6 @@ export async function upsertLaunchApp(
   nextApps.push(nextApp);
   const next = { apps: nextApps };
   await writeForgeConfig(sessionId, next);
-
-  await commitAndMergeLaunchJson({
-    sessionId,
-    containerName,
-    repos: nextApp.repo ? [nextApp.repo] : []
-  }).catch((err) => {
-    console.warn(
-      `[upsertLaunchApp] promote launch.json failed:`,
-      err instanceof Error ? err.message : err
-    );
-  });
-
   return next;
 }
 

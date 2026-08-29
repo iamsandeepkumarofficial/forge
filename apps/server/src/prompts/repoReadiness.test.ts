@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { formatRepoSetupBlock, loadLaunchReadiness } from "./repoReadiness.js";
+import {
+  formatRepoSetupBlock,
+  loadLaunchReadiness,
+  loadWorkspaceLaunchReadiness
+} from "./repoReadiness.js";
 
 describe("repoReadiness", () => {
   it("reports missing launch.json as not agent-ready", async () => {
@@ -73,6 +77,46 @@ describe("repoReadiness", () => {
       assert.match(block, /Eval: agent-ready/);
       assert.doesNotMatch(block, /forge\.json/);
       assert.doesNotMatch(block, /legacy/);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("scans each workspace member mount", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "forge-ws-ready-"));
+    const fe = path.join(root, "bp-frontend");
+    const be = path.join(root, "bp-backend");
+    await fs.mkdir(path.join(fe, ".forge"), { recursive: true });
+    await fs.mkdir(be, { recursive: true });
+    await fs.writeFile(
+      path.join(fe, ".forge", "launch.json"),
+      JSON.stringify({
+        apps: [{ name: "web", type: "web", cwd: ".", command: "yarn dev" }]
+      })
+    );
+    try {
+      const readiness = loadWorkspaceLaunchReadiness({
+        "bp-frontend": fe,
+        "bp-backend": be
+      });
+      assert.equal(readiness.ready, true);
+      assert.equal(readiness.members?.length, 2);
+      assert.equal(
+        readiness.members?.find((m) => m.repo === "bp-frontend")?.ready,
+        true
+      );
+      assert.equal(
+        readiness.members?.find((m) => m.repo === "bp-backend")?.ready,
+        false
+      );
+      const block = formatRepoSetupBlock({
+        readiness,
+        memberRepos: ["bp-backend", "bp-frontend"]
+      });
+      assert.match(block, /multiple repositories/);
+      assert.match(block, /bp-frontend/);
+      assert.match(block, /missing/);
+      assert.match(block, /Never write launch config at the session root/);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
