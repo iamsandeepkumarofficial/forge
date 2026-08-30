@@ -13,6 +13,7 @@ import {
 } from "./settingsHandlers.js";
 import {
   handleListChatMessages,
+  handleGetRunningTurn,
   handleStartChat,
   handleStreamTurn,
   handleCancelTurn
@@ -39,6 +40,9 @@ export function createChatRouter(): Router {
   });
   router.get("/sessions/:sessionId/messages", pocAuth, (req, res) => {
     return handleListChatMessages({ req, res, features, messages });
+  });
+  router.get("/sessions/:sessionId/turns/running", pocAuth, (req, res) => {
+    return handleGetRunningTurn({ req, res, features, turns });
   });
   router.post("/sessions/:sessionId/chat", pocAuth, (req, res) => {
     return handleStartChat({ req, res, features, turns });

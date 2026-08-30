@@ -9,7 +9,7 @@ import {
   DescriptionValidationError
 } from "../../catalog/descriptionDocument.js";
 import { provisionSessionSandbox } from "../../projects/sessionSandbox.js";
-import { autoStartPreview } from "../../projects/appRunner.js";
+import { finalizeSessionProvision } from "../../projects/sessionProvision.js";
 import {
   chatFeatureService,
   chatRepo,
@@ -134,7 +134,7 @@ export async function handleCreateChat(
       workflowId: typeof workflowId === "string" ? workflowId : undefined
     });
     void provisionSessionSandbox(chat.sessionId)
-      .then(() => autoStartPreview(chat.sessionId))
+        .then(() => finalizeSessionProvision(chat.sessionId))
       .catch((err) => {
         console.warn(
           `[chat ${chat.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`
@@ -196,7 +196,7 @@ export async function handleCreateWorkbench(
       title
     });
     void provisionSessionSandbox(session.sessionId)
-      .then(() => autoStartPreview(session.sessionId))
+        .then(() => finalizeSessionProvision(session.sessionId))
       .catch((err) => {
         console.warn(
           `[workbench ${session.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`

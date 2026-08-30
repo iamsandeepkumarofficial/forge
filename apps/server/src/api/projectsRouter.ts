@@ -202,6 +202,78 @@ router.delete("/:projectId", pocAuth, async (req, res) => {
     });
   }
 });
+router.get("/:projectId/parameters", pocAuth, async (req, res) => {
+  const projectId = String(req.params.projectId ?? "");
+  try {
+    const project = await projectService.getProjectById(projectId);
+    if (!project) {
+      return res.status(N_404).json({ error: "Project not found" });
+    }
+    const { ParameterRepository } = await import(
+      "../catalog/parameterRepository.js"
+    );
+    const paramRepo = new ParameterRepository();
+    const parameters = await paramRepo.listProjectParameters(projectId);
+    res.json({
+      parameters: parameters.map((p) => ({
+        key: p.key,
+        value: p.secret ? "••••••••" : p.value,
+        secret: p.secret
+      }))
+    });
+  } catch (error: unknown) {
+    res.status(N_400).json({ error: errorMessage(error) });
+  }
+});
+router.put("/:projectId/parameters", pocAuth, async (req, res) => {
+  const projectId = String(req.params.projectId ?? "");
+  const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+  const value = typeof req.body?.value === "string" ? req.body.value : "";
+  const secret = Boolean(req.body?.secret);
+  if (!key) {
+    return res.status(N_400).json({ error: "key is required" });
+  }
+  try {
+    const project = await projectService.getProjectById(projectId);
+    if (!project) {
+      return res.status(N_404).json({ error: "Project not found" });
+    }
+    const { ParameterRepository } = await import(
+      "../catalog/parameterRepository.js"
+    );
+    const paramRepo = new ParameterRepository();
+    const saved = await paramRepo.upsertProjectParameter({
+      projectId,
+      key,
+      value,
+      secret
+    });
+    res.json({
+      key: saved.key,
+      value: saved.secret ? "••••••••" : saved.value,
+      secret: saved.secret
+    });
+  } catch (error: unknown) {
+    res.status(N_400).json({ error: errorMessage(error) });
+  }
+});
+router.delete("/:projectId/parameters/:key", pocAuth, async (req, res) => {
+  const projectId = String(req.params.projectId ?? "");
+  try {
+    const project = await projectService.getProjectById(projectId);
+    if (!project) {
+      return res.status(N_404).json({ error: "Project not found" });
+    }
+    const { ParameterRepository } = await import(
+      "../catalog/parameterRepository.js"
+    );
+    const paramRepo = new ParameterRepository();
+    await paramRepo.deleteProjectParameter(projectId, String(req.params.key));
+    res.status(N_204).end();
+  } catch (error: unknown) {
+    res.status(N_400).json({ error: errorMessage(error) });
+  }
+});
 export function createProjectsRouter(): Router {
   return router;
 }

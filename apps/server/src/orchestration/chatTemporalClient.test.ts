@@ -12,6 +12,7 @@ describe("chatTemporalClient", () => {
   }) => Promise<string>;
   let newTurnId: () => string;
   let cancelInteractiveChatTurn: (workflowId: string) => Promise<void>;
+  let isInteractiveChatTurnRunning: (workflowId: string) => Promise<boolean>;
 
   before(async () => {
     mock.module("@temporalio/client", {
@@ -23,7 +24,8 @@ describe("chatTemporalClient", () => {
           workflow = {
             start,
             getHandle: () => ({
-              cancel: async () => undefined
+              cancel: async () => undefined,
+              describe: async () => ({ status: { name: "RUNNING" } })
             })
           };
         },
@@ -32,8 +34,12 @@ describe("chatTemporalClient", () => {
         }
       }
     });
-    ({ startInteractiveChatTurn, newTurnId, cancelInteractiveChatTurn } =
-      await import("./chatTemporalClient.js"));
+    ({
+      startInteractiveChatTurn,
+      newTurnId,
+      cancelInteractiveChatTurn,
+      isInteractiveChatTurnRunning
+    } = await import("./chatTemporalClient.js"));
   });
 
   it("newTurnId returns a uuid string", () => {
@@ -55,5 +61,9 @@ describe("chatTemporalClient", () => {
 
   it("cancelInteractiveChatTurn invokes handle.cancel", async () => {
     await cancelInteractiveChatTurn("chat-s1-t1");
+  });
+
+  it("isInteractiveChatTurnRunning reads describe status", async () => {
+    assert.equal(await isInteractiveChatTurnRunning("chat-s1-t1"), true);
   });
 });

@@ -84,6 +84,26 @@ describe("mountSessionRoutes", () => {
         scaffoldForgeConfig: async () => ({ apps: [] })
       }
     });
+    mock.module("./appRoutes.handlers.js", {
+      exports: {
+        handleAppRoutes: async (
+          _req: unknown,
+          res: { json: (body: unknown) => void }
+        ) => {
+          res.json({ routes: [] });
+        }
+      }
+    });
+    mock.module("./httpRequest.handlers.js", {
+      exports: {
+        handleAppHttpRequest: async (
+          _req: unknown,
+          res: { json: (body: unknown) => void }
+        ) => {
+          res.json({ status: 200 });
+        }
+      }
+    });
     mock.module("./terminal.handlers.js", {
       exports: {
         handleTerminalJobs: async (
@@ -103,6 +123,12 @@ describe("mountSessionRoutes", () => {
           res: { json: (body: unknown) => void }
         ) => {
           res.json({ ok: true });
+        },
+        handleTerminalRun: async (
+          _req: unknown,
+          res: { json: (body: unknown) => void }
+        ) => {
+          res.json({ success: true, output: "" });
         }
       }
     });
