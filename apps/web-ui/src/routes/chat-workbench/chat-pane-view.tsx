@@ -1,6 +1,11 @@
 import { ChatComposer } from "../../components/chat-composer.js";
 import type { ComposerAgentMode } from "../../components/chat-composer.js";
+import {
+  AskUserPrompt,
+  type AskUserSubmitResult
+} from "../../components/ask-user-prompt.js";
 import type { ModelsByProvider } from "../../components/chat-composer-shared.js";
+import type { AskUserProposal } from "../../lib/ask-user.js";
 import type { LlmProvider, UiChatMessage } from "../../lib/chat-agent.js";
 import type { ToolPart } from "../../lib/tool-display.js";
 import { ChatMessageList } from "./chat-message-list.js";
@@ -10,6 +15,7 @@ export type ChatPaneViewProps = {
   projectId: string;
   chatId: string;
   sessionKind: "ticket" | "workbench";
+  branchName?: string;
   scrollerRef: React.RefObject<HTMLDivElement | null>;
   stickToBottomRef: React.RefObject<boolean>;
   messages: UiChatMessage[];
@@ -19,7 +25,6 @@ export type ChatPaneViewProps = {
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | null;
   clearError: () => void;
-  lastUserIndex: number;
   input: string;
   setInput: (v: string) => void;
   onSend: () => void;
@@ -27,6 +32,10 @@ export type ChatPaneViewProps = {
   canSend: boolean;
   agentMode: ComposerAgentMode;
   onAgentModeChange: (m: ComposerAgentMode) => void;
+  pendingAskUser?: AskUserProposal | null;
+  onSubmitAskUser?: (result: AskUserSubmitResult) => void;
+  onDismissAskUser?: () => void;
+  askUserSubmitting?: boolean;
   pendingModeSwitch?: ComposerAgentMode | null;
   modeSwitchRemainingSeconds?: number;
   onConfirmModeSwitch?: () => void;
@@ -44,6 +53,7 @@ export type ChatPaneViewProps = {
   attachments: File[];
   onAttachFiles: (files: File[]) => void;
   onRemoveAttachment: (index: number) => void;
+  onOpenFile?: (path: string) => void;
 };
 
 export function ChatPaneView(props: ChatPaneViewProps) {
@@ -61,12 +71,25 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         streamingText={o.streamingText}
         liveToolParts={o.liveToolParts}
         status={o.status}
+        waiting={Boolean(o.pendingAskUser)}
         error={o.error}
         clearError={o.clearError}
-        lastUserIndex={o.lastUserIndex}
+        onPickStarter={o.setInput}
+        onOpenFile={o.onOpenFile}
       />
+      {o.pendingAskUser && o.onSubmitAskUser && o.onDismissAskUser ? (
+        <div className="shrink-0 border-t px-3 py-2">
+          <AskUserPrompt
+            proposal={o.pendingAskUser}
+            onSubmit={o.onSubmitAskUser}
+            onDismiss={o.onDismissAskUser}
+            submitting={o.askUserSubmitting}
+          />
+        </div>
+      ) : null}
       <ChatComposer
         sessionId={o.sessionId}
+        branchName={o.branchName}
         value={o.input}
         onChange={o.setInput}
         onSend={o.onSend}
