@@ -46,9 +46,11 @@ describe("ChatComposer", () => {
         attachments={[]}
         onAttachFiles={vi.fn()}
         onRemoveAttachment={vi.fn()}
+        branchName="forge/workbench-a"
       />
     );
-    expect(screen.getByPlaceholderText(/Plan, Build/i)).toBeTruthy();
+    expect(screen.getByPlaceholderText(/Ask Forge to plan/i)).toBeTruthy();
+    expect(screen.getByText("forge/workbench-a")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(onSend).toHaveBeenCalled();
   });

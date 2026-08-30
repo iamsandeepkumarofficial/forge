@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ToolCalls } from "./tool-calls";
 describe("ToolCalls", () => {
   it("renders an edit_file diff preview instead of raw JSON args", () => {
@@ -43,5 +43,25 @@ describe("ToolCalls", () => {
     );
     expect(screen.getByText(/Write preview/)).toBeTruthy();
     expect(screen.getByText("+hello")).toBeTruthy();
+  });
+
+  it("opens a file path from the timeline", () => {
+    const onOpenPath = vi.fn();
+    render(
+      <ToolCalls
+        onOpenPath={onOpenPath}
+        parts={[
+          {
+            type: "tool-invocation",
+            toolName: "read_file",
+            args: { path: "src/app.ts" },
+            state: "result",
+            output: "ok"
+          }
+        ]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "src/app.ts" }));
+    expect(onOpenPath).toHaveBeenCalledWith("src/app.ts");
   });
 });

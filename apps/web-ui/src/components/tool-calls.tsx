@@ -63,16 +63,26 @@ function FileDiffPreview({
     </div>
   );
 }
+function toolFilePath(part: ToolPart): string | null {
+  const input = part.input ?? part.args;
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    const path = (input as { path?: unknown }).path;
+    if (typeof path === "string" && path.trim()) return path;
+  }
+  return null;
+}
+
 function ToolCallItem(options: {
   part: ToolPart;
   index: number;
-  showEmoji: boolean;
+  onOpenPath?: (path: string) => void;
 }) {
-  const { part: p, index: i, showEmoji } = options;
+  const { part: p, index: i, onOpenPath } = options;
   const name = toolPartName(p);
   const input = p.input ?? p.args;
   const output = p.output ?? p.result;
   const diff = synthesizeToolDiff(name, input);
+  const path = diff?.path ?? toolFilePath(p);
   const inputText = diff ? "" : stringifyToolValue(input);
   const outputText = stringifyToolValue(output);
   const pending = output === undefined && !p.errorText;
@@ -80,18 +90,34 @@ function ToolCallItem(options: {
   return (
     <details
       key={key}
-      className="rounded border border-border bg-muted/40 text-xs"
+      className="border-l-2 border-border bg-muted/30 text-xs"
       open={Boolean(diff)}
     >
       <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 font-mono">
-        {showEmoji && <span>🔧</span>}
         <span className="font-semibold">{name}</span>
-        {diff && (
-          <span className="truncate text-muted-foreground">{diff.path}</span>
-        )}
+        {path ? (
+          onOpenPath ? (
+            <button
+              type="button"
+              className="truncate text-muted-foreground underline-offset-2 hover:underline"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenPath(path);
+              }}
+            >
+              {path}
+            </button>
+          ) : (
+            <span className="truncate text-muted-foreground">{path}</span>
+          )
+        ) : null}
         {pending && (
-          <span className="text-muted-foreground italic">running…</span>
+          <span className="text-muted-foreground italic">running</span>
         )}
+        {p.errorText ? (
+          <span className="text-destructive italic">error</span>
+        ) : null}
         {!pending && output === undefined && !p.errorText && !diff && (
           <span className="text-muted-foreground italic">no result</span>
         )}
@@ -141,10 +167,10 @@ function ToolCallItem(options: {
 }
 export function ToolCalls({
   parts,
-  showEmoji = false
+  onOpenPath
 }: {
   parts: ToolPart[];
-  showEmoji?: boolean;
+  onOpenPath?: (path: string) => void;
 }) {
   if (parts.length === 0) return null;
   return (
@@ -154,7 +180,7 @@ export function ToolCalls({
           key={p.toolCallId ?? i}
           part={p}
           index={i}
-          showEmoji={showEmoji}
+          onOpenPath={onOpenPath}
         />
       ))}
     </div>
