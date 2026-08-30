@@ -50,6 +50,7 @@ describe("runApp readiness", { concurrency: false }, () => {
           stopped = true;
           jobRunning = false;
         },
+        freeListeningPort: async () => undefined,
         waitUntilJobRunning: async () => jobRunning,
         waitUntilTcpListening: async () => tcpListening,
         waitUntilHostTcpListening: async () => true,

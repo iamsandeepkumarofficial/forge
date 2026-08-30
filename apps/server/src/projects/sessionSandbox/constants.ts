@@ -5,6 +5,8 @@ const N_31 = 31;
 const N_64 = 64;
 
 export const DEFAULT_SANDBOX_IMAGE = "forge-sandbox:latest";
+/** Debian slim + git; used when no Node ecosystem evidence is present. */
+export const GENERIC_SANDBOX_IMAGE = "forge-sandbox-generic:latest";
 export const WORKSPACE_MOUNT = "/workspace";
 export const RESERVED_PORTS = 10;
 export const FIRST_APP_PORT = 3000;
@@ -67,4 +69,18 @@ export function sandboxContainerName(sessionId: string): string {
 
 export function preferredSandboxImageName(): string {
   return process.env.FORGE_SANDBOX_IMAGE?.trim() || DEFAULT_SANDBOX_IMAGE;
+}
+
+/**
+ * Pick sandbox image from ecosystem evidence.
+ * Any Node → Node image (Playwright present). Else generic; agent prepares env.
+ * FORGE_SANDBOX_IMAGE overrides when set.
+ */
+export function selectSandboxImageName(options?: {
+  hasNodeEvidence?: boolean;
+}): string {
+  const override = process.env.FORGE_SANDBOX_IMAGE?.trim();
+  if (override) return override;
+  if (options?.hasNodeEvidence) return DEFAULT_SANDBOX_IMAGE;
+  return GENERIC_SANDBOX_IMAGE;
 }

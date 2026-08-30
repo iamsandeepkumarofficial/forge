@@ -27,7 +27,7 @@ import {
   repoDirForProject,
   type LocalFolderSource
 } from "./sessionSandbox/materialize.js";
-import type { BindMount } from "./sandboxRuntime/types.js";
+import type { BindMount, NamedVolumeMount } from "./sandboxRuntime/types.js";
 import {
   canonicalGitContainerPath,
   ensureSessionWorktree,
@@ -73,6 +73,42 @@ function resolveLocalFolderPath(
   return null;
 }
 
+async function sandboxSessionCreateOpts(
+  sessionId: string,
+  bindMounts?: BindMount[],
+  workspaceId?: string
+): Promise<{
+  bindMounts?: BindMount[];
+  namedVolumes?: NamedVolumeMount[];
+  containerEnv: Record<string, string>;
+  image?: string;
+}> {
+  const { resolveSessionEnv } = await import(
+    "../services/parameters/resolveSessionEnv.js"
+  );
+  const env = await resolveSessionEnv(sessionId);
+  let image: string | undefined;
+  let namedVolumes: NamedVolumeMount[] | undefined;
+  if (workspaceId) {
+    const { selectSandboxImageForWorkspace } = await import(
+      "./sandboxImageSelect.js"
+    );
+    image = await selectSandboxImageForWorkspace(workspaceId);
+    const {
+      ensureWorkspaceDepsVolume,
+      DEPS_CACHE_MOUNT
+    } = await import("./workspaceDepsCache.js");
+    const volumeName = await ensureWorkspaceDepsVolume(workspaceId);
+    namedVolumes = [{ volumeName, containerPath: DEPS_CACHE_MOUNT }];
+  }
+  return {
+    bindMounts,
+    namedVolumes,
+    containerEnv: env.containerEnv,
+    image
+  };
+}
+
 export async function provisionSessionSandbox(
   sessionId: string,
   options?: { source?: ProvisionSessionSource }
@@ -88,14 +124,35 @@ export async function provisionSessionSandbox(
     throw new Error(`No chat/feature found for session: ${sessionId}`);
   }
 
-  if (chat.workspaceId) {
-    return provisionWorkspaceScopedSandbox({
-      sessionId,
-      chat,
-      workspaceId: chat.workspaceId
-    });
+  const result = chat.workspaceId
+    ? await provisionWorkspaceScopedSandbox({
+        sessionId,
+        workspaceId: chat.workspaceId,
+        userId: chat.userId,
+        branchName: chat.branchName
+      })
+    : await provisionProjectScopedAfterLookup({
+        sessionId,
+        chat,
+        projectRepo,
+        source: options?.source
+      });
+  try {
+    const { touchSessionActivity } = await import("./sessionActivity.js");
+    await touchSessionActivity(sessionId, { force: true });
+  } catch {
+    void 0;
   }
+  return result;
+}
 
+async function provisionProjectScopedAfterLookup(options: {
+  sessionId: string;
+  chat: ChatFeature;
+  projectRepo: ProjectRepository;
+  source?: ProvisionSessionSource;
+}): Promise<{ status: "ready"; workingDir: string; containerId: string }> {
+  const { sessionId, chat, projectRepo, source } = options;
   if (!chat.projectId) {
     throw new Error(
       `Chat session ${sessionId} has neither projectId nor workspaceId`
@@ -109,7 +166,7 @@ export async function provisionSessionSandbox(
     sessionId,
     chat,
     project,
-    source: options?.source
+    source
   });
 }
 
@@ -134,15 +191,16 @@ async function provisionProjectScopedSandbox(options: {
       sessionId,
       branchName: chat.branchName
     });
-    const handle = await getSandboxRuntime().createSession(sessionId, {
-      bindMounts: [
+    const handle = await getSandboxRuntime().createSession(
+      sessionId,
+      await sandboxSessionCreateOpts(sessionId, [
         { hostPath: wt.workDir, containerPath: WORKSPACE_MOUNT },
         {
           hostPath: wt.gitCanonicalHostPath,
           containerPath: canonicalGitContainerPath(project.id)
         }
-      ]
-    });
+      ])
+    );
     if (handle.runtime !== "docker") {
       throw new Error(
         "Local folder workspaces require the Docker sandbox runtime"
@@ -161,7 +219,10 @@ async function provisionProjectScopedSandbox(options: {
     return { status: "ready", workingDir, containerId: handle.ref };
   }
 
-  const handle = await getSandboxRuntime().createSession(sessionId);
+  const handle = await getSandboxRuntime().createSession(
+    sessionId,
+    await sandboxSessionCreateOpts(sessionId)
+  );
   const containerName = handle.ref;
   const containerId = handle.ref;
   const repoInitialized = await isRepoInitialized(containerName);
@@ -194,11 +255,12 @@ async function provisionProjectScopedSandbox(options: {
 
 async function provisionWorkspaceScopedSandbox(options: {
   sessionId: string;
-  chat: ChatFeature;
   workspaceId: string;
+  userId: string;
+  branchName: string;
 }): Promise<{ status: "ready"; workingDir: string; containerId: string }> {
-  const { sessionId, chat, workspaceId } = options;
-  assertSafeBranch(chat.branchName);
+  const { sessionId, workspaceId, userId, branchName } = options;
+  assertSafeBranch(branchName);
   const workspaceRepo = new WorkspaceRepository();
   const projectRepo = new ProjectRepository();
   const githubOAuth = new GithubOAuthService();
@@ -237,7 +299,7 @@ async function provisionWorkspaceScopedSandbox(options: {
         canonicalKey: hostPath,
         projectId: project.id,
         sessionId,
-        branchName: chat.branchName
+        branchName
       });
       bindMounts.push({
         hostPath: wt.workDir,
@@ -257,9 +319,14 @@ async function provisionWorkspaceScopedSandbox(options: {
   }
 
   const { getSandboxRuntime } = await import("./sandboxRuntime/resolve.js");
-  const handle = await getSandboxRuntime().createSession(sessionId, {
-    bindMounts: bindMounts.length > 0 ? bindMounts : undefined
-  });
+  const handle = await getSandboxRuntime().createSession(
+    sessionId,
+    await sandboxSessionCreateOpts(
+      sessionId,
+      bindMounts.length > 0 ? bindMounts : undefined,
+      workspaceId
+    )
+  );
   if (handle.runtime !== "docker") {
     throw new Error("Workspace sessions require the Docker sandbox runtime");
   }
@@ -274,7 +341,7 @@ async function provisionWorkspaceScopedSandbox(options: {
   ]).catch(() => {});
 
   const token = githubMembers.length
-    ? ((await githubOAuth.getAccessToken(chat.userId)) ?? undefined)
+    ? ((await githubOAuth.getAccessToken(userId)) ?? undefined)
     : undefined;
 
   for (const { member, project } of githubMembers) {
@@ -284,7 +351,7 @@ async function provisionWorkspaceScopedSandbox(options: {
     await cloneGithubIntoVolume({
       containerName,
       project,
-      branch: chat.branchName,
+      branch: branchName,
       token,
       repoName: member.repoName
     });
@@ -309,6 +376,26 @@ async function provisionWorkspaceScopedSandbox(options: {
     workingDir: WORKSPACE_MOUNT,
     containerId: containerName
   };
+}
+
+export function workspacePrepareSessionId(workspaceId: string): string {
+  return `wsa-${workspaceId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40)}`;
+}
+
+/** Ephemeral sandbox used by workspace Analyze: clone, install, cache. */
+export async function provisionWorkspacePrepareSandbox(options: {
+  workspaceId: string;
+  userId: string;
+}): Promise<{ sessionId: string; containerId: string }> {
+  const sessionId = workspacePrepareSessionId(options.workspaceId);
+  const branchName = `analyze-${options.workspaceId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`;
+  const result = await provisionWorkspaceScopedSandbox({
+    sessionId,
+    workspaceId: options.workspaceId,
+    userId: options.userId,
+    branchName
+  });
+  return { sessionId, containerId: result.containerId };
 }
 
 export interface SessionRepoInfo {
@@ -412,6 +499,15 @@ export async function getSessionSandboxStatus(
 }
 
 export async function destroySessionSandbox(sessionId: string): Promise<void> {
+  try {
+    const { destroySessionAppDatabases } = await import("./sessionAppDb.js");
+    await destroySessionAppDatabases(sessionId);
+  } catch (err) {
+    console.warn(
+      `[sessionSandbox] app DB teardown failed for ${sessionId}:`,
+      err instanceof Error ? err.message : err
+    );
+  }
   try {
     await pruneLocalSessionWorktrees(sessionId);
   } catch (err) {
