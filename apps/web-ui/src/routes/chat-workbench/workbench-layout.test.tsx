@@ -16,26 +16,45 @@ vi.mock("./bottom-terminal.js", () => ({
 vi.mock("./run-sidebar.js", () => ({
   RunSidebar: () => <div>run</div>
 }));
+vi.mock("./use-apps.js", () => ({
+  useApps: () => ({ apps: [], exists: true, error: null, refresh: vi.fn() })
+}));
 
 import { Workbench } from "./workbench-layout";
 
 describe("Workbench", () => {
-  it("renders chat and preview panes", () => {
+  it("shows chat on the left and preview as a right-pane tab", () => {
     render(
       <Workbench
         sessionId="s1"
         projectId="p1"
         chatId="c1"
         sessionKind="ticket"
+        leftMode="chat"
+        onLeftModeChange={vi.fn()}
       />
     );
     expect(screen.getByText("chat-pane")).toBeTruthy();
     expect(screen.getByText("preview")).toBeTruthy();
     expect(screen.getByText("terminal")).toBeTruthy();
-    expect(screen.queryByText("Logs")).toBeNull();
-    const rightPane = screen.getByRole("button", { name: "Preview" })
-      .parentElement?.parentElement;
-    expect(rightPane?.textContent).toContain("terminal");
-    expect(rightPane?.textContent).not.toContain("chat-pane");
+    expect(screen.getByRole("button", { name: "Preview" })).toBeTruthy();
+    expect(screen.queryByText("files")).toBeNull();
+  });
+
+  it("switches the left pane to files without covering preview", () => {
+    render(
+      <Workbench
+        sessionId="s1"
+        projectId="p1"
+        chatId="c1"
+        sessionKind="ticket"
+        leftMode="files"
+        onLeftModeChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText("files")).toBeTruthy();
+    expect(screen.getByText("preview")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Files" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close panel" })).toBeNull();
   });
 });

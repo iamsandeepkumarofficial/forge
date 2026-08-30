@@ -11,6 +11,12 @@ type SessionOptions = {
   sessionId: string;
   projectId: string;
   chatId: string;
+  /** When set (workspace chats), used for initial-prompt state clear path. */
+  workspaceId?: string;
+  /** Skip location replace (embedded drawer). */
+  skipInitialPromptNavigate?: boolean;
+  /** Send CTA prompt even when the chat already has messages. */
+  sendInitialPromptEvenIfNotEmpty?: boolean;
   initialPrompt?: string;
   provider: LlmProvider;
   activeModel: string;
@@ -56,8 +62,14 @@ export function useChatPaneSession(options: SessionOptions) {
     historyLoaded: history.historyLoaded,
     status: s.status,
     messageCount: history.messages.length,
-    projectId: o.projectId,
-    chatId: o.chatId,
+    sendEvenIfNotEmpty: o.sendInitialPromptEvenIfNotEmpty,
+    clearStatePath: o.skipInitialPromptNavigate
+      ? undefined
+      : o.projectId
+        ? `/projects/${o.projectId}/chats/${o.chatId}`
+        : o.workspaceId
+          ? `/workspaces/${o.workspaceId}/chats/${o.chatId}`
+          : undefined,
     sendText: (raw) => {
       void sendText(raw);
     }
