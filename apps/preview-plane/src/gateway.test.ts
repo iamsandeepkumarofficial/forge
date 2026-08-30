@@ -61,6 +61,28 @@ describe("preview gateway", () => {
     assert.equal(res.status, N_404);
   });
 
+  it("serves cookie clear on /__forge/clear", async () => {
+    const res = await fetch(`${base}/__forge/clear`, {
+      headers: {
+        "X-Forwarded-Host": "s-abc.preview.forge.local"
+      }
+    });
+    assert.equal(res.status, N_200);
+    const text = await res.text();
+    assert.match(text, /forge-preview-cleared/);
+  });
+
+  it("serves the inspect host on /__forge/inspect", async () => {
+    const res = await fetch(`${base}/__forge/inspect?src=%2F&mode=comment`, {
+      headers: {
+        "X-Forwarded-Host": "s-abc.preview.forge.local"
+      }
+    });
+    assert.equal(res.status, N_200);
+    const text = await res.text();
+    assert.match(text, /__forge\/inspect\.js/);
+  });
+
   it("proxies without auth (RFC 0004)", async () => {
     const res = await fetch(base, {
       headers: {
