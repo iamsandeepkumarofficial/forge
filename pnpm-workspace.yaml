@@ -7,3 +7,4 @@ onlyBuiltDependencies:
   - "@swc/core"
   - "protobufjs"
   - "@temporalio/core-bridge"
+  - "electron"

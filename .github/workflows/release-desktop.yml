@@ -1,5 +1,5 @@
-# Future: build and publish Forge desktop (Tauri) artifacts for macOS / Windows / Linux.
-# Not active yet — scaffold only (see apps/desktop and RFC 0002).
+# Future: build and publish Forge desktop (Electron) artifacts for macOS / Windows / Linux.
+# Not active yet — scaffold only (see apps/electron and RFC 0002).
 name: Release Desktop
 
 on:
@@ -13,5 +13,5 @@ jobs:
     steps:
       - name: Placeholder
         run: |
-          echo "TODO: Tauri release pipeline (matrix OS, signing, artifacts)."
-          echo "See apps/desktop/README.md and docs/rfcs/0002-local-desktop-runtime.md"
+          echo "TODO: Electron release pipeline (matrix OS, signing, artifacts)."
+          echo "See apps/electron/README.md and docs/rfcs/0002-local-desktop-runtime.md"

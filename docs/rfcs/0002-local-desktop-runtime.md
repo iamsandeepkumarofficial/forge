@@ -5,9 +5,11 @@
 - **Authors:** Forge contributors
 - **Depends on:** [RFC 0001](./0001-harness-extraction.md)
 
+Implementation lives in **Electron** (`apps/electron`, `pnpm desktop`). The original write-up named Tauri; the supervisor contract is unchanged.
+
 ## Summary
 
-Forge ships a **Tauri desktop app** whose Rust supervisor owns local infrastructure lifecycle: detect Docker, bring up docker-compose services, ensure the sandbox image exists, spawn the Node harness processes, inject a loopback auth token, and open the chat UI in a webview. LLM credentials and preferences live in `~/.forge/config.json`. Previews use the local preview-plane at `*.preview.localhost`.
+Forge ships an **Electron desktop app** whose supervisor owns local infrastructure lifecycle: detect Docker, bring up docker-compose services, ensure the sandbox image exists, spawn the Node harness processes, inject a loopback auth token, and open the chat UI in Chromium. LLM credentials and preferences live in `~/.forge/config.json`. Previews use the local preview-plane at `*.preview.localhost`.
 
 ## Motivation
 
@@ -32,7 +34,7 @@ End users should not manually orchestrate Postgres, Temporal, MinIO, a sandbox i
 ```mermaid
 sequenceDiagram
   participant User
-  participant Supervisor as Tauri supervisor
+  participant Supervisor as Desktop supervisor
   participant Docker
   participant Compose as docker compose
   participant Node as server + orchestrator + preview-plane
@@ -120,7 +122,7 @@ Example shape:
 
 ### Behavior
 
-- The **Settings UI** in the webview reads/writes this file through Tauri commands (optionally backed by the OS secure store for the API key field).
+- The **Settings UI** in the webview reads/writes this file through desktop IPC (optionally backed by the OS secure store for the API key field).
 - On process spawn, the supervisor **materializes** config into environment variables already understood by server and orchestrator (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_COMPATIBLE_BASE_URL`, etc.).
 - Contributors running headless may continue to use `.env` / `.env.example`; desktop users should not need to edit those files.
 
@@ -155,13 +157,13 @@ Forge keeps the preview-plane for local app previews:
 
 - Bundle `docker-compose.yml` and `Dockerfile.sandbox` as app resources (or resolve them from the install layout).
 - Release artifacts target macOS, Windows, and Linux via CI (see project README).
-- Dev mode: `apps/desktop` can point at a local `pnpm dev` stack for faster iteration while still testing supervisor flows.
+- Dev mode: `apps/electron` can point at a local `pnpm dev` stack for faster iteration while still testing supervisor flows.
 
 ## Security considerations
 
 - Server listens on **loopback only** in desktop mode.
 - Token is high-entropy, per-launch, and never written to the repo.
-- API keys in `config.json` should use restrictive file permissions; prefer OS secure store where Tauri plugins make that practical.
+- API keys in `config.json` should use restrictive file permissions; prefer OS secure store where the desktop shell makes that practical.
 - Sandbox containers must not mount arbitrary host paths beyond the connected workspace the user explicitly chose.
 
 ## Alternatives considered

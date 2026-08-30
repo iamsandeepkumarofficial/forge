@@ -48,7 +48,7 @@ A single workspace abstraction covers both without multi-tenant project bureaucr
 
 ### Local folder
 
-- User picks a directory (Tauri native dialog in desktop; path entry for headless/dev).
+- User picks a directory (Electron native dialog in desktop; path entry for headless/dev).
 - Workspace stores an absolute host path.
 - On session start, the sandbox **bind-mounts** that path (read-write unless a future policy says otherwise).
 - The agent edits the user's real files; there is no separate clone copy unless the user chooses git mode.
