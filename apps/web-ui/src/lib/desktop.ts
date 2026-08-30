@@ -1,25 +1,32 @@
+import type { ForgeDesktopPreview } from "./desktop-preview.js";
+
 declare global {
   interface Window {
-    __TAURI__?: unknown;
-    __TAURI_INTERNALS__?: unknown;
+    forgeDesktop?: {
+      pickFolder: () => Promise<string | null>;
+      getStatus?: () => Promise<string>;
+      preview?: ForgeDesktopPreview;
+    };
   }
 }
 
-/** True when running inside the Forge Tauri desktop shell. */
 export function isDesktop(): boolean {
   if (typeof window === "undefined") return false;
-  return Boolean(window.__TAURI_INTERNALS__ || window.__TAURI__);
+  return Boolean(window.forgeDesktop);
 }
 
-/**
- * Open a native folder picker (desktop only).
- * Returns an absolute path, or null if cancelled / not desktop.
- * Lazy-imports the Tauri dialog plugin so browser builds stay intact.
- */
+export function isElectronPreview(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean(window.forgeDesktop?.preview);
+}
+
+export function electronPreview(): ForgeDesktopPreview | null {
+  return window.forgeDesktop?.preview ?? null;
+}
+
 export async function pickFolder(): Promise<string | null> {
-  if (!isDesktop()) return null;
-  const { open } = await import("@tauri-apps/plugin-dialog");
-  const selected = await open({ directory: true, multiple: false });
-  if (selected === null || Array.isArray(selected)) return null;
-  return selected;
+  if (window.forgeDesktop?.pickFolder) {
+    return window.forgeDesktop.pickFolder();
+  }
+  return null;
 }

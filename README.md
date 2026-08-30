@@ -62,15 +62,19 @@ pnpm build
 
 ## Desktop app
 
-Forge is designed to ship as a **Tauri** desktop app that:
+Forge ships as an **Electron** desktop app (`apps/electron`) that:
 
 - Detects Docker and runs `docker compose up`
 - Builds the sandbox image when needed
 - Spawns the server and orchestrator (preview reverse-proxy runs in-process on the server)
-- Opens the chat UI in a webview (single-user local mode — no POC token)
+- Opens the chat UI in Chromium (single-user local mode — no POC token)
 - Reads LLM settings from `~/.forge/config.json`
 
-The desktop shell (`apps/desktop`) is **work in progress / scaffold**—contributors should use the docker-compose + `pnpm dev` path above until the supervisor lands. Design details: [RFC 0002: Local Desktop Runtime](./docs/rfcs/0002-local-desktop-runtime.md).
+```bash
+pnpm desktop
+```
+
+Contributors can still use docker-compose + `pnpm dev` and open `http://127.0.0.1:5173`. Design details: [RFC 0002: Local Desktop Runtime](./docs/rfcs/0002-local-desktop-runtime.md).
 
 ## Architecture (short)
 
@@ -78,6 +82,7 @@ The desktop shell (`apps/desktop`) is **work in progress / scaffold**—contribu
 - **orchestrator** (`packages/orchestrator`) — Temporal worker for interactive chat turns
 - **preview-plane** (`apps/preview-plane`) — optional standalone preview proxy (k8s / `PREVIEW_IN_PROCESS=0`)
 - **web-ui** (`apps/web-ui`) — chat workbench
+- **desktop** (`apps/electron`) — Electron supervisor (`pnpm desktop`)
 - **Docker sandbox** — per-session isolated workspace
 
 See the RFCs for the full picture.
