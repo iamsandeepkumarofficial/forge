@@ -37,6 +37,10 @@ describe("agentMode", () => {
       isToolAllowedForMode({ agentMode: "ask", toolName: "upsert_launch_app" }),
       false
     );
+    assert.equal(
+      isToolAllowedForMode({ agentMode: "ask", toolName: "ask_user" }),
+      true
+    );
   });
 
   it("Plan allows preview and subtask but not shell", () => {

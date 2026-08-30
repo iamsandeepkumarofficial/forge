@@ -19,7 +19,11 @@ describe("chatToolCatalog", () => {
       "web_search",
       "list_skills",
       "invoke_skill",
-      "switch_mode"
+      "upsert_workspace_parameter",
+      "docker_image_lookup",
+      "provision_app_engine",
+      "switch_mode",
+      "ask_user"
     ]) {
       assert.equal(ids.has(id), true, id);
     }
