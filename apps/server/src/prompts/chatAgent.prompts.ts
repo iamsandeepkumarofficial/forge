@@ -5,6 +5,7 @@ import {
   loadSkillIndexForPrompt
 } from "../tools/skillIndex.js";
 import { formatRepoSetupBlock, loadLaunchReadiness, loadWorkspaceLaunchReadiness } from "./repoReadiness.js";
+import { formatSetupAgentSopBlock } from "../services/workspace/health/types.js";
 
 const N_65536 = 65536;
 const N_2000000 = 2000000;
@@ -19,6 +20,16 @@ export type ChatAgentPromptPaths = {
   /** Host paths for reading launch.json / AGENTS.md (local worktrees). */
   hostWorktrees?: Record<string, string>;
   hostWorkingDir?: string;
+  /** Pre-formatted repo inventory block (Part 1). */
+  inventoryBlock?: string;
+  /** Condensed workspace health block (Part 8). */
+  healthBlock?: string;
+  /** Workspace setup SOP (stack-agnostic; skills own stacks). */
+  setupSopBlock?: string;
+  /** Env key names available (no secret values). */
+  envKeyNames?: string[];
+  /** Optional precomputed launch readiness (workspace: from sandbox root launch.json). */
+  readiness?: import("./repoReadiness.js").LaunchReadiness;
 };
 
 const BASE_INSTRUCTIONS = [
@@ -84,10 +95,10 @@ function sandboxFilesystemBlock(paths: ChatAgentPromptPaths): string {
       "## Working repositories (authoritative)",
       `- Session root: \`${root}\`. This is a **workspace** with ${names.length} mounted repo${names.length === 1 ? "" : "s"}:`,
       ...lines,
-      `- All source lives under these member folders. There is **no** project at \`${root}\` itself — do not create \`${root}/.forge/launch.json\` or treat \`${root}\` as a git repo.`,
+      `- Member folders are the git roots. Session root \`${root}\` is **not** a git repo.`,
+      `- Launch config is **only** at \`${root}/.forge/launch.json\` (session-root). Do **not** create per-member \`.forge/launch.json\` under \`${names[0]}/\` etc.`,
       `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` and **must start with a member repo name** (example: \`${names[0]}/package.json\`). Never use host paths (\`/Users/…\`, \`/home/…\`).`,
       `- \`run_terminal\` default cwd is \`${root}\`. Always pass \`workingDirectory\` as a member repo (e.g. \`${names[0]}\`) or a subdirectory under it.`,
-      `- Each member has its own git root and its own \`.forge/launch.json\` (path: \`${names[0]}/.forge/launch.json\`).`,
       "- Coordinated cross-repo edits are fine; keep changes scoped to the repos that need them."
     ].join("\n");
   }
@@ -130,24 +141,46 @@ export function composeChatAgentSystemPrompt(
     workingDir: skillsRoot
   });
 
-  const readiness = isWorkspace
-    ? loadWorkspaceLaunchReadiness(
-        Object.fromEntries(
-          memberNames.map((name) => [name, readRootFor(name)])
-        )
-      )
-    : loadLaunchReadiness(paths.hostWorkingDir ?? paths.workingDir);
+  const readiness =
+    paths.readiness ??
+    (isWorkspace
+      ? loadWorkspaceLaunchReadiness({
+          sessionRoot: paths.workingDir || paths.sessionRoot,
+          memberRepos: memberNames
+        })
+      : loadLaunchReadiness(paths.hostWorkingDir ?? paths.workingDir));
 
   const parts = [
     ...BASE_INSTRUCTIONS,
     "",
     sandboxFilesystemBlock(paths),
-    "",
+    ""
+  ];
+  if (paths.inventoryBlock?.trim()) {
+    parts.push(paths.inventoryBlock.trim(), "");
+  }
+  if (paths.healthBlock?.trim()) {
+    parts.push(paths.healthBlock.trim(), "");
+  }
+  parts.push(
     formatRepoSetupBlock({
       readiness,
       memberRepos: isWorkspace ? memberNames : undefined
     })
-  ];
+  );
+  if (isWorkspace) {
+    parts.push(
+      "",
+      paths.setupSopBlock?.trim() || formatSetupAgentSopBlock()
+    );
+  }
+  if (paths.envKeyNames && paths.envKeyNames.length > 0) {
+    parts.push(
+      "",
+      "## Environment",
+      `Env keys available (values injected at runtime, including DATABASE_URL / MONGODB_URI on the network plane): ${paths.envKeyNames.map((k) => `\`${k}\``).join(", ")}`
+    );
+  }
   if (agentsMd) {
     parts.push("", "## Repository instructions", agentsMd);
   }
