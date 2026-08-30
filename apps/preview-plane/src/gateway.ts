@@ -11,7 +11,14 @@ import {
   type PreviewRoute,
   type RouteStore
 } from "./routeStore.js";
+import {
+  CLEAR_HTML,
+  INSPECT_HTML,
+  INSPECT_JS,
+  inspectAsset
+} from "./inspectPage.js";
 
+const N_200 = 200;
 const N_401 = 401;
 const N_404 = 404;
 
@@ -126,6 +133,19 @@ export function createGateway(
     });
     if (!decision.ok) {
       denyAuth({ res, log, host: hostname, decision });
+      return;
+    }
+    const inspect = inspectAsset(req.url);
+    if (inspect) {
+      res.setHeader("Cache-Control", "no-store");
+      res.status(N_200).type(inspect === "js" ? "application/javascript" : "html");
+      res.send(
+        inspect === "js"
+          ? INSPECT_JS
+          : inspect === "clear"
+            ? CLEAR_HTML
+            : INSPECT_HTML
+      );
       return;
     }
     const { target, url } = resolveProxyTarget({ route: resolved, req });
