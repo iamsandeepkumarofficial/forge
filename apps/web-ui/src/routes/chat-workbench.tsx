@@ -3,7 +3,15 @@ import { Download, UploadCloud } from "lucide-react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { fetchChat, startSession } from "../lib/projects-api.js";
 import { downloadRepoArchive, promoteToCanonical } from "../lib/tool-runner.js";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Workbench } from "./chat-workbench/workbench-layout.js";
+import { SessionHeader } from "./chat-workbench/session-header.js";
+import { SessionBootScreen } from "./chat-workbench/session-boot.js";
+import type {
+  LeftPaneMode,
+  SandboxStatus,
+  WorkbenchChrome
+} from "./chat-workbench/types.js";
 
 function readInitialPrompt(state: unknown): string | undefined {
   if (
@@ -28,18 +36,33 @@ export function ChatWorkbench() {
     sessionId?: string;
     title?: string;
     kind?: "ticket" | "workbench";
+    branchName?: string;
   } | null>(null);
   const [loadingChat, setLoadingChat] = useState(true);
+  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>("starting");
+  const [chrome, setChrome] = useState<WorkbenchChrome>({
+    turnStatus: "idle"
+  });
+  const [leftMode, setLeftMode] = useState<LeftPaneMode>("chat");
   const [activeKey, setActiveKey] = useState(`${projectId}:${chatId}`);
   if (activeKey !== `${projectId}:${chatId}`) {
     setActiveKey(`${projectId}:${chatId}`);
     setLoadingChat(true);
+    setLeftMode("chat");
   }
   useEffect(() => {
     let cancelled = false;
     void fetchChat(projectId, chatId)
       .then((data) => {
-        if (!cancelled) setChat(data);
+        if (!cancelled) {
+          setChat({
+            sessionId: data.sessionId,
+            title: data.title,
+            kind: data.kind,
+            branchName:
+              typeof data.branchName === "string" ? data.branchName : undefined
+          });
+        }
       })
       .catch((err) => console.error("Failed to load chat:", err))
       .finally(() => {
@@ -50,39 +73,56 @@ export function ChatWorkbench() {
     };
   }, [projectId, chatId]);
   const sessionId: string | undefined = chat?.sessionId;
+  const startSandbox = () => {
+    if (!sessionId) return;
+    setSandboxStatus("starting");
+    void startSession(sessionId)
+      .then(() => setSandboxStatus("ready"))
+      .catch((err) => {
+        console.error("Failed to start session sandbox:", err);
+        setSandboxStatus("error");
+      });
+  };
   useEffect(() => {
     if (!sessionId) return;
-    void startSession(sessionId).catch((err) =>
-      console.error("Failed to start session sandbox:", err)
-    );
+    startSandbox();
   }, [sessionId]);
+  const booting =
+    loadingChat || Boolean(sessionId && sandboxStatus === "starting");
   return (
-    <div className="h-screen flex flex-col">
-      <div className="flex items-center gap-3 border-b px-4 py-2 shrink-0 min-w-0">
-        <button
-          onClick={() => navigate(`/projects/${projectId}/chats`)}
-          className="text-sm text-muted-foreground hover:underline shrink-0"
-        >
-          ← Chats
-        </button>
-        <h1 className="font-semibold truncate">
-          {loadingChat ? "Loading…" : (chat?.title ?? "Chat")}
-        </h1>
-        <div className="flex-1" />
-        {sessionId && <SessionActions sessionId={sessionId} />}
-      </div>
-      <div className="flex-1 min-h-0">
-        {sessionId ? (
+    <div className="flex h-screen flex-col">
+      <SessionHeader
+        onBack={() => navigate(`/projects/${projectId}/chats`)}
+        title={loadingChat ? "Loading…" : (chat?.title ?? "Chat")}
+        turnStatus={chrome.turnStatus}
+        sandboxStatus={sessionId ? sandboxStatus : "starting"}
+        leftMode={leftMode}
+        onLeftMode={setLeftMode}
+        actions={
+          sessionId ? <SessionActions sessionId={sessionId} /> : undefined
+        }
+      />
+      <div className="min-h-0 flex-1">
+        {booting || sandboxStatus === "error" ? (
+          <SessionBootScreen
+            sandboxStatus={sandboxStatus === "error" ? "error" : "starting"}
+            onRetry={sandboxStatus === "error" ? startSandbox : undefined}
+          />
+        ) : sessionId ? (
           <Workbench
             sessionId={sessionId}
             projectId={projectId}
             chatId={chatId}
             sessionKind={chat?.kind ?? "workbench"}
+            branchName={chat?.branchName}
             initialPrompt={initialPrompt}
+            leftMode={leftMode}
+            onLeftModeChange={setLeftMode}
+            onChromeChange={setChrome}
           />
         ) : (
-          <div className="h-full grid place-items-center text-sm text-muted-foreground">
-            {loadingChat ? "Loading session…" : "Session not ready yet."}
+          <div className="grid h-full place-items-center text-sm text-muted-foreground">
+            Session not ready yet.
           </div>
         )}
       </div>
@@ -124,30 +164,22 @@ function SessionActions({ sessionId }: { sessionId: string }) {
       setBusy(null);
     }
   };
-  const btn =
-    "flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50";
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      <button
-        type="button"
+    <>
+      <DropdownMenuItem
+        disabled={busy !== null}
         onClick={() => void download()}
-        disabled={busy !== null}
-        className={btn}
-        title="Download working code as .tar.gz"
       >
-        <Download className="size-3.5" />
-        {busy === "download" ? "…" : "Download"}
-      </button>
-      <button
-        type="button"
+        <Download className="size-4" />
+        {busy === "download" ? "Downloading…" : "Download"}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        disabled={busy !== null}
         onClick={() => void promote()}
-        disabled={busy !== null}
-        className={btn}
-        title="Promote working code to canonical"
       >
-        <UploadCloud className="size-3.5" />
-        {busy === "promote" ? "…" : "Promote"}
-      </button>
-    </div>
+        <UploadCloud className="size-4" />
+        {busy === "promote" ? "Promoting…" : "Promote"}
+      </DropdownMenuItem>
+    </>
   );
 }

@@ -21,10 +21,9 @@ describe("FilesTab", () => {
     vi.clearAllMocks();
   });
 
-  it("renders files header, refresh, and tree", () => {
+  it("renders a refresh control and the file tree", () => {
     render(<FilesTab sessionId="s1" onOpen={vi.fn()} />);
-    expect(screen.getByText("Files")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refresh files" })).toBeTruthy();
     expect(screen.getByText("File tree")).toBeTruthy();
   });
 });
