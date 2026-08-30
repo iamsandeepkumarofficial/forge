@@ -11,6 +11,7 @@ import {
   index,
   unique,
   jsonb,
+  boolean,
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
 export const projectSourceEnum = pgEnum("project_source", ["github", "local"]);
@@ -205,6 +206,119 @@ export const workspaceProjects = pgTable(
     )
   })
 );
+
+export const projectParameters = pgTable(
+  "project_parameters",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 255 }).notNull(),
+    value: text("value").notNull(),
+    secret: boolean("secret").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => ({
+    projectKeyUnique: unique("project_parameters_project_id_key_unique").on(
+      table.projectId,
+      table.key
+    ),
+    projectIdIndex: index("project_parameters_project_id_idx").on(table.projectId)
+  })
+);
+
+export const workspaceParameters = pgTable(
+  "workspace_parameters",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 255 }).notNull(),
+    value: text("value").notNull(),
+    secret: boolean("secret").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => ({
+    workspaceKeyUnique: unique("workspace_parameters_workspace_id_key_unique").on(
+      table.workspaceId,
+      table.key
+    ),
+    workspaceIdIndex: index("workspace_parameters_workspace_id_idx").on(
+      table.workspaceId
+    )
+  })
+);
+
+export type WorkspaceHealthStatus =
+  | "ready"
+  | "blocked"
+  | "warnings"
+  | "computing";
+
+export const workspaceHealth = pgTable("workspace_health", {
+  workspaceId: uuid("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 32 })
+    .notNull()
+    .default("computing")
+    .$type<WorkspaceHealthStatus>(),
+  report: jsonb("report").$type<Record<string, unknown>>().notNull().default({}),
+  computedAt: timestamp("computed_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+});
+
+/** Engines the workspace opted into (shared docker servers; per-workspace db name). */
+export const workspaceDatabases = pgTable(
+  "workspace_databases",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    engineId: varchar("engine_id", { length: 64 }).notNull(),
+    databaseName: varchar("database_name", { length: 128 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => ({
+    workspaceEngineUnique: unique(
+      "workspace_databases_workspace_id_engine_id_unique"
+    ).on(table.workspaceId, table.engineId),
+    workspaceIdIndex: index("workspace_databases_workspace_id_idx").on(
+      table.workspaceId
+    )
+  })
+);
+
+/** Durable session-root launch.json promoted from a successful chat env. */
+export const workspaceEnvironments = pgTable("workspace_environments", {
+  workspaceId: uuid("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  launch: jsonb("launch")
+    .$type<{ apps?: unknown[] } & Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  sourceSessionId: text("source_session_id"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+});
 
 export const chatFeatures = pgTable(
   "chat_features",
@@ -488,6 +602,16 @@ export type Workspace = typeof workspaces.$inferSelect;
 export type WorkspaceInsert = typeof workspaces.$inferInsert;
 export type WorkspaceProject = typeof workspaceProjects.$inferSelect;
 export type WorkspaceProjectInsert = typeof workspaceProjects.$inferInsert;
+export type ProjectParameter = typeof projectParameters.$inferSelect;
+export type ProjectParameterInsert = typeof projectParameters.$inferInsert;
+export type WorkspaceParameter = typeof workspaceParameters.$inferSelect;
+export type WorkspaceParameterInsert = typeof workspaceParameters.$inferInsert;
+export type WorkspaceHealthRow = typeof workspaceHealth.$inferSelect;
+export type WorkspaceDatabase = typeof workspaceDatabases.$inferSelect;
+export type WorkspaceDatabaseInsert = typeof workspaceDatabases.$inferInsert;
+export type WorkspaceEnvironment = typeof workspaceEnvironments.$inferSelect;
+export type WorkspaceEnvironmentInsert =
+  typeof workspaceEnvironments.$inferInsert;
 export type ChatFeature = typeof chatFeatures.$inferSelect;
 export type ChatFeatureInsert = typeof chatFeatures.$inferInsert;
 export type ChatFeatureKind = (typeof chatFeatureKindEnum.enumValues)[number];
@@ -518,6 +642,11 @@ export const allTables = {
   projects,
   workspaces,
   workspaceProjects,
+  projectParameters,
+  workspaceParameters,
+  workspaceHealth,
+  workspaceDatabases,
+  workspaceEnvironments,
   chatFeatures,
   documents,
   chatComments,

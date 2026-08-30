@@ -99,6 +99,27 @@
       "when": 1785855000000,
       "tag": "0013_workspaces",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785860000000,
+      "tag": "0014_workspace_params_health",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785865000000,
+      "tag": "0015_workspace_databases",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785870000000,
+      "tag": "0016_workspace_environments",
+      "breakpoints": true
     }
   ]
 }
