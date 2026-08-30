@@ -68,6 +68,15 @@ app.listen(port, bindHost, () => {
   process.stdout.write(
     `Forge tool plane listening on http://${bindHost}:${port}\n`
   );
+  void import("./projects/sandboxIdle.js")
+    .then(({ startSandboxIdleSweeper }) => {
+      startSandboxIdleSweeper();
+    })
+    .catch((err) => {
+      process.stderr.write(
+        `[sandboxIdle] sweeper failed to start: ${err instanceof Error ? err.message : String(err)}\n`
+      );
+    });
   void import("./tools/web/executeWebTool.js")
     .then(({ ensureWarmPool, webToolsEnabled }) => {
       if (!webToolsEnabled()) return;

@@ -52,7 +52,9 @@ describe("mountToolsRoutes", () => {
           repoDir: "repo",
           workingDir: "/workspace",
           sessionRoot: "/workspace"
-        })
+        }),
+        readFileFromSandbox: async () => "",
+        dockerExec: async () => ({ code: 0, stdout: "", stderr: "" })
       }
     });
     mock.module("../../projects/sessionSandbox.js", {
@@ -67,6 +69,15 @@ describe("mountToolsRoutes", () => {
     mock.module("../../prompts/chatAgent.prompts.js", {
       exports: {
         composeChatAgentSystemPrompt: () => "PROMPT"
+      }
+    });
+    mock.module("../../prompts/promptContext.js", {
+      exports: {
+        buildPromptContextForSession: async ({
+          paths
+        }: {
+          paths: Record<string, unknown>;
+        }) => paths
       }
     });
     mock.module("../../projects/launchScaffold.js", {

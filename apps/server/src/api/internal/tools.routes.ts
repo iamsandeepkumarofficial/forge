@@ -4,6 +4,7 @@ import {
   serializeChatToolDefinitions
 } from "@forge/core";
 import { composeChatAgentSystemPrompt } from "../../prompts/chatAgent.prompts.js";
+import { buildPromptContextForSession } from "../../prompts/promptContext.js";
 import { ensureLaunchConfig } from "../../projects/launchScaffold.js";
 import { getSessionRepoInfo } from "../../projects/sessionSandbox.js";
 import { resolveSandbox } from "../../projects/sandboxExec.js";
@@ -55,15 +56,19 @@ function mountToolsPrepareRoutes(
       await ensureLaunchConfig(sessionId).catch(() => undefined);
       const { workingDir, repoDir, sessionRoot, worktrees, hostWorktrees, hostWorkingDir } =
         await getSessionRepoInfo(sessionId);
-      const prompt = composeChatAgentSystemPrompt({
-        sessionRoot,
-        repoDir,
-        workingDir,
+      const promptPaths = await buildPromptContextForSession({
         sessionId,
-        worktrees,
-        hostWorktrees,
-        hostWorkingDir
+        paths: {
+          sessionRoot,
+          repoDir,
+          workingDir,
+          sessionId,
+          worktrees,
+          hostWorktrees,
+          hostWorkingDir
+        }
       });
+      const prompt = composeChatAgentSystemPrompt(promptPaths);
       res.type("text/plain; charset=utf-8").send(prompt);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -8,6 +8,7 @@ import {
   type ChatTurnChunk,
   type SessionMessage
 } from "@forge/db";
+import { sanitizeJsonForPg } from "./sanitizeJsonForPg.js";
 export class SessionMessageRepository {
   async listBySessionId(sessionId: string): Promise<SessionMessage[]> {
     const db = getDb();
@@ -29,7 +30,7 @@ export class SessionMessageRepository {
       .values({
         sessionId: input.sessionId,
         role: input.role,
-        parts: input.parts,
+        parts: sanitizeJsonForPg(input.parts),
         turnId: input.turnId ?? null,
         createdAt: new Date()
       })
@@ -43,7 +44,7 @@ export class SessionMessageRepository {
     const db = getDb();
     const [updated] = await db
       .update(sessionMessages)
-      .set({ parts })
+      .set({ parts: sanitizeJsonForPg(parts) })
       .where(eq(sessionMessages.id, id))
       .returning();
     return (updated as SessionMessage) ?? null;
@@ -95,6 +96,14 @@ export class ChatTurnRepository {
       .limit(1);
     return (row as ChatTurn) ?? null;
   }
+  async listRunningSessionIds(): Promise<string[]> {
+    const db = getDb();
+    const rows = await db
+      .select({ sessionId: chatTurns.sessionId })
+      .from(chatTurns)
+      .where(eq(chatTurns.status, "running"));
+    return [...new Set(rows.map((row) => row.sessionId))];
+  }
   async finish(options: {
     id: string;
     status: "completed" | "cancelled" | "failed";
@@ -134,7 +143,7 @@ export class ChatTurnChunkRepository {
         turnId: input.turnId,
         seq,
         eventType: input.eventType,
-        payload: input.payload,
+        payload: sanitizeJsonForPg(input.payload),
         createdAt: new Date()
       })
       .returning();

@@ -74,9 +74,62 @@ export async function stopBackgroundJob(options: {
     argv: [
       "sh",
       "-c",
-      `P=$(cat "${pf}" 2>/dev/null); if [ -n "$P" ]; then kill -TERM -"$P" 2>/dev/null; kill -TERM "$P" 2>/dev/null; fi; rm -f "${pf}"`
+      `P=$(cat "${pf}" 2>/dev/null); if [ -n "$P" ]; then kill -TERM -"$P" 2>/dev/null; kill -TERM "$P" 2>/dev/null; sleep 0.2; kill -KILL -"$P" 2>/dev/null; kill -KILL "$P" 2>/dev/null; fi; rm -f "${pf}"`
     ]
   });
+}
+
+/**
+ * Kill whatever is listening on a container TCP port (orphaned next/node children
+ * often survive after the forge job pid file is gone).
+ */
+export function freeListeningPortScript(port: number): string {
+  const p = Math.floor(port);
+  return `
+port=${p}
+hex=$(printf '%04X' "$port")
+inodes=$(
+  for proto in /proc/net/tcp /proc/net/tcp6; do
+    [ -r "$proto" ] || continue
+    awk -v hex="$hex" 'BEGIN { hex = toupper(hex) } NR > 1 {
+      split($2, a, ":");
+      if (toupper(a[2]) == hex && $4 == "0A") print $10
+    }' "$proto"
+  done | sort -u
+)
+[ -z "$inodes" ] && exit 0
+for inode in $inodes; do
+  for fd in /proc/[0-9]*/fd/*; do
+    link=$(readlink "$fd" 2>/dev/null) || continue
+    if [ "$link" = "socket:[$inode]" ]; then
+      pid=$(echo "$fd" | cut -d/ -f3)
+      kill -TERM "$pid" 2>/dev/null
+    fi
+  done
+done
+sleep 0.3
+for inode in $inodes; do
+  for fd in /proc/[0-9]*/fd/*; do
+    link=$(readlink "$fd" 2>/dev/null) || continue
+    if [ "$link" = "socket:[$inode]" ]; then
+      pid=$(echo "$fd" | cut -d/ -f3)
+      kill -KILL "$pid" 2>/dev/null
+    fi
+  done
+done
+`.trim();
+}
+
+export async function freeListeningPort(options: {
+  containerName: string;
+  port: number;
+}): Promise<void> {
+  const port = Math.floor(options.port);
+  if (!Number.isFinite(port) || port < 1) return;
+  await dockerExec({
+    container: options.containerName,
+    argv: ["sh", "-c", freeListeningPortScript(port)]
+  }).catch(() => undefined);
 }
 
 export async function isBackgroundJobRunning(options: {
