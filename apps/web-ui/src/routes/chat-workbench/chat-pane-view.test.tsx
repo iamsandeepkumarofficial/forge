@@ -3,10 +3,18 @@ import { render, screen } from "@testing-library/react";
 import { ChatPaneView } from "./chat-pane-view";
 
 vi.mock("../../components/chat-composer.js", () => ({
-  ChatComposer: () => <div>composer</div>
+  ChatComposer: (props: { leading?: unknown }) => (
+    <div>
+      {props.leading}
+      <div>composer</div>
+    </div>
+  )
 }));
 vi.mock("./chat-message-list.js", () => ({
   ChatMessageList: () => <div>messages</div>
+}));
+vi.mock("./running-terminals-bar.js", () => ({
+  RunningTerminalsBar: () => <div>running-terminals</div>
 }));
 
 describe("ChatPaneView", () => {
@@ -50,5 +58,6 @@ describe("ChatPaneView", () => {
     );
     expect(screen.getByText("messages")).toBeTruthy();
     expect(screen.getByText("composer")).toBeTruthy();
+    expect(screen.getByText("running-terminals")).toBeTruthy();
   });
 });

@@ -15,6 +15,12 @@ import {
   workspaceDepsVolumeName
 } from "./workspaceDepsCache.js";
 import { resolveSandbox } from "./sandboxExec.js";
+import {
+  formatLaunchAppNames,
+  logLaunchConfigPromoted,
+  logLaunchConfigSeedSkip,
+  logLaunchConfigSeeded
+} from "./launchConfigLog.js";
 
 function asForgeConfig(launch: { apps: unknown[] }): ForgeConfig {
   const apps: ForgeApp[] = [];
@@ -55,16 +61,52 @@ export async function seedLaunchFromWorkspace(
 ): Promise<boolean> {
   const chatRepo = new ChatFeatureRepository();
   const chat = await chatRepo.getBySessionId(sessionId);
-  if (!chat?.workspaceId) return false;
+  if (!chat?.workspaceId) {
+    logLaunchConfigSeedSkip({
+      sessionId,
+      reason: "not-workspace-chat"
+    });
+    return false;
+  }
 
   const envRepo = new WorkspaceEnvironmentRepository();
   const saved = await envRepo.get(chat.workspaceId);
-  if (!saved || saved.launch.apps.length === 0) return false;
+  if (!saved) {
+    logLaunchConfigSeedSkip({
+      sessionId,
+      workspaceId: chat.workspaceId,
+      reason: "catalog-missing"
+    });
+    return false;
+  }
+  if (saved.launch.apps.length === 0) {
+    logLaunchConfigSeedSkip({
+      sessionId,
+      workspaceId: chat.workspaceId,
+      reason: "catalog-empty"
+    });
+    return false;
+  }
 
   const config = asForgeConfig(saved.launch);
-  if (config.apps.length === 0) return false;
+  if (config.apps.length === 0) {
+    logLaunchConfigSeedSkip({
+      sessionId,
+      workspaceId: chat.workspaceId,
+      reason: "catalog-invalid"
+    });
+    return false;
+  }
 
   await writeForgeConfig(sessionId, config);
+  logLaunchConfigSeeded({
+    sessionId,
+    workspaceId: chat.workspaceId,
+    appCount: config.apps.length,
+    appNames: formatLaunchAppNames(config.apps),
+    sourceSessionId: saved.sourceSessionId,
+    catalogUpdatedAt: saved.updatedAt?.toISOString() ?? null
+  });
   return true;
 }
 
@@ -81,6 +123,12 @@ export async function promoteLaunchToWorkspace(
 
   const envRepo = new WorkspaceEnvironmentRepository();
   await envRepo.upsertLaunch(chat.workspaceId, config, sessionId);
+  logLaunchConfigPromoted({
+    sessionId,
+    workspaceId: chat.workspaceId,
+    appCount: config.apps.length,
+    appNames: formatLaunchAppNames(config.apps)
+  });
 }
 
 async function memberRepoNames(sessionId: string): Promise<string[]> {

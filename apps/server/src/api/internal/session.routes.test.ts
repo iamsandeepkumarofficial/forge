@@ -112,12 +112,6 @@ describe("mountSessionRoutes", () => {
         ) => {
           res.json({ jobs: [] });
         },
-        handleTerminalLogs: async (
-          _req: unknown,
-          res: { send: (text: string) => void }
-        ) => {
-          res.send("");
-        },
         handleTerminalStop: async (
           _req: unknown,
           res: { json: (body: unknown) => void }

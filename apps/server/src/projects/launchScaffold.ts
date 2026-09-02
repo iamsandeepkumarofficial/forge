@@ -11,6 +11,14 @@ import {
   type ForgeApp,
   type ForgeConfig
 } from "./appRunner.js";
+import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
+import {
+  formatLaunchAppNames,
+  logLaunchConfigExisting,
+  logLaunchConfigNone,
+  logLaunchConfigScaffolded,
+  type LaunchConfigSource
+} from "./launchConfigLog.js";
 
 function guessType(deps: Record<string, string>): AppType {
   const has = (n: string) => Object.prototype.hasOwnProperty.call(deps, n);
@@ -193,26 +201,44 @@ export async function scaffoldForgeConfig(
   return config;
 }
 
+async function chatWorkspaceId(sessionId: string): Promise<string | null> {
+  const chat = await new ChatFeatureRepository().getBySessionId(sessionId);
+  return chat?.workspaceId ?? null;
+}
+
 /** Scaffold launch.json when missing/empty and detectApps finds apps. */
 export async function ensureLaunchConfig(sessionId: string): Promise<{
   ready: boolean;
   scaffolded: boolean;
   seeded?: boolean;
+  source: LaunchConfigSource;
 }> {
+  const workspaceId = await chatWorkspaceId(sessionId);
   const { exists, config } = await readForgeConfig(sessionId);
   if (exists && config.apps.length > 0) {
-    return { ready: true, scaffolded: false };
+    logLaunchConfigExisting({
+      sessionId,
+      workspaceId,
+      appCount: config.apps.length,
+      appNames: formatLaunchAppNames(config.apps)
+    });
+    return { ready: true, scaffolded: false, source: "existing" };
   }
 
   try {
     const { seedLaunchFromWorkspace } = await import("./workspaceEnvironment.js");
     const seeded = await seedLaunchFromWorkspace(sessionId);
     if (seeded) {
-      return { ready: true, scaffolded: false, seeded: true };
+      return {
+        ready: true,
+        scaffolded: false,
+        seeded: true,
+        source: "seeded"
+      };
     }
   } catch (err) {
     console.warn(
-      `[ensureLaunchConfig] seed from workspace ${sessionId}: ${
+      `[launchConfig] seed error session=${sessionId}: ${
         err instanceof Error ? err.message : String(err)
       }`
     );
@@ -220,8 +246,15 @@ export async function ensureLaunchConfig(sessionId: string): Promise<{
 
   const detected = await detectApps(sessionId);
   if (detected.apps.length === 0) {
-    return { ready: false, scaffolded: false };
+    logLaunchConfigNone({ sessionId, workspaceId });
+    return { ready: false, scaffolded: false, source: "none" };
   }
   await writeForgeConfig(sessionId, detected);
-  return { ready: true, scaffolded: true };
+  logLaunchConfigScaffolded({
+    sessionId,
+    workspaceId,
+    appCount: detected.apps.length,
+    appNames: formatLaunchAppNames(detected.apps)
+  });
+  return { ready: true, scaffolded: true, source: "scaffolded" };
 }

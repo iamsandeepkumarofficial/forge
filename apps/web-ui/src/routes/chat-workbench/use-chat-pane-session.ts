@@ -80,6 +80,7 @@ export function useChatPaneSession(options: SessionOptions) {
     attachments: s.attachments,
     setAttachments: s.setAttachments,
     messages: history.messages,
+    historyLoaded: history.historyLoaded,
     status: s.status,
     error: s.error,
     clearError: () => s.setError(null),

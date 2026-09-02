@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, GitBranch, Loader2, Paperclip, Square, X } from "lucide-react";
 import type { LlmProvider } from "../lib/chat-agent.js";
 import type {
@@ -52,6 +52,8 @@ export type ChatComposerProps = {
   modeSwitchRemainingSeconds?: number;
   onConfirmModeSwitch?: () => void;
   onDismissModeSwitch?: () => void;
+  /** Content that sits on the composer top border (e.g. running terminals). */
+  leading?: ReactNode;
 };
 
 function ComposerAttachments(options: {
@@ -272,39 +274,42 @@ export function ChatComposer(props: ChatComposerProps) {
     maxOutputTokens
   });
   return (
-    <div className="shrink-0 border-t p-3">
-      <div className="rounded-2xl border border-border bg-background shadow-sm">
-        <PendingModeBanner
-          target={props.pendingModeSwitch}
-          remainingSeconds={props.modeSwitchRemainingSeconds}
-          onConfirm={props.onConfirmModeSwitch}
-          onDismiss={props.onDismissModeSwitch}
-        />
-        <ComposerAttachments
-          attachments={attachments}
-          onRemoveAttachment={onRemoveAttachment}
-        />
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (canSend) onSend();
-            }
-          }}
-          placeholder={placeholder}
-          rows={2}
-          className="w-full resize-none bg-transparent px-3 pt-3 pb-2 text-sm outline-none placeholder:text-muted-foreground"
-        />
-        <ComposerToolbar
-          props={props}
-          contextOpen={contextOpen}
-          setContextOpen={setContextOpen}
-          contextWrapRef={contextWrapRef}
-          fileRef={fileRef}
-          usage={usage}
-        />
+    <div className="shrink-0 px-3 pb-3 pt-10">
+      <div className="relative">
+        {props.leading}
+        <div className="rounded-2xl border border-border bg-background shadow-sm">
+          <PendingModeBanner
+            target={props.pendingModeSwitch}
+            remainingSeconds={props.modeSwitchRemainingSeconds}
+            onConfirm={props.onConfirmModeSwitch}
+            onDismiss={props.onDismissModeSwitch}
+          />
+          <ComposerAttachments
+            attachments={attachments}
+            onRemoveAttachment={onRemoveAttachment}
+          />
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (canSend) onSend();
+              }
+            }}
+            placeholder={placeholder}
+            rows={2}
+            className="w-full resize-none bg-transparent px-3 pt-3 pb-2 text-sm outline-none placeholder:text-muted-foreground"
+          />
+          <ComposerToolbar
+            props={props}
+            contextOpen={contextOpen}
+            setContextOpen={setContextOpen}
+            contextWrapRef={contextWrapRef}
+            fileRef={fileRef}
+            usage={usage}
+          />
+        </div>
       </div>
       {props.branchName ? (
         <p

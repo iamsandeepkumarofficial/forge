@@ -1,372 +1,506 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Square } from "lucide-react";
-import { fetchAllAppLogs } from "../../lib/tool-runner.js";
 import {
-  fetchAllTerminalLogs,
-  runTerminalCommand,
-  stopTerminalJob
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent
+} from "react";
+import { LoaderCircle, Plus, X } from "lucide-react";
+import {
+  closeShellTab,
+  createShellTab,
+  listTerminalTabs,
+  type TerminalTab
 } from "../../lib/session-terminal.js";
-import { useApps } from "./use-apps.js";
+import type { TerminalSessionClient } from "../../lib/terminal-session-client.js";
 import {
-  appLogsByStream,
-  buildAppStreams,
-  buildJobStreams,
-  countRunningStreams,
-  formatShellEntry,
-  jobLogsByStream,
-  jobNameFromCommand,
-  shouldRunInBackground,
-  type TerminalStream
+  getTerminalSessionClient,
+  releaseTerminalSessionClient,
+  retainTerminalSessionClient
+} from "../../lib/terminal-session-registry.js";
+import {
+  isBackgroundJobTracked,
+  listTrackedApps,
+  listTrackedBackgroundJobs,
+  subscribeTrackedTerminals,
+  trackApp
+} from "./tracked-terminals.js";
+import {
+  appNameFromTabId,
+  appTab,
+  applyTrackedRunningState,
+  jobNameFromTabId,
+  mergeApiTabsWithPinnedJobs,
+  mergeShellTab,
+  partitionStripTabs,
+  pickActiveTab,
+  pinnedJobTab,
+  pruneHiddenTabs,
+  visibleTabs
 } from "./terminal-model.js";
+import {
+  clampTerminalTabListWidth,
+  loadActiveTerminalTab,
+  loadTerminalTabListWidth,
+  persistActiveTerminalTab,
+  persistTerminalTabListWidth
+} from "./storage.js";
+import {
+  jobNameFromOpenEvent,
+  OPEN_TERMINAL_JOB_EVENT,
+  OPEN_TERMINAL_TAB_EVENT,
+  terminalTabFromOpenEvent
+} from "./terminal-toggle.js";
+import {
+  AppLogXtermPane,
+  JobLogXtermPane,
+  ShellXtermPane
+} from "./terminal-xterm-view.js";
 
-const N_3000 = 3000;
-const SHELL_ID = "shell";
-
-const STREAM_COLORS = [
-  "text-blue-400",
-  "text-green-400",
-  "text-purple-400",
-  "text-amber-400",
-  "text-pink-400",
-  "text-cyan-400",
-  "text-orange-400"
-];
-
-export type { TerminalStream };
-
-type LogLine = {
-  key: string;
-  streamId: string;
-  label: string;
-  color: string;
-  text: string;
-};
-
-function buildLogLines(options: {
-  streams: TerminalStream[];
-  excluded: Set<string>;
-  logsById: Record<string, string>;
-  query: string;
-  colorOf: (id: string) => string;
-}): LogLine[] {
-  const { streams, excluded, logsById, query, colorOf } = options;
-  const q = query.trim().toLowerCase();
-  const lines: LogLine[] = [];
-  for (const stream of streams) {
-    if (excluded.has(stream.id)) continue;
-    const split = (logsById[stream.id] ?? "").split("\n");
-    split.forEach((text, i) => {
-      if (text === "") return;
-      if (
-        q &&
-        !text.toLowerCase().includes(q) &&
-        !stream.label.toLowerCase().includes(q)
-      ) {
-        return;
-      }
-      lines.push({
-        key: `${stream.id}:${i}`,
-        streamId: stream.id,
-        label: stream.label,
-        color: colorOf(stream.id),
-        text
-      });
-    });
-  }
-  return lines;
-}
-
-function useTerminalStreams(
-  sessionId: string,
-  shellLog: string,
-  refresh: number
-): {
-  streams: TerminalStream[];
-  logsById: Record<string, string>;
-} {
-  const { apps } = useApps(sessionId);
-  const [jobState, setJobState] = useState<{
-    streams: TerminalStream[];
-    logs: Record<string, string>;
-  }>({ streams: [], logs: {} });
-  const [appLogs, setAppLogs] = useState<Record<string, string>>({});
-  useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const [nextAppLogs, term] = await Promise.all([
-          fetchAllAppLogs(sessionId).catch(() => ({})),
-          fetchAllTerminalLogs(sessionId).catch(() => ({
-            jobs: [],
-            logs: {}
-          }))
-        ]);
-        if (cancelled) return;
-        setAppLogs(appLogsByStream(nextAppLogs));
-        setJobState({
-          streams: buildJobStreams(term.jobs),
-          logs: jobLogsByStream(term.logs)
-        });
-      } catch {
-        if (!cancelled) {
-          setAppLogs({});
-          setJobState({ streams: [], logs: {} });
-        }
-      }
-    };
-    void poll();
-    const id = window.setInterval(() => void poll(), N_3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [sessionId, refresh]);
-  const streams = [
-    ...buildAppStreams(apps),
-    ...jobState.streams,
-    ...(shellLog
-      ? [{ id: SHELL_ID, label: "shell", running: false }]
-      : [])
-  ];
-  return {
-    streams,
-    logsById: { ...appLogs, ...jobState.logs, [SHELL_ID]: shellLog }
-  };
-}
+const PRIMARY_BUTTON = 0;
 
 export function TerminalPane(options: {
   sessionId: string;
-  onRunningCount?: (count: number) => void;
+  visible: boolean;
+  fitSignal: number;
 }) {
-  const { sessionId, onRunningCount } = options;
-  const [shellLog, setShellLog] = useState("");
-  const [refresh, setRefresh] = useState(0);
-  const { streams, logsById } = useTerminalStreams(
-    sessionId,
-    shellLog,
-    refresh
+  const { sessionId, visible: dockVisible, fitSignal } = options;
+  const listResize = useTabListResize();
+  const paneFitSignal = fitSignal + listResize.width;
+  const [tabs, setTabs] = useState<TerminalTab[]>([]);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [activeTabId, setActiveTabId] = useState<string | null>(() =>
+    loadActiveTerminalTab(sessionId)
   );
-  const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const running = countRunningStreams(streams);
-  useEffect(() => {
-    onRunningCount?.(running);
-  }, [onRunningCount, running]);
-  const colorOf = useCallback(
-    (id: string) =>
-      STREAM_COLORS[
-        Math.max(
-          0,
-          streams.findIndex((s) => s.id === id)
-        ) % STREAM_COLORS.length
-      ]!,
-    [streams]
-  );
-  const lines = buildLogLines({
-    streams,
-    excluded,
-    logsById,
-    query,
-    colorOf
-  });
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [lines.length]);
-  const toggle = (id: string) =>
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const onStop = async (id: string) => {
-    if (!id.startsWith("job:")) return;
-    await stopTerminalJob(sessionId, id.slice("job:".length));
-    setRefresh((n) => n + 1);
-  };
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <StreamFilters
-        streams={streams}
-        excluded={excluded}
-        query={query}
-        colorOf={colorOf}
-        onToggle={toggle}
-        onStop={(id) => void onStop(id)}
-        onQueryChange={setQuery}
-      />
-      <LogLines scrollRef={scrollRef} lines={lines} empty={streams.length === 0} />
-      <CommandBar
-        sessionId={sessionId}
-        onOutput={(text) => {
-          setShellLog((prev) => (prev ? `${prev}\n${text}` : text));
-          setRefresh((n) => n + 1);
-        }}
-      />
-    </div>
-  );
-}
-
-function CommandBar(options: {
-  sessionId: string;
-  onOutput: (text: string) => void;
-}) {
-  const { sessionId, onOutput } = options;
-  const [command, setCommand] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [background, setBackground] = useState(false);
-  const autoBg = shouldRunInBackground(command);
-  const runBackground = background || autoBg;
-  const submit = async () => {
-    const next = command.trim();
-    if (!next || busy) return;
+  const [loading, setLoading] = useState(true);
+  const [sessionClient, setSessionClient] =
+    useState<TerminalSessionClient | null>(() =>
+      getTerminalSessionClient(sessionId)
+    );
+
+  useEffect(() => {
+    const client = retainTerminalSessionClient(sessionId);
+    setSessionClient(client);
+    return () => {
+      releaseTerminalSessionClient(sessionId);
+      setSessionClient(getTerminalSessionClient(sessionId));
+    };
+  }, [sessionId]);
+
+  const shownTabs = useMemo(() => visibleTabs(tabs, hidden), [tabs, hidden]);
+  const { shells, apps, jobs } = useMemo(
+    () => partitionStripTabs(shownTabs),
+    [shownTabs]
+  );
+
+  const syncTracked = useCallback(() => {
+    setTabs((prev) =>
+      applyTrackedRunningState(prev, {
+        trackedApps: listTrackedApps(sessionId),
+        trackedJobs: listTrackedBackgroundJobs(sessionId)
+      })
+    );
+  }, [sessionId]);
+
+  const refreshTabsStable = useCallback(async () => {
+    const apiTabs = await listTerminalTabs(sessionId);
+    for (const tab of apiTabs) {
+      if (tab.kind === "app" && tab.running) {
+        trackApp(sessionId, appNameFromTabId(tab.id));
+      }
+    }
+    const jobRunning = Object.fromEntries(
+      listTrackedBackgroundJobs(sessionId).map((name) => [name, true])
+    );
+    setTabs((prev) => {
+      const merged = mergeApiTabsWithPinnedJobs(apiTabs, prev, jobRunning);
+      return applyTrackedRunningState(merged, {
+        trackedApps: listTrackedApps(sessionId),
+        trackedJobs: listTrackedBackgroundJobs(sessionId)
+      });
+    });
+    return apiTabs;
+  }, [sessionId]);
+
+  useEffect(() => {
+    return subscribeTrackedTerminals(() => {
+      syncTracked();
+    });
+  }, [syncTracked]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const boot = async () => {
+      try {
+        if (cancelled) return;
+        await refreshTabsStable();
+        if (!cancelled) setError(null);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, refreshTabsStable]);
+
+  useEffect(() => {
+    setHidden((prev) => pruneHiddenTabs(prev, tabs));
+  }, [tabs]);
+
+  const selectTab = useCallback(
+    (tabId: string) => {
+      setActiveTabId(tabId);
+      persistActiveTerminalTab(sessionId, tabId);
+    },
+    [sessionId]
+  );
+
+  const openJobTab = useCallback(
+    (jobName: string) => {
+      const running = isBackgroundJobTracked(sessionId, jobName);
+      const tab = pinnedJobTab(jobName, running);
+      setHidden((prev) => {
+        if (!prev.has(tab.id)) return prev;
+        const next = new Set(prev);
+        next.delete(tab.id);
+        return next;
+      });
+      setTabs((prev) => mergeShellTab(prev, tab));
+      selectTab(tab.id);
+    },
+    [sessionId, selectTab]
+  );
+
+  const openAppTab = useCallback(
+    (tabId: string) => {
+      const id = tabId.startsWith("app:") ? tabId : `app:${tabId}`;
+      const name = appNameFromTabId(id);
+      trackApp(sessionId, name);
+      const tab = appTab(name, true);
+      setHidden((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setTabs((prev) => mergeShellTab(prev, tab));
+      selectTab(id);
+    },
+    [sessionId, selectTab]
+  );
+
+  useEffect(() => {
+    const onOpenTab = (event: Event) => {
+      const detail = terminalTabFromOpenEvent(event);
+      if (!detail) return;
+      if (detail.kind === "job") {
+        openJobTab(jobNameFromTabId(detail.id));
+        return;
+      }
+      openAppTab(detail.id);
+    };
+    const onOpenJob = (event: Event) => {
+      const name = jobNameFromOpenEvent(event);
+      if (name) openJobTab(name);
+    };
+    window.addEventListener(OPEN_TERMINAL_TAB_EVENT, onOpenTab);
+    window.addEventListener(OPEN_TERMINAL_JOB_EVENT, onOpenJob);
+    return () => {
+      window.removeEventListener(OPEN_TERMINAL_TAB_EVENT, onOpenTab);
+      window.removeEventListener(OPEN_TERMINAL_JOB_EVENT, onOpenJob);
+    };
+  }, [openAppTab, openJobTab]);
+
+  useEffect(() => {
+    const next = pickActiveTab(tabs, activeTabId, hidden);
+    if (next !== activeTabId) {
+      setActiveTabId(next);
+      persistActiveTerminalTab(sessionId, next);
+    }
+  }, [tabs, hidden, activeTabId, sessionId]);
+
+  const onCreateTab = async () => {
+    if (busy) return;
     setBusy(true);
     try {
-      const result = await runTerminalCommand({
-        sessionId,
-        command: next,
-        background: runBackground,
-        jobName: runBackground ? jobNameFromCommand(next) : undefined
-      });
-      onOutput(formatShellEntry(next, result.output));
-      setCommand("");
+      const created = await createShellTab(sessionId);
+      setTabs((prev) => mergeShellTab(prev, created.tab));
+      selectTab(created.tabId);
+      setError(null);
     } catch (err) {
-      onOutput(
-        formatShellEntry(
-          next,
-          err instanceof Error ? err.message : String(err)
-        )
-      );
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   };
+
+  const onCloseTab = async (tab: TerminalTab) => {
+    if (tab.kind === "shell") {
+      if (!tab.closable) return;
+      setBusy(true);
+      try {
+        await closeShellTab(sessionId, tab.id);
+        setTabs((prev) => prev.filter((entry) => entry.id !== tab.id));
+        setError(null);
+        void refreshTabsStable();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (tab.kind === "job") {
+      setTabs((prev) => prev.filter((entry) => entry.id !== tab.id));
+      return;
+    }
+    setHidden((prev) => {
+      const next = new Set(prev);
+      next.add(tab.id);
+      return next;
+    });
+  };
+
   return (
-    <form
-      className="flex items-center gap-1.5 border-t px-2 py-1"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <span className="font-mono text-[0.7rem] text-muted-foreground">$</span>
-      <input
-        aria-label="Run command"
-        value={command}
-        disabled={busy}
-        onChange={(e) => setCommand(e.target.value)}
-        placeholder="ls, pnpm test, curl …  (dev servers → Run)"
-        className="min-w-0 flex-1 bg-transparent font-mono text-[0.7rem] outline-none"
-      />
-      <label className="flex items-center gap-1 text-[0.65rem] text-muted-foreground">
-        <input
-          type="checkbox"
-          aria-label="Run in background"
-          checked={runBackground}
-          disabled={autoBg}
-          onChange={(e) => setBackground(e.target.checked)}
-        />
-        Bg
-      </label>
-      <button
-        type="submit"
-        disabled={busy || !command.trim()}
-        className="rounded border px-1.5 py-0.5 text-[0.65rem] disabled:opacity-40"
+    <div className="relative flex h-full min-h-0 overflow-hidden">
+      {listResize.dragging ? (
+        <div className="fixed inset-0 z-50 cursor-col-resize touch-none" />
+      ) : null}
+      <div
+        data-testid="terminal-tab-list"
+        style={{ width: listResize.width }}
+        className="flex shrink-0 flex-col gap-0.5 overflow-y-auto bg-gray-950 px-1 py-1"
       >
-        {busy ? "…" : "Run"}
-      </button>
-    </form>
-  );
-}
-
-function StreamFilters(options: {
-  streams: TerminalStream[];
-  excluded: Set<string>;
-  query: string;
-  colorOf: (id: string) => string;
-  onToggle: (id: string) => void;
-  onStop: (id: string) => void;
-  onQueryChange: (value: string) => void;
-}) {
-  const {
-    streams,
-    excluded,
-    query,
-    colorOf,
-    onToggle,
-    onStop,
-    onQueryChange
-  } = options;
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b px-2 py-1">
-      {streams.map((s) => {
-        const on = !excluded.has(s.id);
-        return (
-          <span
-            key={s.id}
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] ${on ? "bg-muted" : "text-muted-foreground opacity-50"}`}
-          >
-            <button
-              type="button"
-              onClick={() => onToggle(s.id)}
-              title={s.command ?? (on ? "Click to hide" : "Click to show")}
-            >
-              <span
-                className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${s.running ? "bg-green-500" : colorOf(s.id).replace("text-", "bg-")}`}
-              />
-              {s.label}
-            </button>
-            {s.stoppable && s.running ? (
-              <button
-                type="button"
-                aria-label={`Stop ${s.label}`}
-                title="Stop job"
-                onClick={() => onStop(s.id)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Square className="size-2.5 fill-current" />
-              </button>
-            ) : null}
+        {shells.map((tab) => (
+          <TabButton
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeTabId}
+            onSelect={() => selectTab(tab.id)}
+            onClose={() => void onCloseTab(tab)}
+          />
+        ))}
+        {apps.map((tab) => (
+          <TabButton
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeTabId}
+            onSelect={() => selectTab(tab.id)}
+            onClose={() => void onCloseTab(tab)}
+          />
+        ))}
+        {jobs.map((tab) => (
+          <TabButton
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeTabId}
+            onSelect={() => selectTab(tab.id)}
+            onClose={() => void onCloseTab(tab)}
+          />
+        ))}
+        <button
+          type="button"
+          aria-label="New shell tab"
+          title="New shell tab"
+          disabled={busy}
+          onClick={() => void onCreateTab()}
+          className="inline-flex h-6 items-center justify-center gap-1 rounded border border-dashed border-gray-700 px-1.5 text-[0.65rem] text-gray-400 hover:border-gray-500 hover:bg-gray-900 hover:text-gray-200 disabled:opacity-40"
+        >
+          <Plus className="size-3" />
+          Shell
+        </button>
+        {busy ? (
+          <span className="px-1 text-[0.65rem] text-gray-500">Creating…</span>
+        ) : null}
+        {error ? (
+          <span className="truncate px-1 text-[0.65rem] text-red-400">
+            {error}
           </span>
-        );
-      })}
-      <input
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-        placeholder="filter…"
-        className="ml-auto w-28 rounded border bg-background px-1.5 py-0.5 text-[0.7rem]"
+        ) : null}
+      </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize terminal tab list"
+        title="Drag to resize tab list"
+        onPointerDown={listResize.startDrag}
+        className="w-1 shrink-0 cursor-col-resize touch-none bg-gray-900 hover:bg-gray-600"
       />
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+        {loading && shownTabs.length === 0 ? (
+          <div className="flex h-full items-center justify-center bg-gray-950 p-2 font-mono text-[0.7rem] text-gray-500">
+            Loading terminals…
+          </div>
+        ) : shownTabs.length === 0 ? (
+          <div className="flex h-full items-center justify-center bg-gray-950 p-2 font-mono text-[0.7rem] text-gray-500">
+            No tabs yet. Create a shell tab to start.
+          </div>
+        ) : !sessionClient ? (
+          <div className="flex h-full items-center justify-center bg-gray-950 p-2 font-mono text-[0.7rem] text-gray-500">
+            Connecting session…
+          </div>
+        ) : (
+          shownTabs.map((tab) => {
+            const appName = tab.kind === "app" ? tab.id.slice(4) : "";
+            const jobName =
+              tab.kind === "job" ? jobNameFromTabId(tab.id) : "";
+            return (
+              <div
+                key={tab.id}
+                hidden={tab.id !== activeTabId}
+                className="absolute inset-0 min-h-0 overflow-hidden"
+              >
+                {tab.kind === "shell" ? (
+                  <ShellXtermPane
+                    client={sessionClient}
+                    tabId={tab.id}
+                    active={tab.id === activeTabId}
+                    visible={dockVisible && tab.id === activeTabId}
+                    fitSignal={paneFitSignal}
+                  />
+                ) : tab.kind === "job" ? (
+                  <JobLogXtermPane
+                    client={sessionClient}
+                    jobName={jobName}
+                    tabId={tab.id}
+                    active={tab.id === activeTabId}
+                    visible={dockVisible}
+                    running={tab.running}
+                    fitSignal={paneFitSignal}
+                  />
+                ) : (
+                  <AppLogXtermPane
+                    client={sessionClient}
+                    appName={appName}
+                    tabId={tab.id}
+                    active={tab.id === activeTabId}
+                    visible={dockVisible}
+                    running={tab.running}
+                    fitSignal={paneFitSignal}
+                  />
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
 
-function LogLines(options: {
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-  lines: LogLine[];
-  empty: boolean;
+function detachTabListResizeListeners(options: {
+  onMove: (e: PointerEvent) => void;
+  onUp: () => void;
 }) {
-  const { scrollRef, lines, empty } = options;
+  const { onMove, onUp } = options;
+  document.removeEventListener("pointermove", onMove, true);
+  document.removeEventListener("pointerup", onUp, true);
+  document.removeEventListener("pointercancel", onUp, true);
+}
+
+function useTabListResize() {
+  const [width, setWidth] = useState(loadTerminalTabListWidth);
+  const [dragging, setDragging] = useState(false);
+  const widthRef = useRef(width);
+  const draggingRef = useRef(false);
+  const originRef = useRef<{ x: number; width: number } | null>(null);
+  useEffect(() => {
+    widthRef.current = width;
+  }, [width]);
+  const onPointerMove = useCallback((e: PointerEvent) => {
+    if (!draggingRef.current || !Number.isFinite(e.clientX)) return;
+    const origin = originRef.current;
+    if (!origin) return;
+    setWidth(
+      clampTerminalTabListWidth(origin.width + (e.clientX - origin.x))
+    );
+  }, []);
+  const onPointerUp = useCallback(() => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    originRef.current = null;
+    setDragging(false);
+    persistTerminalTabListWidth(widthRef.current);
+  }, []);
+  const startDrag = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.button > PRIMARY_BUTTON) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      draggingRef.current = true;
+      originRef.current = { x: e.clientX, width: widthRef.current };
+      setDragging(true);
+      document.addEventListener("pointermove", onPointerMove, true);
+      document.addEventListener("pointerup", onPointerUp, true);
+      document.addEventListener("pointercancel", onPointerUp, true);
+    },
+    [onPointerMove, onPointerUp]
+  );
+  useEffect(() => {
+    if (dragging) {
+      return () =>
+        detachTabListResizeListeners({
+          onMove: onPointerMove,
+          onUp: onPointerUp
+        });
+    }
+    detachTabListResizeListeners({ onMove: onPointerMove, onUp: onPointerUp });
+    return undefined;
+  }, [dragging, onPointerMove, onPointerUp]);
+  return { width, dragging, startDrag };
+}
+
+function TabButton(options: {
+  tab: TerminalTab;
+  active: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+}) {
+  const { tab, active, onSelect, onClose } = options;
+  const showRunning =
+    (tab.kind === "app" || tab.kind === "job") && tab.running;
   return (
-    <div
-      ref={scrollRef}
-      className="min-h-0 flex-1 overflow-auto bg-gray-950 p-2 font-mono text-[0.7rem] text-gray-100"
+    <span
+      className={`group flex w-full items-center gap-1 rounded px-1.5 py-1 text-[0.65rem] ${
+        active
+          ? "bg-gray-800 text-gray-100"
+          : "text-gray-400 hover:bg-gray-900 hover:text-gray-200"
+      }`}
     >
-      {lines.length === 0 ? (
-        <span className="text-gray-500">
-          {empty
-            ? "No output yet. Start an app from Run, or type a command below."
-            : "No output yet."}
-        </span>
-      ) : (
-        lines.map((l) => (
-          <div key={l.key} className="whitespace-pre-wrap">
-            <span className={`mr-2 ${l.color}`}>[{l.label}]</span>
-            {l.text}
-          </div>
-        ))
-      )}
-    </div>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+      >
+        {showRunning ? (
+          <LoaderCircle
+            className="size-3 shrink-0 animate-spin text-gray-300 [animation-duration:2.8s]"
+            aria-label="Running"
+          />
+        ) : null}
+        <span className="truncate">{tab.label}</span>
+      </button>
+      {tab.closable ? (
+        <button
+          type="button"
+          aria-label={`Close ${tab.label}`}
+          title="Close tab"
+          onClick={onClose}
+          className="shrink-0 text-gray-500 opacity-60 hover:text-gray-200 group-hover:opacity-100"
+        >
+          <X className="size-2.5" />
+        </button>
+      ) : null}
+    </span>
   );
 }

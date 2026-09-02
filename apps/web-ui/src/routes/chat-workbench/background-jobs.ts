@@ -1,0 +1,20 @@
+export {
+  isAppTracked,
+  isBackgroundJobTracked,
+  isBackgroundTerminalToolPart,
+  listTrackedApps,
+  listTrackedBackgroundJobs,
+  resetBackgroundJobsForTests,
+  resetTrackedTerminalsForTests,
+  shouldTrackBackgroundToolPart,
+  shouldTrackPreviewStartToolPart,
+  subscribeBackgroundJobs,
+  subscribeTrackedTerminals,
+  terminalAppNameFromToolPart,
+  terminalJobNameFromToolPart,
+  trackApp,
+  trackBackgroundJob,
+  trackBackgroundJobsFromToolParts,
+  trackTerminalsFromToolParts,
+  type TrackedKind
+} from "./tracked-terminals.js";

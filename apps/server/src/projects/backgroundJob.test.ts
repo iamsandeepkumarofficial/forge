@@ -45,9 +45,11 @@ describe("backgroundJob", { concurrency: false }, () => {
     const script = startJobScript();
     assert.match(script, /: > "\$LOG"/);
     assert.match(script, /cwd not found/);
+    assert.match(script, /printf '\$ %s\\n' "\$CMD"/);
     const logIdx = script.indexOf(': > "$LOG"');
+    const cmdIdx = script.indexOf('printf');
     const pidIdx = script.indexOf('echo $$ > "$PID"');
-    assert.ok(logIdx >= 0 && pidIdx > logIdx);
+    assert.ok(logIdx >= 0 && cmdIdx > logIdx && pidIdx > cmdIdx);
   });
 
   it("sanitizeJobName and pid paths stay under /tmp", () => {

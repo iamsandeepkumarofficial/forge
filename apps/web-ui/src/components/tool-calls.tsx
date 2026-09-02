@@ -6,6 +6,7 @@ import {
   truncateDiffText,
   type ToolPart
 } from "@/lib/tool-display";
+
 function DiffText({ text }: { text: string }) {
   return (
     <>

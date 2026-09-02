@@ -2,8 +2,7 @@ import type { Request, Response } from "express";
 import { resolveSandbox } from "../../projects/sandboxExec.js";
 import {
   listTerminalJobStatuses,
-  stopTerminalJob,
-  terminalJobLogs
+  stopTerminalJob
 } from "../../projects/terminalJobs.js";
 import { runTerminalInSession } from "../../tools/runTerminal.tool.js";
 
@@ -33,55 +32,15 @@ export async function handleTerminalJobs(
   try {
     const { containerName } = await resolveSandbox(sessionId);
     const jobs = await listTerminalJobStatuses(containerName);
+    jobs.sort((a, b) =>
+      (b.startedAt ?? "").localeCompare(a.startedAt ?? "")
+    );
     res.json({ jobs });
   } catch (err) {
     res
       .status(N_500)
       .json({ error: err instanceof Error ? err.message : String(err) });
   }
-}
-
-export async function handleTerminalLogs(
-  req: Request,
-  res: Response
-): Promise<void> {
-  const sessionId = sessionIdFrom(req);
-  const name = typeof req.query.name === "string" ? req.query.name.trim() : "";
-  if (!sessionId) {
-    res.status(N_400).json({ error: "sessionId required" });
-    return;
-  }
-  try {
-    const { containerName } = await resolveSandbox(sessionId);
-    if (!name) {
-      await sendAllTerminalLogs(res, containerName);
-      return;
-    }
-    const logs = await terminalJobLogs({ containerName, name });
-    res.type("text/plain; charset=utf-8").send(logs);
-  } catch (err) {
-    res
-      .status(N_500)
-      .type("text/plain; charset=utf-8")
-      .send(err instanceof Error ? err.message : String(err));
-  }
-}
-
-async function sendAllTerminalLogs(
-  res: Response,
-  containerName: string
-): Promise<void> {
-  const jobs = await listTerminalJobStatuses(containerName);
-  const entries = await Promise.all(
-    jobs.map(async (job) => {
-      const text = await terminalJobLogs({
-        containerName,
-        name: job.name
-      });
-      return [job.name, text] as const;
-    })
-  );
-  res.json({ jobs, logs: Object.fromEntries(entries) });
 }
 
 export async function handleTerminalStop(
@@ -109,6 +68,7 @@ export async function handleTerminalRun(
   req: Request,
   res: Response
 ): Promise<void> {
+  // Agent/tool-plane only. Interactive user shells use WS /internal/terminal/session.
   const sessionId = sessionIdFrom(req);
   const command =
     typeof req.body?.command === "string" ? req.body.command.trim() : "";

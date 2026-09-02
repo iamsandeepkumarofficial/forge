@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ToolCalls } from "./tool-calls";
+
 describe("ToolCalls", () => {
   it("renders an edit_file diff preview instead of raw JSON args", () => {
     render(
@@ -63,5 +64,26 @@ describe("ToolCalls", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "src/app.ts" }));
     expect(onOpenPath).toHaveBeenCalledWith("src/app.ts");
+  });
+
+  it("does not show Show in terminal for background run_terminal jobs", () => {
+    render(
+      <ToolCalls
+        parts={[
+          {
+            type: "tool-invocation",
+            toolName: "run_terminal",
+            args: { command: "pnpm test", background: true },
+            state: "result",
+            output: "Background job install is running.",
+            metadata: { jobName: "install", running: true }
+          }
+        ]}
+      />
+    );
+    expect(screen.getByText("run_terminal")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Show in terminal" })
+    ).toBeNull();
   });
 });

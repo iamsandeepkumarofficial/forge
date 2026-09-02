@@ -21,11 +21,16 @@ import {
 } from "./storage.js";
 import { TerminalPane } from "./terminal-pane.js";
 import {
+  dockEnsureFromEvent,
   dockModeFromEvent,
   PREVIEW_DOCK_EVENT,
   TERMINAL_TOGGLE_EVENT,
   type PreviewDockMode
 } from "./terminal-toggle.js";
+import {
+  releaseTerminalSessionClient,
+  retainTerminalSessionClient
+} from "../../lib/terminal-session-registry.js";
 
 const N_32 = 32;
 const N_120 = 120;
@@ -36,7 +41,6 @@ const PRIMARY_BUTTON = 0;
 export function BottomTerminal({ sessionId }: { sessionId: string }) {
   const [open, setOpen] = useState(loadTerminalOpen);
   const [mode, setMode] = useState<PreviewDockMode>(loadDockMode);
-  const [runningCount, setRunningCount] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(open);
   const modeRef = useRef(mode);
@@ -76,7 +80,12 @@ export function BottomTerminal({ sessionId }: { sessionId: string }) {
       requestMode("terminal");
     };
     const onDock = (e: Event) => {
-      requestMode(dockModeFromEvent(e));
+      const nextMode = dockModeFromEvent(e);
+      if (dockEnsureFromEvent(e)) {
+        selectMode(nextMode);
+        return;
+      }
+      requestMode(nextMode);
     };
     const onLegacyToggle = () => {
       requestMode("terminal");
@@ -89,18 +98,22 @@ export function BottomTerminal({ sessionId }: { sessionId: string }) {
       window.removeEventListener(PREVIEW_DOCK_EVENT, onDock);
       window.removeEventListener(TERMINAL_TOGGLE_EVENT, onLegacyToggle);
     };
-  }, [requestMode]);
+  }, [requestMode, selectMode]);
+  useEffect(() => {
+    const client = retainTerminalSessionClient(sessionId);
+    return () => {
+      releaseTerminalSessionClient(sessionId);
+    };
+  }, [sessionId]);
   return (
     <DockShell
       sessionId={sessionId}
       open={open}
       mode={mode}
-      runningCount={runningCount}
       containerRef={containerRef}
       resize={resize}
       onSelect={selectMode}
       onToggle={toggle}
-      onRunningCount={setRunningCount}
     />
   );
 }
@@ -109,26 +122,28 @@ function DockShell(options: {
   sessionId: string;
   open: boolean;
   mode: PreviewDockMode;
-  runningCount: number;
   containerRef: RefObject<HTMLDivElement | null>;
   resize: ReturnType<typeof useTerminalResize>;
   onSelect: (mode: PreviewDockMode) => void;
   onToggle: () => void;
-  onRunningCount: (n: number) => void;
 }) {
   const {
     sessionId,
     open,
     mode,
-    runningCount,
     containerRef,
     resize,
     onSelect,
-    onToggle,
-    onRunningCount
+    onToggle
   } = options;
   const showTerminal = open && mode === "terminal";
   const showDevtools = open && mode === "devtools";
+  const [fitSignal, setFitSignal] = useState(0);
+  useEffect(() => {
+    if (showTerminal) {
+      setFitSignal((n) => n + 1);
+    }
+  }, [showTerminal, resize.height, resize.dragging]);
   return (
     <div
       ref={containerRef}
@@ -144,20 +159,18 @@ function DockShell(options: {
           title="Drag to resize"
         />
       ) : null}
-      <DockBar
-        open={open}
-        mode={mode}
-        runningCount={runningCount}
-        onSelect={onSelect}
-        onToggle={onToggle}
-      />
+      <DockBar open={open} mode={mode} onSelect={onSelect} onToggle={onToggle} />
       <div
         data-testid="terminal-body"
         hidden={!showTerminal}
         style={showTerminal ? { height: resize.height } : undefined}
-        className="min-h-0"
+        className="min-h-0 overflow-hidden"
       >
-        <TerminalPane sessionId={sessionId} onRunningCount={onRunningCount} />
+        <TerminalPane
+          sessionId={sessionId}
+          visible={showTerminal}
+          fitSignal={fitSignal}
+        />
       </div>
       <div
         data-testid="devtools-body"
@@ -250,11 +263,10 @@ function useTerminalResize(containerRef: RefObject<HTMLDivElement | null>) {
 function DockBar(options: {
   open: boolean;
   mode: PreviewDockMode;
-  runningCount: number;
   onSelect: (mode: PreviewDockMode) => void;
   onToggle: () => void;
 }) {
-  const { open, mode, runningCount, onSelect, onToggle } = options;
+  const { open, mode, onSelect, onToggle } = options;
   return (
     <div className="flex h-8 shrink-0 items-center gap-0.5 px-1 text-xs">
       <button
@@ -275,11 +287,6 @@ function DockBar(options: {
         <SquareTerminal className="size-3.5" />
         DevTools
       </button>
-      {mode === "terminal" && runningCount > 0 ? (
-        <span className="rounded-full bg-green-500/15 px-1.5 py-0.5 text-[0.65rem] font-medium text-green-700 dark:text-green-300">
-          {runningCount} running
-        </span>
-      ) : null}
       <button
         type="button"
         onClick={onToggle}

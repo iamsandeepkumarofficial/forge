@@ -33,6 +33,11 @@ const short = proxyActivities<typeof activities>({
   startToCloseTimeout: "2 minutes",
   retry: { maximumAttempts: 5, initialInterval: "2s", backoffCoefficient: 2 }
 });
+const sandbox = proxyActivities<typeof activities>({
+  startToCloseTimeout: "10 minutes",
+  heartbeatTimeout: "30 seconds",
+  retry: { maximumAttempts: 3, initialInterval: "5s", backoffCoefficient: 2 }
+});
 const llmCloud = proxyActivities<typeof activities>({
   startToCloseTimeout: "15 minutes",
   heartbeatTimeout: "2 minutes",
@@ -325,7 +330,7 @@ export async function interactiveChatTurnWorkflow(
   let finalText = "";
   let toolCallCount = 0;
   try {
-    await short.ensureChatSandbox(args.sessionId);
+    await sandbox.ensureChatSandbox(args.sessionId);
     await short.appendChatMessage({
       sessionId: args.sessionId,
       role: "user",

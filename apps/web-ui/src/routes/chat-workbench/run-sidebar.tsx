@@ -8,6 +8,7 @@ import {
 } from "../../lib/tool-runner.js";
 import { useApps } from "./use-apps.js";
 import { AddAppForm } from "./add-app-form.js";
+import { trackApp } from "./tracked-terminals.js";
 
 export { AddAppForm } from "./add-app-form.js";
 
@@ -126,10 +127,14 @@ export function RunSidebar({
   const runNamed = async (options: {
     name: string;
     action: (sessionId: string, name: string) => Promise<unknown>;
+    track?: boolean;
   }) => {
     setBusy(options.name);
     try {
       await options.action(sessionId, options.name);
+      if (options.track) {
+        trackApp(sessionId, options.name);
+      }
       await refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
@@ -161,7 +166,9 @@ export function RunSidebar({
       onToggleAdding={() => setAdding((v) => !v)}
       onSetAdding={setAdding}
       onRefresh={refresh}
-      onRun={(name) => void runNamed({ name, action: runApp })}
+      onRun={(name) =>
+        void runNamed({ name, action: runApp, track: true })
+      }
       onStop={(name) => void runNamed({ name, action: stopApp })}
     />
   );

@@ -51,6 +51,35 @@ describe("localWorktree", () => {
     assert.equal(log, "forge: initial import");
   });
 
+  it("ensureSessionWorktree tolerates concurrent worktree add", async () => {
+    const projectId = "proj-race";
+    const sessionId = "session-race";
+    const branchName = "workbench-race";
+    const canonical = path.join(tmpRoot, "proj-race-canon");
+    await fs.mkdir(canonical, { recursive: true });
+    await fs.writeFile(path.join(canonical, "app.js"), "console.log(1)\n");
+    await ensureCanonicalGitRepo(canonical);
+
+    const workDir = worktreeWorkDir(projectId, sessionId);
+    const opts = {
+      canonicalKey: canonical,
+      projectId,
+      sessionId,
+      branchName
+    };
+    await Promise.all([
+      ensureSessionWorktree(opts),
+      ensureSessionWorktree(opts)
+    ]);
+
+    await fs.access(workDir);
+    await removeSessionWorktree({
+      canonicalKey: canonical,
+      projectId,
+      sessionId
+    });
+  });
+
   it("ensureSessionWorktree rewrites .git pointer to /forge-git/{id}", async () => {
     const projectId = "proj-a";
     const sessionId = "session-1";

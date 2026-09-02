@@ -1,10 +1,12 @@
 import "./env.js";
+import http from "node:http";
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { createLocalUserMiddleware } from "./api/pocAuth.js";
 import { connectPostgres } from "@forge/db";
 import { createInternalRouter } from "./api/internal/internal.router.js";
+import { attachTerminalSessionWebSocket } from "./api/internal/terminalSession.ws.js";
 import { createProjectsRouter } from "./api/projectsRouter.js";
 import { createChatFeaturesRouter } from "./api/chatFeaturesRouter.js";
 import { createAttachmentsRouter } from "./api/attachmentsRouter.js";
@@ -64,7 +66,10 @@ const bindHost =
 // PREVIEW_IN_PROCESS=0 to use a standalone @forge/preview-plane instead.
 startInProcessPreview(bindHost);
 
-app.listen(port, bindHost, () => {
+const server = http.createServer(app);
+attachTerminalSessionWebSocket(server);
+
+server.listen(port, bindHost, () => {
   process.stdout.write(
     `Forge tool plane listening on http://${bindHost}:${port}\n`
   );

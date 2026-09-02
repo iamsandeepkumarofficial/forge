@@ -866,6 +866,33 @@ export async function listAppStatuses(sessionId: string): Promise<{
   return { exists, source, apps };
 }
 
+/** Lightweight app list for terminal tabs (no preview URLs or plane health). */
+export async function listAppRunningFlags(
+  sessionId: string
+): Promise<Array<{ name: string; running: boolean }>> {
+  const { config } = await readForgeConfig(sessionId);
+  if (config.apps.length === 0) return [];
+  const { containerName } = await ctx(sessionId);
+  const { pathExistsInSandbox } = await import("./sandboxExec.js");
+  const { jobLogFile } = await import("./backgroundJob.js");
+  const flags = await Promise.all(
+    config.apps.map(async (app) => {
+      const running = await isBackgroundJobRunning({
+        containerName,
+        kind: "app",
+        name: app.name
+      });
+      if (running) return { name: app.name, running: true };
+      const hasLog = await pathExistsInSandbox(
+        containerName,
+        jobLogFile({ kind: "app", name: app.name })
+      );
+      return hasLog ? { name: app.name, running: false } : null;
+    })
+  );
+  return flags.filter((f): f is { name: string; running: boolean } => f != null);
+}
+
 /** Best-effort: start apps after sandbox provision. Never throws. */
 export async function autoStartPreview(sessionId: string): Promise<void> {
   try {

@@ -100,7 +100,7 @@ export async function ensureVolume(sessionId: string): Promise<string> {
   return name;
 }
 
-async function bootstrapSandboxTools(containerName: string): Promise<void> {
+async function bootstrapSandboxToolsRequired(containerName: string): Promise<void> {
   await docker([
     "exec",
     containerName,
@@ -109,11 +109,27 @@ async function bootstrapSandboxTools(containerName: string): Promise<void> {
     "(command -v git >/dev/null 2>&1 || " +
       "(command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends git) || " +
       "apk add --no-cache git >/dev/null 2>&1 || true); " +
-      "(command -v node >/dev/null 2>&1 && " +
-      "(node -e \"require('playwright')\" >/dev/null 2>&1 || " +
-      "(npm install -g playwright@1.49.1 && playwright install --with-deps chromium) || true) || true); " +
       "git config --global --replace-all safe.directory '*' >/dev/null 2>&1 || true"
   ]);
+}
+
+/** Playwright install can take several minutes — must not block session provision. */
+function bootstrapSandboxToolsOptional(containerName: string): void {
+  void docker([
+    "exec",
+    containerName,
+    "sh",
+    "-c",
+    "(command -v node >/dev/null 2>&1 && " +
+      "(node -e \"require('playwright')\" >/dev/null 2>&1 || " +
+      "(npm install -g playwright@1.49.1 && playwright install --with-deps chromium) || true) || true)"
+  ]).catch((err) => {
+    console.warn(
+      `[sandbox] optional bootstrap failed for ${containerName}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  });
 }
 
 async function inspectContainer(name: string): Promise<{
@@ -307,7 +323,8 @@ export async function ensureContainer(
     needsBootstrap = true;
   }
   if (needsBootstrap) {
-    await bootstrapSandboxTools(name);
+    await bootstrapSandboxToolsRequired(name);
+    bootstrapSandboxToolsOptional(name);
   }
   await repairHostPortBindings({ containerName: name, portBase });
   const { stdout } = await execFileAsync("docker", [

@@ -46,6 +46,15 @@ describe("launchScaffold", { concurrency: false }, () => {
         pathExistsInSandbox: async () => true
       }
     });
+    mock.module("../catalog/chatFeatureRepository.js", {
+      exports: {
+        ChatFeatureRepository: class {
+          async getBySessionId() {
+            return { workspaceId: "ws-test", sessionId: "s1" };
+          }
+        }
+      }
+    });
     mock.module("./workspaceEnvironment.js", {
       exports: {
         seedLaunchFromWorkspace: async () => {
@@ -86,7 +95,7 @@ describe("launchScaffold", { concurrency: false }, () => {
     seedResult = true;
     appsListing = "web";
     const r = await ensureLaunchConfig("s1");
-    assert.deepEqual(r, { ready: true, scaffolded: false });
+    assert.deepEqual(r, { ready: true, scaffolded: false, source: "existing" });
     assert.equal(written, "");
   });
 
@@ -97,7 +106,12 @@ describe("launchScaffold", { concurrency: false }, () => {
     appsListing = "";
     packageByPath = new Map();
     const r = await ensureLaunchConfig("s2");
-    assert.deepEqual(r, { ready: true, scaffolded: false, seeded: true });
+    assert.deepEqual(r, {
+      ready: true,
+      scaffolded: false,
+      seeded: true,
+      source: "seeded"
+    });
     assert.match(written, /saved-web/);
   });
 
@@ -117,7 +131,7 @@ describe("launchScaffold", { concurrency: false }, () => {
       ]
     ]);
     const r = await ensureLaunchConfig("s1");
-    assert.deepEqual(r, { ready: true, scaffolded: true });
+    assert.deepEqual(r, { ready: true, scaffolded: true, source: "scaffolded" });
     assert.match(written, /"name": "web"/);
     assert.match(written, /"cwd": "apps\/web"/);
   });
@@ -129,7 +143,7 @@ describe("launchScaffold", { concurrency: false }, () => {
     appsListing = "";
     packageByPath = new Map();
     const r = await ensureLaunchConfig("s1");
-    assert.deepEqual(r, { ready: false, scaffolded: false });
+    assert.deepEqual(r, { ready: false, scaffolded: false, source: "none" });
     assert.equal(written, "");
   });
 });

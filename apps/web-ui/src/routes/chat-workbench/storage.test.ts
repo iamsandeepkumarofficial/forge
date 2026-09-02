@@ -7,6 +7,7 @@ import {
   AUTO_MODEL_KEY,
   TERMINAL_OPEN_KEY,
   TERMINAL_HEIGHT_KEY,
+  TERMINAL_TAB_LIST_WIDTH_KEY,
   DOCK_MODE_KEY,
   loadStoredProvider,
   loadStoredModelMap,
@@ -15,9 +16,11 @@ import {
   loadStoredAutoModel,
   loadTerminalOpen,
   loadTerminalHeight,
+  loadTerminalTabListWidth,
   loadDockMode,
   persistTerminalOpen,
   persistTerminalHeight,
+  persistTerminalTabListWidth,
   persistDockMode
 } from "./storage";
 
@@ -34,6 +37,7 @@ describe("chat-workbench storage", () => {
     expect(loadStoredModelMap()).toEqual({});
     expect(loadTerminalOpen()).toBe(false);
     expect(loadTerminalHeight()).toBeGreaterThan(0);
+    expect(loadTerminalTabListWidth()).toBeGreaterThan(0);
     expect(loadDockMode()).toBe("terminal");
   });
 
@@ -50,6 +54,7 @@ describe("chat-workbench storage", () => {
     expect(loadStoredModelMap()).toEqual({ openai: "gpt-4o" });
     persistTerminalOpen(true);
     persistTerminalHeight(loadTerminalHeight());
+    persistTerminalTabListWidth(180);
     persistDockMode("devtools");
     expect(localStorage.getItem(TERMINAL_OPEN_KEY)).toBe("1");
     expect(localStorage.getItem(DOCK_MODE_KEY)).toBe("devtools");
@@ -58,6 +63,8 @@ describe("chat-workbench storage", () => {
     expect(Number(localStorage.getItem(TERMINAL_HEIGHT_KEY))).toBe(
       loadTerminalHeight()
     );
+    expect(Number(localStorage.getItem(TERMINAL_TAB_LIST_WIDTH_KEY))).toBe(180);
+    expect(loadTerminalTabListWidth()).toBe(180);
   });
 
   it("maps legacy custom/ollama providers to openai-compatible", () => {

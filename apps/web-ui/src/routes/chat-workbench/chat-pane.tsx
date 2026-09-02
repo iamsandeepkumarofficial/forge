@@ -11,6 +11,7 @@ import { useChatPaneModel } from "./use-chat-pane-model.js";
 import { useChatPaneSession } from "./use-chat-pane-session.js";
 import { usePendingModeSwitch } from "./use-pending-mode-switch.js";
 import { usePendingAskUser } from "./use-pending-ask-user.js";
+import { useTrackBackgroundJobs } from "./use-track-background-jobs.js";
 import { estimateConversationTokens } from "./chat-pane-tokens.js";
 import { ChatPaneView } from "./chat-pane-view.js";
 import type { WorkbenchTurnStatus } from "./types.js";
@@ -86,6 +87,12 @@ export function ChatPane(props: ChatPaneProps) {
   const askUser = usePendingAskUser({
     sessionId,
     messages: session.messages,
+    liveToolParts: session.liveToolParts
+  });
+  useTrackBackgroundJobs({
+    sessionId,
+    messages: session.messages,
+    historyLoaded: session.historyLoaded,
     liveToolParts: session.liveToolParts
   });
   const [askUserSubmitting, setAskUserSubmitting] = useState(false);

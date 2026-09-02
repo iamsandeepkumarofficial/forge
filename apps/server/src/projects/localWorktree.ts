@@ -215,10 +215,21 @@ export async function ensureSessionWorktree(options: {
 
   const alreadyPresent = await pathExists(workDir);
   if (!alreadyPresent) {
-    await git(canonicalKey, ["worktree", "add", "-B", branchName, workDir]);
-    await configureForgeIdentity(workDir).catch(() => {});
-    const adminName = await resolveWorktreeAdminName(workDir);
-    await rewriteWorktreeGitdir({ workDir, projectId, adminName });
+    try {
+      await git(canonicalKey, ["worktree", "add", "-B", branchName, workDir]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const concurrent =
+        /already used by worktree at/i.test(msg) && msg.includes(workDir);
+      if (!concurrent && !(await pathExists(workDir))) {
+        throw err;
+      }
+    }
+    if (await pathExists(workDir)) {
+      await configureForgeIdentity(workDir).catch(() => {});
+      const adminName = await resolveWorktreeAdminName(workDir);
+      await rewriteWorktreeGitdir({ workDir, projectId, adminName });
+    }
   } else {
     // Re-apply rewrite only when the pointer still uses a host path.
     const pointer = path.join(workDir, ".git");

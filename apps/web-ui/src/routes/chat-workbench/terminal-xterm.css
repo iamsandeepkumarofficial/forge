@@ -1,0 +1,12 @@
+.terminal-xterm-host {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.terminal-xterm-host .xterm {
+  height: 100%;
+}
+
+.terminal-xterm-host .xterm-viewport {
+  overflow-y: auto !important;
+}

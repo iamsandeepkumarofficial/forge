@@ -21,6 +21,7 @@ export type TerminalJobStatus = {
   running: boolean;
   command?: string;
   cwd?: string;
+  startedAt?: string;
 };
 
 function metaPath(name: string): string {
@@ -96,7 +97,8 @@ export async function listTerminalJobStatuses(
         name,
         running,
         command: meta?.command,
-        cwd: meta?.cwd
+        cwd: meta?.cwd,
+        startedAt: meta?.startedAt
       };
     })
   );

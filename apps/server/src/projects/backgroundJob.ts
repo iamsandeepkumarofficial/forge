@@ -33,6 +33,7 @@ export function startJobScript(): string {
   return [
     ': > "$LOG"',
     'if ! cd "$APPDIR"; then echo "cwd not found: $APPDIR" >> "$LOG"; exit 1; fi',
+    'printf \'$ %s\\n\' "$CMD" >> "$LOG"',
     'echo $$ > "$PID"',
     'exec sh -c "$CMD" >> "$LOG" 2>&1'
   ].join("; ");

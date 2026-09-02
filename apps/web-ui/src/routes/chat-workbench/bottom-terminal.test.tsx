@@ -7,6 +7,21 @@ vi.mock("./terminal-pane.js", () => ({
   TerminalPane: () => <div>terminal-output</div>
 }));
 
+vi.mock("../../lib/terminal-session-registry.js", () => ({
+  retainTerminalSessionClient: () => ({
+    connect() {
+      return undefined;
+    },
+    disconnect() {
+      return undefined;
+    },
+    subscribe() {
+      return () => undefined;
+    }
+  }),
+  releaseTerminalSessionClient: () => undefined
+}));
+
 describe("BottomTerminal", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -78,6 +93,24 @@ describe("BottomTerminal", () => {
     expect(screen.getByTestId("terminal-body").hasAttribute("hidden")).toBe(
       true
     );
+  });
+
+  it("keeps the terminal open when opening a job tab ensures the dock", async () => {
+    const { requestOpenTerminalJob } = await import("./terminal-toggle");
+    render(<BottomTerminal sessionId="s1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    expect(screen.getByTestId("terminal-body").hasAttribute("hidden")).toBe(
+      false
+    );
+    act(() => {
+      requestOpenTerminalJob("install");
+    });
+    expect(screen.getByTestId("terminal-body").hasAttribute("hidden")).toBe(
+      false
+    );
+    expect(
+      screen.getByRole("button", { name: "Collapse panel" }).getAttribute("aria-expanded")
+    ).toBe("true");
   });
 
   it("keeps resizing after the pointer leaves the drag edge", () => {

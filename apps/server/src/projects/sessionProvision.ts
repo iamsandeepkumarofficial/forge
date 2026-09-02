@@ -1,6 +1,10 @@
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
+import { autoStartPreview, readForgeConfig } from "./appRunner.js";
 import { ensureLaunchConfig } from "./launchScaffold.js";
-import { autoStartPreview } from "./appRunner.js";
+import {
+  formatLaunchAppNames,
+  logLaunchConfigProvisionResult
+} from "./launchConfigLog.js";
 
 /**
  * Post-provision setup: restore deps cache, scaffold/seed launch.json, auto-start.
@@ -24,11 +28,28 @@ export async function finalizeSessionProvision(sessionId: string): Promise<void>
   }
 
   try {
-    await ensureLaunchConfig(sessionId);
+    const launch = await ensureLaunchConfig(sessionId);
+    let appNames: string | undefined;
+    if (launch.ready) {
+      const { config } = await readForgeConfig(sessionId);
+      appNames = formatLaunchAppNames(config.apps);
+    }
+    logLaunchConfigProvisionResult({
+      sessionId,
+      source: launch.source,
+      ready: launch.ready,
+      appNames
+    });
   } catch (err) {
     console.warn(
       `[finalizeSessionProvision] launch scaffold ${sessionId}: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  await autoStartPreview(sessionId);
+  // Preview auto-start can take minutes (Next dev servers, port repair). Run in
+  // the background so session/start and Temporal ensureChatSandbox return quickly.
+  void autoStartPreview(sessionId).catch((err) => {
+    console.warn(
+      `[finalizeSessionProvision] autoStartPreview ${sessionId}: ${err instanceof Error ? err.message : String(err)}`
+    );
+  });
 }

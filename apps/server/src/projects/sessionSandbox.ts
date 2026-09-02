@@ -60,6 +60,11 @@ export interface SandboxStatus {
 
 export type ProvisionSessionSource = LocalFolderSource;
 
+const provisionInFlight = new Map<
+  string,
+  Promise<{ status: "ready"; workingDir: string; containerId: string }>
+>();
+
 function resolveLocalFolderPath(
   project: Project,
   source?: ProvisionSessionSource
@@ -110,6 +115,25 @@ async function sandboxSessionCreateOpts(
 }
 
 export async function provisionSessionSandbox(
+  sessionId: string,
+  options?: { source?: ProvisionSessionSource }
+): Promise<{
+  status: "ready";
+  workingDir: string;
+  containerId: string;
+}> {
+  const key = sessionId.trim();
+  const existing = provisionInFlight.get(key);
+  if (existing) return existing;
+
+  const work = provisionSessionSandboxOnce(key, options).finally(() => {
+    provisionInFlight.delete(key);
+  });
+  provisionInFlight.set(key, work);
+  return work;
+}
+
+async function provisionSessionSandboxOnce(
   sessionId: string,
   options?: { source?: ProvisionSessionSource }
 ): Promise<{

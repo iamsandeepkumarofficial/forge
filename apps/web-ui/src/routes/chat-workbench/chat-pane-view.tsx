@@ -9,6 +9,7 @@ import type { AskUserProposal } from "../../lib/ask-user.js";
 import type { LlmProvider, UiChatMessage } from "../../lib/chat-agent.js";
 import type { ToolPart } from "../../lib/tool-display.js";
 import { ChatMessageList } from "./chat-message-list.js";
+import { RunningTerminalsBar } from "./running-terminals-bar.js";
 
 export type ChatPaneViewProps = {
   sessionId: string;
@@ -115,6 +116,7 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         attachments={o.attachments}
         onAttachFiles={o.onAttachFiles}
         onRemoveAttachment={o.onRemoveAttachment}
+        leading={<RunningTerminalsBar sessionId={o.sessionId} />}
       />
     </div>
   );

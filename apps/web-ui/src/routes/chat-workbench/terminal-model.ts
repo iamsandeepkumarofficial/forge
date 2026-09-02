@@ -1,53 +1,13 @@
-import type { TerminalJobStatus } from "../../lib/session-terminal.js";
+export type TerminalTabKind = "shell" | "app" | "job";
 
-export type TerminalStream = {
+export type TerminalTab = {
   id: string;
+  kind: TerminalTabKind;
   label: string;
   running: boolean;
-  command?: string;
+  closable: boolean;
   stoppable?: boolean;
 };
-
-const BACKGROUND_RE = /(?:^|\s)--watch(?:\s|$)|tail\s+-f|(?:^|\s)watch\s+/i;
-const N_24 = 24;
-const N_4 = 4;
-
-export function shouldRunInBackground(command: string): boolean {
-  return BACKGROUND_RE.test(command.trim());
-}
-
-export function jobNameFromCommand(command: string): string {
-  const tokens = command.trim().split(/\s+/).slice(0, 3);
-  const raw = tokens.join("-").replace(/[^a-zA-Z0-9_-]/g, "");
-  const base = raw.slice(0, N_24) || "cmd";
-  return `u-${base}-${Date.now().toString(36).slice(-N_4)}`;
-}
-
-export function buildAppStreams(
-  apps: Array<{ name: string; running: boolean }>
-): TerminalStream[] {
-  return apps.map((a) => ({
-    id: `app:${a.name}`,
-    label: a.name,
-    running: a.running
-  }));
-}
-
-export function buildJobStreams(jobs: TerminalJobStatus[]): TerminalStream[] {
-  return jobs.map((job) => ({
-    id: `job:${job.name}`,
-    label: jobLabel(job),
-    running: job.running,
-    command: job.command,
-    stoppable: true
-  }));
-}
-
-export function jobLabel(job: TerminalJobStatus): string {
-  const cmd = job.command?.trim();
-  if (cmd) return cmd.length > N_24 ? `${cmd.slice(0, N_24)}…` : cmd;
-  return job.name;
-}
 
 export function appLogsByStream(
   appLogs: Record<string, string>
@@ -59,21 +19,157 @@ export function appLogsByStream(
   return next;
 }
 
-export function jobLogsByStream(
-  jobLogs: Record<string, string>
-): Record<string, string> {
-  const next: Record<string, string> = {};
-  for (const [name, text] of Object.entries(jobLogs)) {
-    next[`job:${name}`] = text;
+export function jobTabId(jobName: string): string {
+  return `job:${jobName}`;
+}
+
+export function jobNameFromTabId(tabId: string): string {
+  return tabId.startsWith("job:") ? tabId.slice(4) : tabId;
+}
+
+export function pinnedJobTab(jobName: string, running = true): TerminalTab {
+  return {
+    id: jobTabId(jobName),
+    kind: "job",
+    label: jobName,
+    running,
+    closable: true,
+    stoppable: running
+  };
+}
+
+export function appTab(appName: string, running = true): TerminalTab {
+  const slash = appName.lastIndexOf("/");
+  const label = slash >= 0 ? appName.slice(slash + 1) : appName;
+  return {
+    id: `app:${appName}`,
+    kind: "app",
+    label,
+    running,
+    closable: true,
+    stoppable: running
+  };
+}
+
+export function appNameFromTabId(tabId: string): string {
+  return tabId.startsWith("app:") ? tabId.slice(4) : tabId;
+}
+
+export function mergeShellTab(
+  tabs: TerminalTab[],
+  tab: TerminalTab
+): TerminalTab[] {
+  if (tabs.some((entry) => entry.id === tab.id)) {
+    return tabs.map((entry) => (entry.id === tab.id ? tab : entry));
+  }
+  return [...tabs, tab];
+}
+
+/** Keep client-pinned job tabs when refreshing strip from the API. */
+export function mergeApiTabsWithPinnedJobs(
+  apiTabs: TerminalTab[],
+  previous: TerminalTab[],
+  jobRunning?: Record<string, boolean>
+): TerminalTab[] {
+  const jobs = previous.filter((tab) => tab.kind === "job");
+  const nextJobs = jobs.map((tab) => {
+    const name = jobNameFromTabId(tab.id);
+    const running = jobRunning?.[name];
+    if (running === undefined) return tab;
+    return { ...tab, running, stoppable: running };
+  });
+  return [...apiTabs.filter((tab) => tab.kind !== "job"), ...nextJobs];
+}
+
+/** Merge tracked app/job running state into local tabs (no HTTP). */
+export function applyTrackedRunningState(
+  tabs: TerminalTab[],
+  options: { trackedApps: string[]; trackedJobs: string[] }
+): TerminalTab[] {
+  const trackedApps = new Set(options.trackedApps);
+  const trackedJobs = new Set(options.trackedJobs);
+  const shells = tabs.filter((tab) => tab.kind === "shell");
+  const appMap = new Map<string, TerminalTab>();
+  for (const tab of tabs) {
+    if (tab.kind !== "app") continue;
+    appMap.set(appNameFromTabId(tab.id), tab);
+  }
+  for (const name of trackedApps) {
+    const existing = appMap.get(name);
+    appMap.set(
+      name,
+      existing
+        ? { ...existing, running: true, stoppable: true }
+        : appTab(name, true)
+    );
+  }
+  for (const [name, tab] of appMap) {
+    if (trackedApps.has(name)) continue;
+    if (!tab.running && !tab.stoppable) continue;
+    appMap.set(name, { ...tab, running: false, stoppable: false });
+  }
+  const jobs = tabs
+    .filter((tab) => tab.kind === "job")
+    .map((tab) => {
+      const name = jobNameFromTabId(tab.id);
+      const running = trackedJobs.has(name);
+      if (tab.running === running && tab.stoppable === running) return tab;
+      return { ...tab, running, stoppable: running };
+    });
+  return [...shells, ...appMap.values(), ...jobs];
+}
+
+export function countRunningTabs(tabs: TerminalTab[]): number {
+  return tabs.filter(
+    (tab) => tab.running && (tab.kind === "app" || tab.kind === "job")
+  ).length;
+}
+
+export function pickActiveTab(
+  tabs: TerminalTab[],
+  preferredId: string | null,
+  hidden: ReadonlySet<string>
+): string | null {
+  const visible = tabs.filter((tab) => !hidden.has(tab.id));
+  if (visible.length === 0) return null;
+  if (preferredId && visible.some((tab) => tab.id === preferredId)) {
+    return preferredId;
+  }
+  const shell = visible.find((tab) => tab.kind === "shell");
+  return shell?.id ?? visible[0]!.id;
+}
+
+export function visibleTabs(
+  tabs: TerminalTab[],
+  hidden: ReadonlySet<string>
+): TerminalTab[] {
+  return tabs.filter((tab) => !hidden.has(tab.id));
+}
+
+export function pruneHiddenTabs(
+  hidden: Set<string>,
+  tabs: TerminalTab[]
+): Set<string> {
+  const ids = new Set(tabs.map((tab) => tab.id));
+  const next = new Set<string>();
+  for (const id of hidden) {
+    if (ids.has(id)) next.add(id);
   }
   return next;
 }
 
-export function countRunningStreams(streams: TerminalStream[]): number {
-  return streams.filter((s) => s.running).length;
-}
-
-export function formatShellEntry(command: string, output: string): string {
-  const body = output.trim() || "(no output)";
-  return `$ ${command}\n${body}`;
+export function partitionStripTabs(tabs: TerminalTab[]): {
+  shells: TerminalTab[];
+  apps: TerminalTab[];
+  jobs: TerminalTab[];
+} {
+  const shells: TerminalTab[] = [];
+  const apps: TerminalTab[] = [];
+  const jobs: TerminalTab[] = [];
+  for (const tab of tabs) {
+    if (tab.kind === "shell") shells.push(tab);
+    else if (tab.kind === "job") jobs.push(tab);
+    else apps.push(tab);
+  }
+  return { shells, apps, jobs };
 }

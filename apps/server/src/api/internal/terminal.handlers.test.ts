@@ -30,7 +30,6 @@ function mockRes() {
 
 describe("terminal.handlers", { concurrency: false }, () => {
   let handleTerminalJobs: typeof import("./terminal.handlers.js").handleTerminalJobs;
-  let handleTerminalLogs: typeof import("./terminal.handlers.js").handleTerminalLogs;
   let handleTerminalStop: typeof import("./terminal.handlers.js").handleTerminalStop;
   let handleTerminalRun: typeof import("./terminal.handlers.js").handleTerminalRun;
 
@@ -45,7 +44,6 @@ describe("terminal.handlers", { concurrency: false }, () => {
         listTerminalJobStatuses: async () => [
           { name: "t1", running: true, command: "pnpm test", cwd: "/workspace" }
         ],
-        terminalJobLogs: async () => "ok\n",
         stopTerminalJob: async () => undefined
       }
     });
@@ -60,7 +58,6 @@ describe("terminal.handlers", { concurrency: false }, () => {
     });
     ({
       handleTerminalJobs,
-      handleTerminalLogs,
       handleTerminalStop,
       handleTerminalRun
     } = await import("./terminal.handlers.js"));
@@ -73,16 +70,9 @@ describe("terminal.handlers", { concurrency: false }, () => {
       jobs.res as never
     );
     assert.equal(jobs.state.statusCode, 400);
-
-    const logs = mockRes();
-    await handleTerminalLogs(
-      { query: {}, body: {} } as never,
-      logs.res as never
-    );
-    assert.equal(logs.state.statusCode, 400);
   });
 
-  it("lists jobs and returns logs", async () => {
+  it("lists jobs, stops, and runs", async () => {
     const jobs = mockRes();
     await handleTerminalJobs(
       { query: { sessionId: "s1" }, body: {} } as never,
@@ -99,30 +89,6 @@ describe("terminal.handlers", { concurrency: false }, () => {
         }
       ]
     });
-
-    const allLogs = mockRes();
-    await handleTerminalLogs(
-      { query: { sessionId: "s1" }, body: {} } as never,
-      allLogs.res as never
-    );
-    assert.deepEqual(allLogs.state.body, {
-      jobs: [
-        {
-          name: "t1",
-          running: true,
-          command: "pnpm test",
-          cwd: "/workspace"
-        }
-      ],
-      logs: { t1: "ok\n" }
-    });
-
-    const logs = mockRes();
-    await handleTerminalLogs(
-      { query: { sessionId: "s1", name: "t1" }, body: {} } as never,
-      logs.res as never
-    );
-    assert.equal(logs.state.text, "ok\n");
 
     const stop = mockRes();
     await handleTerminalStop(
