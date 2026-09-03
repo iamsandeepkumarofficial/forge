@@ -3,3 +3,7 @@ packages:
   - "packages/*"
 allowBuilds:
   esbuild: false
+onlyBuiltDependencies:
+  - "@swc/core"
+  - "protobufjs"
+  - "@temporalio/core-bridge"
