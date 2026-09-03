@@ -8,21 +8,28 @@ import {
 } from "./tracked-terminals";
 import { resetTerminalSessionRegistryForTests } from "../../lib/terminal-session-registry";
 
-const requestOpenTerminalTab = vi.fn();
-const stopApp = vi.fn(async () => ({ ok: true }));
-const stopTerminalJob = vi.fn(async () => undefined);
+const requestOpenTerminalTab = vi.fn(
+  (_detail: { id: string; kind: "app" | "job" }) => undefined
+);
+const stopApp = vi.fn(async (_sessionId: string, _name: string) => ({
+  ok: true
+}));
+const stopTerminalJob = vi.fn(
+  async (_sessionId: string, _name: string, _signal?: AbortSignal) => undefined
+);
 
 vi.mock("./terminal-toggle.js", () => ({
-  requestOpenTerminalTab: (...args: unknown[]) =>
-    requestOpenTerminalTab(...args)
+  requestOpenTerminalTab: (detail: { id: string; kind: "app" | "job" }) =>
+    requestOpenTerminalTab(detail)
 }));
 
 vi.mock("../../lib/tool-runner.js", () => ({
-  stopApp: (...args: unknown[]) => stopApp(...args)
+  stopApp: (sessionId: string, name: string) => stopApp(sessionId, name)
 }));
 
 vi.mock("../../lib/session-terminal.js", () => ({
-  stopTerminalJob: (...args: unknown[]) => stopTerminalJob(...args)
+  stopTerminalJob: (sessionId: string, name: string, signal?: AbortSignal) =>
+    stopTerminalJob(sessionId, name, signal)
 }));
 
 vi.mock("../../lib/terminal-session-client.js", () => ({

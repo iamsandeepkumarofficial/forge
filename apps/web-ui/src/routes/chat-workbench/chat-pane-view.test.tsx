@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { ChatPaneView } from "./chat-pane-view";
 
 vi.mock("../../components/chat-composer.js", () => ({
-  ChatComposer: (props: { leading?: unknown }) => (
+  ChatComposer: (props: { leading?: ReactNode }) => (
     <div>
       {props.leading}
       <div>composer</div>
