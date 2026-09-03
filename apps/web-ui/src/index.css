@@ -48,77 +48,239 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Forge brand system — one story, switchable "heat".
+ * Base = cooled iron (graphite). The accent + logo are the forge's heat and
+ * change per theme (see src/brand/use-brand-theme.tsx). Default: Molten Steel.
+ *
+ * Neutrals live in :root / .dark. Each theme overrides only the heat:
+ *   --brand-accent / -fg, --brand-tint / -fg, --brand-ring,
+ *   --chart-1..5, and the logo gradient (--brand-logo-*).
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.75rem;
+
+  /* Cooled-iron neutrals — light */
+  --background: oklch(0.99 0.002 250);
+  --foreground: oklch(0.20 0.012 250);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.20 0.012 250);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --user-bubble: oklch(0.92 0.04 195);
-  --assistant-accent: oklch(0.55 0.22 285);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.20 0.012 250);
+  --secondary: oklch(0.95 0.004 250);
+  --secondary-foreground: oklch(0.20 0.012 250);
+  --muted: oklch(0.965 0.003 250);
+  --muted-foreground: oklch(0.50 0.014 250);
+  --destructive: oklch(0.55 0.22 25);
+  --border: oklch(0.91 0.004 250);
+  --input: oklch(0.91 0.004 250);
+
+  --sidebar: oklch(0.975 0.003 250);
+  --sidebar-foreground: oklch(0.20 0.012 250);
+  --sidebar-border: oklch(0.91 0.004 250);
+
+  /* Heat — Molten Steel (default), light */
+  --primary: oklch(0.55 0.12 66);
+  --primary-foreground: oklch(0.99 0.01 80);
+  --accent: oklch(0.93 0.045 80);
+  --accent-foreground: oklch(0.38 0.10 60);
+  --ring: oklch(0.55 0.12 66 / 40%);
+  --sidebar-primary: oklch(0.55 0.12 66);
+  --sidebar-primary-foreground: oklch(0.99 0.01 80);
+  --sidebar-accent: oklch(0.93 0.045 80);
+  --sidebar-accent-foreground: oklch(0.38 0.10 60);
+  --sidebar-ring: oklch(0.55 0.12 66 / 40%);
+  --user-bubble: oklch(0.95 0.04 80);
+  --assistant-accent: oklch(0.55 0.12 66);
+  --chart-1: oklch(0.93 0.04 82);
+  --chart-2: oklch(0.82 0.08 74);
+  --chart-3: oklch(0.68 0.11 68);
+  --chart-4: oklch(0.55 0.12 66);
+  --chart-5: oklch(0.44 0.11 62);
+  --brand-logo-from: oklch(0.66 0.12 70);
+  --brand-logo-to: oklch(0.48 0.12 55);
+  --brand-logo-spark: oklch(0.86 0.10 88);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --user-bubble: oklch(0.24 0.04 195);
-  --assistant-accent: oklch(0.62 0.22 285);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Cooled-iron neutrals — dark */
+  --background: oklch(0.17 0.008 250);
+  --foreground: oklch(0.96 0.003 250);
+  --card: oklch(0.21 0.01 250);
+  --card-foreground: oklch(0.96 0.003 250);
+  --popover: oklch(0.21 0.01 250);
+  --popover-foreground: oklch(0.96 0.003 250);
+  --secondary: oklch(0.26 0.01 250);
+  --secondary-foreground: oklch(0.96 0.003 250);
+  --muted: oklch(0.26 0.01 250);
+  --muted-foreground: oklch(0.70 0.012 250);
+  --destructive: oklch(0.65 0.20 22);
+  --border: oklch(1 0.01 250 / 12%);
+  --input: oklch(1 0.01 250 / 14%);
+
+  --sidebar: oklch(0.14 0.007 250);
+  --sidebar-foreground: oklch(0.96 0.003 250);
+  --sidebar-border: oklch(1 0.01 250 / 12%);
+
+  /* Heat — Molten Steel (default), dark */
+  --primary: oklch(0.74 0.13 74);
+  --primary-foreground: oklch(0.18 0.02 70);
+  --accent: oklch(0.28 0.06 70);
+  --accent-foreground: oklch(0.86 0.09 82);
+  --ring: oklch(0.74 0.13 74 / 45%);
+  --sidebar-primary: oklch(0.74 0.13 74);
+  --sidebar-primary-foreground: oklch(0.18 0.02 70);
+  --sidebar-accent: oklch(0.28 0.06 70);
+  --sidebar-accent-foreground: oklch(0.86 0.09 82);
+  --sidebar-ring: oklch(0.74 0.13 74 / 45%);
+  --user-bubble: oklch(0.28 0.06 70);
+  --assistant-accent: oklch(0.74 0.13 74);
+  --chart-1: oklch(0.30 0.05 68);
+  --chart-2: oklch(0.42 0.08 70);
+  --chart-3: oklch(0.56 0.11 72);
+  --chart-4: oklch(0.68 0.13 74);
+  --chart-5: oklch(0.80 0.13 78);
+  --brand-logo-from: oklch(0.80 0.12 80);
+  --brand-logo-to: oklch(0.60 0.13 66);
+  --brand-logo-spark: oklch(0.90 0.09 88);
+}
+
+/* ================= Ember on Iron — red-hot crimson ================= */
+[data-forge-theme="ember-iron"] {
+  --primary: oklch(0.53 0.20 30);
+  --primary-foreground: oklch(0.99 0.01 40);
+  --accent: oklch(0.94 0.045 32);
+  --accent-foreground: oklch(0.44 0.16 30);
+  --ring: oklch(0.53 0.20 30 / 42%);
+  --sidebar-primary: oklch(0.53 0.20 30);
+  --sidebar-primary-foreground: oklch(0.99 0.01 40);
+  --sidebar-accent: oklch(0.94 0.045 32);
+  --sidebar-accent-foreground: oklch(0.44 0.16 30);
+  --sidebar-ring: oklch(0.53 0.20 30 / 42%);
+  --user-bubble: oklch(0.94 0.045 32);
+  --assistant-accent: oklch(0.53 0.20 30);
+  --chart-1: oklch(0.93 0.045 34);
+  --chart-2: oklch(0.80 0.11 32);
+  --chart-3: oklch(0.66 0.17 31);
+  --chart-4: oklch(0.53 0.20 30);
+  --chart-5: oklch(0.43 0.17 29);
+  --brand-logo-from: oklch(0.66 0.19 34);
+  --brand-logo-to: oklch(0.46 0.19 28);
+  --brand-logo-spark: oklch(0.82 0.14 52);
+}
+.dark[data-forge-theme="ember-iron"] {
+  --primary: oklch(0.64 0.20 32);
+  --primary-foreground: oklch(0.99 0.01 40);
+  --accent: oklch(0.29 0.08 30);
+  --accent-foreground: oklch(0.85 0.11 36);
+  --ring: oklch(0.64 0.20 32 / 45%);
+  --sidebar-primary: oklch(0.64 0.20 32);
+  --sidebar-primary-foreground: oklch(0.99 0.01 40);
+  --sidebar-accent: oklch(0.29 0.08 30);
+  --sidebar-accent-foreground: oklch(0.85 0.11 36);
+  --sidebar-ring: oklch(0.64 0.20 32 / 45%);
+  --user-bubble: oklch(0.29 0.08 30);
+  --assistant-accent: oklch(0.64 0.20 32);
+  --chart-1: oklch(0.31 0.07 30);
+  --chart-2: oklch(0.43 0.12 31);
+  --chart-3: oklch(0.55 0.17 31);
+  --chart-4: oklch(0.66 0.19 33);
+  --chart-5: oklch(0.76 0.16 40);
+  --brand-logo-from: oklch(0.72 0.18 38);
+  --brand-logo-to: oklch(0.52 0.20 28);
+  --brand-logo-spark: oklch(0.86 0.13 56);
+}
+
+/* ================= Cold Forged — steel-blue, near mono ================= */
+[data-forge-theme="cold-forged"] {
+  --primary: oklch(0.52 0.11 252);
+  --primary-foreground: oklch(0.99 0.01 250);
+  --accent: oklch(0.93 0.03 252);
+  --accent-foreground: oklch(0.38 0.10 252);
+  --ring: oklch(0.52 0.11 252 / 42%);
+  --sidebar-primary: oklch(0.52 0.11 252);
+  --sidebar-primary-foreground: oklch(0.99 0.01 250);
+  --sidebar-accent: oklch(0.93 0.03 252);
+  --sidebar-accent-foreground: oklch(0.38 0.10 252);
+  --sidebar-ring: oklch(0.52 0.11 252 / 42%);
+  --user-bubble: oklch(0.93 0.03 252);
+  --assistant-accent: oklch(0.52 0.11 252);
+  --chart-1: oklch(0.92 0.025 252);
+  --chart-2: oklch(0.80 0.06 252);
+  --chart-3: oklch(0.66 0.09 252);
+  --chart-4: oklch(0.52 0.11 252);
+  --chart-5: oklch(0.42 0.10 252);
+  --brand-logo-from: oklch(0.64 0.11 250);
+  --brand-logo-to: oklch(0.44 0.10 254);
+  --brand-logo-spark: oklch(0.82 0.09 240);
+}
+.dark[data-forge-theme="cold-forged"] {
+  --primary: oklch(0.72 0.10 250);
+  --primary-foreground: oklch(0.17 0.02 250);
+  --accent: oklch(0.27 0.045 252);
+  --accent-foreground: oklch(0.85 0.07 248);
+  --ring: oklch(0.72 0.10 250 / 45%);
+  --sidebar-primary: oklch(0.72 0.10 250);
+  --sidebar-primary-foreground: oklch(0.17 0.02 250);
+  --sidebar-accent: oklch(0.27 0.045 252);
+  --sidebar-accent-foreground: oklch(0.85 0.07 248);
+  --sidebar-ring: oklch(0.72 0.10 250 / 45%);
+  --user-bubble: oklch(0.27 0.045 252);
+  --assistant-accent: oklch(0.72 0.10 250);
+  --chart-1: oklch(0.29 0.04 252);
+  --chart-2: oklch(0.41 0.07 252);
+  --chart-3: oklch(0.55 0.09 251);
+  --chart-4: oklch(0.66 0.10 250);
+  --chart-5: oklch(0.78 0.09 246);
+  --brand-logo-from: oklch(0.76 0.10 246);
+  --brand-logo-to: oklch(0.54 0.11 254);
+  --brand-logo-spark: oklch(0.88 0.08 236);
+}
+
+/* ================= Molten Glow — red-to-amber gradient ================= */
+[data-forge-theme="molten-glow"] {
+  --primary: oklch(0.58 0.16 48);
+  --primary-foreground: oklch(0.99 0.01 60);
+  --accent: oklch(0.94 0.05 60);
+  --accent-foreground: oklch(0.42 0.14 45);
+  --ring: oklch(0.58 0.16 48 / 42%);
+  --sidebar-primary: oklch(0.58 0.16 48);
+  --sidebar-primary-foreground: oklch(0.99 0.01 60);
+  --sidebar-accent: oklch(0.94 0.05 60);
+  --sidebar-accent-foreground: oklch(0.42 0.14 45);
+  --sidebar-ring: oklch(0.58 0.16 48 / 42%);
+  --user-bubble: oklch(0.94 0.05 60);
+  --assistant-accent: oklch(0.58 0.16 48);
+  --chart-1: oklch(0.93 0.05 62);
+  --chart-2: oklch(0.81 0.11 56);
+  --chart-3: oklch(0.68 0.15 50);
+  --chart-4: oklch(0.58 0.16 46);
+  --chart-5: oklch(0.48 0.17 38);
+  --brand-logo-from: oklch(0.78 0.15 70);
+  --brand-logo-to: oklch(0.52 0.20 30);
+  --brand-logo-spark: oklch(0.88 0.12 82);
+}
+.dark[data-forge-theme="molten-glow"] {
+  --primary: oklch(0.70 0.16 52);
+  --primary-foreground: oklch(0.18 0.02 45);
+  --accent: oklch(0.29 0.07 45);
+  --accent-foreground: oklch(0.86 0.10 62);
+  --ring: oklch(0.70 0.16 52 / 45%);
+  --sidebar-primary: oklch(0.70 0.16 52);
+  --sidebar-primary-foreground: oklch(0.18 0.02 45);
+  --sidebar-accent: oklch(0.29 0.07 45);
+  --sidebar-accent-foreground: oklch(0.86 0.10 62);
+  --sidebar-ring: oklch(0.70 0.16 52 / 45%);
+  --user-bubble: oklch(0.29 0.07 45);
+  --assistant-accent: oklch(0.70 0.16 52);
+  --chart-1: oklch(0.30 0.06 44);
+  --chart-2: oklch(0.43 0.11 46);
+  --chart-3: oklch(0.56 0.15 48);
+  --chart-4: oklch(0.68 0.16 52);
+  --chart-5: oklch(0.80 0.14 66);
+  --brand-logo-from: oklch(0.82 0.14 74);
+  --brand-logo-to: oklch(0.56 0.20 30);
+  --brand-logo-spark: oklch(0.90 0.11 84);
 }
 
 @layer base {

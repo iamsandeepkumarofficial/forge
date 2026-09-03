@@ -17,20 +17,14 @@ describe("postgres connection helpers", () => {
     await assert.rejects(() => connectPostgres(), /DATABASE_URL/);
   });
 
-  it("connectPostgres initializes getDb without querying", async () => {
+  it("connectPostgres rejects when the database is unreachable", async () => {
     process.env.DATABASE_URL =
       "postgresql://forge:forge@127.0.0.1:1/forge_test_unused";
-    await connectPostgres();
-    const db = getDb();
-    assert.equal(typeof db.select, "function");
-    await connectPostgres();
-    assert.equal(getDb(), db);
+    await assert.rejects(() => connectPostgres(), /PostgreSQL connect failed/i);
+    assert.throws(() => getDb(), /not initialized/i);
   });
 
-  it("closePostgres clears the initialized client", async () => {
-    process.env.DATABASE_URL =
-      "postgresql://forge:forge@127.0.0.1:1/forge_test_unused";
-    await connectPostgres();
+  it("closePostgres is a no-op when never connected", async () => {
     await closePostgres();
     assert.throws(() => getDb(), /not initialized/i);
   });

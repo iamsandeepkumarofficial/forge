@@ -17,10 +17,14 @@ export function parseApiErrorText(options: {
       error?: string;
       help?: string;
     };
-    if (error.error) {
-      errorMessage = error.error;
-      errorCode = error.error;
+    if (typeof error.error === "string" && error.error.trim()) {
+      errorMessage = error.error.trim();
+      errorCode = error.error.trim();
       helpText = error.help || undefined;
+    } else if (typeof error.help === "string" && error.help.trim()) {
+      // Empty AggregateError messages used to surface as blank 500s.
+      errorMessage = error.help.trim();
+      helpText = error.help.trim();
     }
   } catch {
     errorMessage = `${fallbackMessage}: ${errorText.substring(0, N_100)}`;

@@ -45,7 +45,7 @@ Typical local ports:
 | ------- | ---- |
 | Tool-plane API (`apps/server`) | `4000` |
 | Web UI | `5173` |
-| Postgres | `5432` |
+| Postgres (Docker) | `5433` |
 | Temporal gRPC / UI | `7233` / `8233` |
 | MinIO | `9000` (console `9001`) |
 

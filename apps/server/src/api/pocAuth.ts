@@ -10,6 +10,30 @@ export type AuthedRequest = Request & {
 
 type AuthArgs = [Request, Response, NextFunction];
 
+/** Node pg wraps refused connections as AggregateError with an empty `.message`. */
+export function formatAuthError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const nested =
+    "errors" in err && Array.isArray((err as AggregateError).errors)
+      ? (err as AggregateError).errors
+          .map((e) => (e instanceof Error ? e.message : String(e)))
+          .filter(Boolean)
+      : [];
+  const message = err.message.trim() || nested.join("; ");
+  if (message) return message;
+  const code =
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    typeof (err as { code?: unknown }).code === "string"
+      ? (err as { code: string }).code
+      : undefined;
+  if (code === "ECONNREFUSED") {
+    return "Database connection refused. Is Postgres running (docker compose up -d postgres)?";
+  }
+  return code ? `Database error (${code})` : "Database request failed";
+}
+
 /**
  * Attach the singleton local user (RFC 0004). No bearer token or email header.
  */
@@ -20,8 +44,10 @@ export function createLocalUserMiddleware() {
       (req as AuthedRequest).forgeUser = await getLocalUser();
       next();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(N_500).json({ error: message });
+      res.status(N_500).json({
+        error: formatAuthError(err),
+        help: "Check DATABASE_URL and that Postgres is up (default host port 5433)."
+      });
     }
   };
 }

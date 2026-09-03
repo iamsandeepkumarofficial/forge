@@ -1,71 +1,16 @@
 import { Folder, Loader2 } from "lucide-react";
 import { TEMPLATES } from "./empty-state-shared.js";
 
-function GitHubMark({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      className={className}
-      aria-hidden
-    >
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-    </svg>
-  );
-}
-
 type ImportPanelOptions = {
   busy: boolean;
-  loading: "github" | "local" | null;
+  loading: "local" | null;
   desktop: boolean;
   showPathInput: boolean;
   localPath: string;
   onLocalPathChange: (value: string) => void;
-  onGithub: () => void;
   onSelectFolder: () => void;
   onConnectPath: () => void;
 };
-
-function ProviderButtons(options: ImportPanelOptions) {
-  const { busy, loading, onGithub } = options;
-  return (
-    <div className="mt-4 space-y-2">
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onGithub}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background disabled:opacity-50"
-      >
-        {loading === "github" ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <GitHubMark className="size-4" />
-        )}
-        Continue with GitHub
-      </button>
-      <button
-        type="button"
-        disabled
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm text-muted-foreground opacity-60"
-      >
-        Continue with GitLab
-        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
-          Coming soon
-        </span>
-      </button>
-      <button
-        type="button"
-        disabled
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm text-muted-foreground opacity-60"
-      >
-        Continue with Bitbucket
-        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
-          Coming soon
-        </span>
-      </button>
-    </div>
-  );
-}
 
 function LocalFolderSection(options: ImportPanelOptions) {
   const {
@@ -78,29 +23,36 @@ function LocalFolderSection(options: ImportPanelOptions) {
     onSelectFolder,
     onConnectPath
   } = options;
+
   return (
-    <div className="mt-4 border-t border-border pt-4">
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onSelectFolder}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm hover:bg-muted/50 disabled:opacity-50"
-      >
-        {loading === "local" ? (
-          <>
-            <Loader2 className="size-4 animate-spin" />
-            Connecting…
-          </>
-        ) : (
-          <>
-            <Folder className="size-4" />
-            Select folder
-          </>
-        )}
-      </button>
+    <section className="rounded-xl border border-border p-6">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onSelectFolder}
+          aria-label="Select folder"
+          className="inline-flex size-16 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary disabled:opacity-50"
+        >
+          {loading === "local" ? (
+            <Loader2 className="size-7 animate-spin" />
+          ) : (
+            <Folder className="size-7" />
+          )}
+        </button>
+        <div>
+          <h2 className="text-base font-semibold">Select a project folder</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {desktop
+              ? "Choose a folder on this machine to connect as a project."
+              : "Paste an absolute path below, or use the desktop app for a native folder picker."}
+          </p>
+        </div>
+      </div>
+
       {showPathInput && !desktop && (
         <form
-          className="mt-3 space-y-2"
+          className="mx-auto mt-5 max-w-md space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
             onConnectPath();
@@ -120,31 +72,17 @@ function LocalFolderSection(options: ImportPanelOptions) {
           <button
             type="submit"
             disabled={busy || !localPath.trim()}
-            className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            aria-label="Connect folder"
+            className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
-            Connect
+            {loading === "local" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Folder className="size-4" />
+            )}
           </button>
         </form>
       )}
-      <p className="mt-2 text-xs text-muted-foreground">
-        {desktop
-          ? "Choose a project folder on this machine. Large dirs like node_modules are skipped when copying."
-          : "Native folder picker requires the desktop app. Paste an absolute path above to connect in the browser."}
-      </p>
-    </div>
-  );
-}
-
-function ImportGitSection(options: ImportPanelOptions) {
-  return (
-    <section className="rounded-xl border border-border p-5">
-      <h2 className="text-base font-semibold">Import Git Repository</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Select a Git provider to import an existing project from a Git
-        repository.
-      </p>
-      <ProviderButtons {...options} />
-      <LocalFolderSection {...options} />
     </section>
   );
 }
@@ -169,7 +107,7 @@ function CloneTemplateSection() {
                 Soon
               </span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {t.description}
             </p>
             <div className="mt-3 h-16 rounded-md border border-dashed border-border bg-background/60" />
@@ -182,8 +120,8 @@ function CloneTemplateSection() {
 
 export function EmptyStateImportPanels(options: ImportPanelOptions) {
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <ImportGitSection {...options} />
+    <div className="flex flex-col gap-6">
+      <LocalFolderSection {...options} />
       <CloneTemplateSection />
     </div>
   );
