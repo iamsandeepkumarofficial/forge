@@ -6,7 +6,11 @@ import {
   type AuthorizeDecision
 } from "./authorize.js";
 import { parsePreviewHostname } from "./hostnames.js";
-import type { PreviewRoute, RouteStore } from "./routeStore.js";
+import {
+  matchPathRoute,
+  type PreviewRoute,
+  type RouteStore
+} from "./routeStore.js";
 
 const N_401 = 401;
 const N_404 = 404;
@@ -27,14 +31,14 @@ function defaultLog(event: string, meta: Record<string, unknown>): void {
   process.stderr.write(`${JSON.stringify({ event, ...meta })}\n`);
 }
 
-function backendTarget(route: PreviewRoute): string {
+function backendTarget(backendService: string): string {
   if (
-    route.backendService.startsWith("http://") ||
-    route.backendService.startsWith("https://")
+    backendService.startsWith("http://") ||
+    backendService.startsWith("https://")
   ) {
-    return route.backendService;
+    return backendService;
   }
-  return `http://${route.backendService}`;
+  return `http://${backendService}`;
 }
 
 function denyAuth(input: {
@@ -61,6 +65,30 @@ function requestHostname(req: Request): string {
     req.headers.host ??
     "";
   return raw.split(":")[0]?.toLowerCase() ?? "";
+}
+
+function resolveProxyTarget(input: {
+  route: PreviewRoute;
+  req: Request;
+}): { target: string; url?: string } {
+  const pathAndQuery = input.req.url || "/";
+  const matched = matchPathRoute(input.route.pathRoutes, pathAndQuery);
+  if (!matched) {
+    return { target: backendTarget(input.route.backendService) };
+  }
+  let url = pathAndQuery;
+  if (matched.stripPrefix && matched.pathPrefix !== "/") {
+    const prefix = matched.pathPrefix;
+    const pathOnly = pathAndQuery.split("?")[0] || "/";
+    const qs = pathAndQuery.includes("?")
+      ? pathAndQuery.slice(pathAndQuery.indexOf("?"))
+      : "";
+    let rest = pathOnly.slice(prefix.length);
+    if (!rest.startsWith("/")) rest = `/${rest}`;
+    if (rest === "") rest = "/";
+    url = `${rest}${qs}`;
+  }
+  return { target: backendTarget(matched.backendService), url };
 }
 
 export function createGateway(
@@ -100,7 +128,11 @@ export function createGateway(
       denyAuth({ res, log, host: hostname, decision });
       return;
     }
-    proxy.web(req, res, { target: backendTarget(resolved) }, (err) => {
+    const { target, url } = resolveProxyTarget({ route: resolved, req });
+    if (url != null) {
+      req.url = url;
+    }
+    proxy.web(req, res, { target }, (err) => {
       log("preview_proxy_error", { host: hostname, error: String(err) });
       if (!res.headersSent) {
         res.status(N_404).json({ error: "preview_upstream_unavailable" });

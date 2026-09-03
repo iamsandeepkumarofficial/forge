@@ -11,6 +11,11 @@ export type RegisterPreviewInput = {
   backendService: string;
   hostname?: string;
   ownerEmail?: string;
+  pathRoutes?: Array<{
+    pathPrefix: string;
+    backendService: string;
+    stripPrefix?: boolean;
+  }>;
 };
 
 export type RegisterPreviewResult = {

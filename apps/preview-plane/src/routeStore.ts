@@ -1,9 +1,20 @@
+export type PathRouteRule = {
+  pathPrefix: string;
+  backendService: string;
+  stripPrefix?: boolean;
+};
+
 export type PreviewRoute = {
   sessionId: string;
   port: number;
   hostname: string;
   backendService: string;
   ownerEmail?: string;
+  /**
+   * Optional single-origin path rules (workspace gateway).
+   * Matched longest-prefix-first; catch-all "/" should be last.
+   */
+  pathRoutes?: PathRouteRule[];
 };
 
 export class RouteStore {
@@ -38,6 +49,29 @@ export class RouteStore {
     }
     return false;
   }
+}
+
+/** Longest pathPrefix wins; exact "/" is the fallback. */
+export function matchPathRoute(
+  pathRoutes: PathRouteRule[] | undefined,
+  requestPath: string
+): PathRouteRule | null {
+  if (!pathRoutes?.length) return null;
+  const path = requestPath.split("?")[0] || "/";
+  let best: PathRouteRule | null = null;
+  for (const rule of pathRoutes) {
+    const prefix = rule.pathPrefix || "/";
+    if (prefix === "/") {
+      if (!best) best = rule;
+      continue;
+    }
+    if (path === prefix || path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`) || path.startsWith(prefix)) {
+      if (!best || rule.pathPrefix.length > best.pathPrefix.length) {
+        best = rule;
+      }
+    }
+  }
+  return best;
 }
 
 export const defaultRouteStore = new RouteStore();

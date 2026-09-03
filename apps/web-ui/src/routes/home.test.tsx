@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { Home } from "./home";
+
+const workspaceApi = vi.hoisted(() => ({
+  listWorkspaces: vi.fn().mockResolvedValue([]),
+  createWorkspace: vi.fn(),
+  deleteWorkspace: vi.fn()
+}));
 
 vi.mock("../lib/tool-runner.js", () => ({
   runnerUrl: () => "http://127.0.0.1:4000"
@@ -9,6 +14,7 @@ vi.mock("../lib/tool-runner.js", () => ({
 vi.mock("../lib/projects-api.js", () => ({
   deleteProject: vi.fn()
 }));
+vi.mock("../lib/workspaces-api.js", () => workspaceApi);
 vi.mock("../components/dashboard-empty-state.js", () => ({
   DashboardEmptyState: () => <div>Empty state</div>
 }));
@@ -19,8 +25,11 @@ vi.mock("../components/connect-project-dialog.js", () => ({
   ConnectProjectDialog: () => null
 }));
 
+import { Home } from "./home";
+
 describe("Home", () => {
   beforeEach(() => {
+    workspaceApi.listWorkspaces.mockReset().mockResolvedValue([]);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -41,8 +50,8 @@ describe("Home", () => {
     });
   });
 
-  it("lists workspaces when the API returns rows", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
+  it("lists workspaces and section-level connect cta", async () => {
+    vi.mocked(fetch).mockResolvedValue({
       ok: true,
       json: async () => [
         {
@@ -53,14 +62,25 @@ describe("Home", () => {
         }
       ]
     } as Response);
+    workspaceApi.listWorkspaces.mockResolvedValue([
+      {
+        id: "w1",
+        userId: "u1",
+        name: "Full stack",
+        routes: [],
+        createdAt: "",
+        lastActivityAt: ""
+      }
+    ]);
     render(
       <MemoryRouter>
         <Home />
       </MemoryRouter>
     );
     await waitFor(() => {
-      expect(screen.getByText("Workspaces")).toBeTruthy();
-      expect(screen.getByRole("button", { name: /Connect workspace/i })).toBeTruthy();
+      expect(screen.getByText("Full stack")).toBeTruthy();
+      expect(screen.getByLabelText("Connect a project")).toBeTruthy();
+      expect(screen.getByLabelText("Create a workspace")).toBeTruthy();
       expect(screen.getAllByText("Forge").length).toBeGreaterThan(0);
     });
   });

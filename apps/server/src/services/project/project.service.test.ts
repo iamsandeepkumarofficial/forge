@@ -38,7 +38,8 @@ describe("ProjectService", () => {
         name: "n",
         source: "github",
         status: "available",
-        createdAt: new Date("2024-01-01T00:00:00.000Z")
+        createdAt: new Date("2024-01-01T00:00:00.000Z"),
+        lastActivityAt: new Date("2024-01-02T00:00:00.000Z")
       }
     ]);
     const rows = await svc.listProjects("u1");
@@ -48,7 +49,8 @@ describe("ProjectService", () => {
         name: "n",
         source: "github",
         status: "available",
-        createdAt: "2024-01-01T00:00:00.000Z"
+        createdAt: "2024-01-01T00:00:00.000Z",
+        lastActivityAt: "2024-01-02T00:00:00.000Z"
       }
     ]);
   });

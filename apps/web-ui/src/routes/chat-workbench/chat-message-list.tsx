@@ -1,6 +1,5 @@
 import { type RefObject } from "react";
 import { AssistantMarkdown } from "../../components/assistant-markdown.js";
-import { StagePipelineTranscript } from "../../components/stage-pipeline-transcript.js";
 import { ToolCalls } from "../../components/tool-calls.js";
 import type { UiChatMessage } from "../../lib/chat-agent.js";
 import {
@@ -98,9 +97,6 @@ export function ChatMessageList(options: {
   const {
     scrollerRef,
     stickToBottomRef,
-    sessionKind,
-    projectId,
-    chatId,
     messages,
     isStreaming,
     streamingText,
@@ -120,15 +116,10 @@ export function ChatMessageList(options: {
         stickToBottomRef.current = distance < N_80;
       }}
     >
-      {sessionKind === "ticket" && (
-        <StagePipelineTranscript projectId={projectId} chatId={chatId} />
-      )}
       <div className="space-y-3 px-3 py-3">
         {messages.length === 0 && !isStreaming && (
-          <p className="text-sm text-muted-foreground text-center mt-4">
-            {sessionKind === "workbench"
-              ? "Manual workbench — send a message to work interactively in this session’s sandbox."
-              : "Builder chat — send a message to work interactively in this ticket’s sandbox."}
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Send a message to work interactively in this session’s sandbox.
           </p>
         )}
         {messages.map((m, index) => (

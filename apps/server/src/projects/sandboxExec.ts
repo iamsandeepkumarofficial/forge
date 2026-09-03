@@ -87,7 +87,10 @@ export function shInSandbox(
   const { container, script, ...opts } = options;
   return dockerExec({ container, argv: ["sh", "-c", script], ...opts });
 }
-export function resolveWorkspacePath(relative: string): string {
+export function resolveWorkspacePath(
+  relative: string,
+  options?: { knownRepos?: ReadonlySet<string> | string[] }
+): string {
   const cleaned = String(relative || "")
     .replace(/\\/g, "/")
     .replace(/^\/+/, "");
@@ -100,6 +103,19 @@ export function resolveWorkspacePath(relative: string): string {
       );
     }
     segments.push(seg);
+  }
+  const known = options?.knownRepos
+    ? options.knownRepos instanceof Set
+      ? options.knownRepos
+      : new Set(options.knownRepos)
+    : null;
+  if (known && known.size > 0 && segments.length > 0) {
+    const first = segments[0];
+    if (!known.has(first)) {
+      throw new Error(
+        `Invalid path: first segment must be a member repo (${[...known].sort().join(", ")}), got "${first}"`
+      );
+    }
   }
   return `${WORKSPACE_MOUNT}/${segments.join("/")}`;
 }

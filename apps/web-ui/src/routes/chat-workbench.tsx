@@ -77,7 +77,7 @@ export function ChatWorkbench() {
             sessionId={sessionId}
             projectId={projectId}
             chatId={chatId}
-            sessionKind={chat?.kind ?? "ticket"}
+            sessionKind={chat?.kind ?? "workbench"}
             initialPrompt={initialPrompt}
           />
         ) : (

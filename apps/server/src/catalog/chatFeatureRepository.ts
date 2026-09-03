@@ -35,6 +35,23 @@ export class ChatFeatureRepository {
       .where(where)
       .orderBy(chatFeatures.order, desc(chatFeatures.lastActivityAt));
   }
+  async listByWorkspaceId(
+    workspaceId: string,
+    kind?: ChatFeatureKind
+  ): Promise<ChatFeature[]> {
+    const db = getDb();
+    const where = kind
+      ? and(
+          eq(chatFeatures.workspaceId, workspaceId),
+          eq(chatFeatures.kind, kind)
+        )
+      : eq(chatFeatures.workspaceId, workspaceId);
+    return db
+      .select()
+      .from(chatFeatures)
+      .where(where)
+      .orderBy(chatFeatures.order, desc(chatFeatures.lastActivityAt));
+  }
   async deleteChatFeature(id: string): Promise<void> {
     const db = getDb();
     await db.delete(chatFeatures).where(eq(chatFeatures.id, id));

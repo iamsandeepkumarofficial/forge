@@ -10,6 +10,11 @@ vi.mock("./lib/tool-runner.js", () => ({
 vi.mock("./lib/projects-api.js", () => ({
   deleteProject: vi.fn()
 }));
+vi.mock("./lib/workspaces-api.js", () => ({
+  listWorkspaces: vi.fn().mockResolvedValue([]),
+  createWorkspace: vi.fn(),
+  deleteWorkspace: vi.fn()
+}));
 vi.mock("./components/dashboard-empty-state.js", () => ({
   DashboardEmptyState: () => <div>Empty state</div>
 }));
