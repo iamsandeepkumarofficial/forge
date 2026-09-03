@@ -1,4 +1,4 @@
-import type { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { User } from "@forge/db";
 import { getLocalUser } from "../catalog/localUser.js";
 
@@ -37,7 +37,7 @@ export function formatAuthError(err: unknown): string {
 /**
  * Attach the singleton local user (RFC 0004). No bearer token or email header.
  */
-export function createLocalUserMiddleware() {
+export function createLocalUserMiddleware(): RequestHandler {
   return async (...args: AuthArgs): Promise<void> => {
     const [req, res, next] = args;
     try {
@@ -53,4 +53,5 @@ export function createLocalUserMiddleware() {
 }
 
 /** @deprecated Use createLocalUserMiddleware — kept as alias during migration. */
-export const createPocAuth = (_pocToken?: string) => createLocalUserMiddleware();
+export const createPocAuth = (_pocToken?: string): RequestHandler =>
+  createLocalUserMiddleware();
