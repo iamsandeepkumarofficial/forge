@@ -54,7 +54,6 @@ export function parsePreviewHostname(
   return null;
 }
 
-/** Public listen port for preview URLs (from PREVIEW_PUBLIC_ORIGIN or PREVIEW_PLANE_URL). */
 export function previewPublicPort(): number | null {
   const raw =
     process.env.PREVIEW_PUBLIC_ORIGIN?.trim() ||

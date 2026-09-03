@@ -1,11 +1,11 @@
 import type { IncomingHttpHeaders } from "node:http";
 
-const N_401 = 401;
-const N_403 = 403;
+export const UNAUTHORIZED = 401;
+export const FORBIDDEN = 403;
 
 export type AuthorizeDecision =
   | { ok: true; email: string }
-  | { ok: false; status: typeof N_401 | typeof N_403 };
+  | { ok: false; status: typeof UNAUTHORIZED | typeof FORBIDDEN };
 
 export type AuthorizeInput = {
   sessionId: string;
@@ -20,7 +20,6 @@ export type RequestAuth = {
   email?: string;
 };
 
-/** Preview gateway is open on loopback (RFC 0004 — no token/email). */
 export function authorizePreviewAccess(
   _input: AuthorizeInput
 ): AuthorizeDecision {

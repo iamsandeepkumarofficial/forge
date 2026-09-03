@@ -10,10 +10,6 @@ export type PreviewRoute = {
   hostname: string;
   backendService: string;
   ownerEmail?: string;
-  /**
-   * Optional single-origin path rules (workspace gateway).
-   * Matched longest-prefix-first; catch-all "/" should be last.
-   */
   pathRoutes?: PathRouteRule[];
 };
 
@@ -51,7 +47,6 @@ export class RouteStore {
   }
 }
 
-/** Longest pathPrefix wins; exact "/" is the fallback. */
 export function matchPathRoute(
   pathRoutes: PathRouteRule[] | undefined,
   requestPath: string
