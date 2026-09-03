@@ -43,6 +43,11 @@ describe("session.handlers", () => {
         scaffoldForgeConfig: async () => ({ apps: [] })
       }
     });
+    mock.module("../../projects/sessionProvision.js", {
+      exports: {
+        finalizeSessionProvision: async () => undefined
+      }
+    });
     ({ handleSessionStart } = await import("./session.handlers.js"));
   });
 

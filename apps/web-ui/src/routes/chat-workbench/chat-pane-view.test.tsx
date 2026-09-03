@@ -26,7 +26,6 @@ describe("ChatPaneView", () => {
         status="ready"
         error={null}
         clearError={vi.fn()}
-        lastUserIndex={-1}
         input=""
         setInput={vi.fn()}
         onSend={vi.fn()}

@@ -11,6 +11,7 @@ import {
   normalizeRepoName,
   validateWorkspaceRoutes
 } from "./workspaceWiring.js";
+import { scheduleWorkspaceHealthAnalysis } from "./workspaceHealthJob.js";
 
 const N_403 = 403;
 const N_404 = 404;
@@ -64,6 +65,7 @@ export class WorkspaceService {
       name: trimmed,
       routes: []
     });
+    scheduleWorkspaceHealthAnalysis(ws.id);
     return { ...ws, members: [] };
   }
 
@@ -109,6 +111,7 @@ export class WorkspaceService {
     const names = new Set(members.map((m) => m.repoName));
     const normalized = validateWorkspaceRoutes(routes, names);
     await this.workspaceRepo.updateRoutes(workspaceId, normalized);
+    scheduleWorkspaceHealthAnalysis(workspaceId);
     return this.getWorkspaceDetail(workspaceId, userId);
   }
 
@@ -171,6 +174,7 @@ export class WorkspaceService {
       env: input.env ?? {}
     });
     await this.workspaceRepo.updateLastActivity(workspaceId);
+    scheduleWorkspaceHealthAnalysis(workspaceId);
     return this.getWorkspaceDetail(workspaceId, userId);
   }
 
@@ -205,6 +209,7 @@ export class WorkspaceService {
       }
     }
     await this.workspaceRepo.updateLastActivity(workspaceId);
+    scheduleWorkspaceHealthAnalysis(workspaceId);
     return this.getWorkspaceDetail(workspaceId, userId);
   }
 
@@ -304,6 +309,7 @@ export class WorkspaceService {
       }
     }
     await this.workspaceRepo.updateLastActivity(workspaceId);
+    scheduleWorkspaceHealthAnalysis(workspaceId);
     return this.getWorkspaceDetail(workspaceId, userId);
   }
 

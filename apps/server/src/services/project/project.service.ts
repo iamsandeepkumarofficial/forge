@@ -4,6 +4,7 @@ import { ProjectRepository } from "../../catalog/projectRepository.js";
 import { cloneGithubRepo } from "../codebase/codebase.service.js";
 import { GithubService } from "../github/github.service.js";
 import { assertLocalFolderPath } from "../../projects/sessionSandbox/materialize.js";
+import { ensureCanonicalGitRepo } from "../../projects/localWorktree.js";
 import { copyProjectTree } from "./copyProjectTree.js";
 import {
   ensureProjectsRoot,
@@ -85,6 +86,7 @@ export class ProjectService {
     const dest = projectCanonicalDir(result.id);
     try {
       await copyProjectTree(abs, dest);
+      await ensureCanonicalGitRepo(dest);
       await this.projectRepo.updateCanonicalKey(result.id, dest);
     } catch (err) {
       await fs.rm(dest, { recursive: true, force: true }).catch(() => {});
@@ -177,6 +179,13 @@ export class ProjectService {
         .rm(project.canonicalKey, { recursive: true, force: true })
         .catch(() => {});
     }
+    const { resolveSessionsRoot } = await import("./projectsRoot.js");
+    await fs
+      .rm(path.join(resolveSessionsRoot(), id), {
+        recursive: true,
+        force: true
+      })
+      .catch(() => {});
     await this.projectRepo.deleteProject(id);
   }
   async resolveAvailability(projectId: string): Promise<void> {

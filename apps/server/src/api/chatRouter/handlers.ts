@@ -10,6 +10,7 @@ import type {
 } from "../../catalog/sessionChatRepository.js";
 import {
   cancelInteractiveChatTurn,
+  isInteractiveChatTurnRunning,
   newTurnId,
   startInteractiveChatTurn
 } from "../../orchestration/chatTemporalClient.js";
@@ -136,6 +137,53 @@ async function launchTurn(options: {
   return { turnId, workflowId };
 }
 
+/** Drop stale DB "running" rows when Temporal no longer has the workflow. */
+async function reconcileRunningTurn(
+  turns: ChatTurnRepository,
+  sessionId: string
+): Promise<{ id: string; workflowId: string } | null> {
+  const running = await turns.getRunningBySessionId(sessionId);
+  if (!running) return null;
+  const stillRunning = await isInteractiveChatTurnRunning(running.workflowId);
+  if (stillRunning) {
+    return { id: running.id, workflowId: running.workflowId };
+  }
+  await turns.finish({
+    id: running.id,
+    status: "failed",
+    error: "reconciled: temporal workflow no longer running"
+  });
+  return null;
+}
+
+export async function handleGetRunningTurn(options: {
+  req: Request;
+  res: Response;
+  features: ChatFeatureRepository;
+  turns: ChatTurnRepository;
+}): Promise<void> {
+  const { req, res, features, turns } = options;
+  const sessionId = String(req.params.sessionId ?? "");
+  const userId = (req as AuthedRequest).forgeUser.id;
+  try {
+    const card = await features.getBySessionId(sessionId);
+    if (card && card.userId !== userId) {
+      res.status(N_404).json({ error: "session not found" });
+      return;
+    }
+    const turn = await reconcileRunningTurn(turns, sessionId);
+    res.json({
+      turn: turn
+        ? { id: turn.id, workflowId: turn.workflowId, status: "running" }
+        : null
+    });
+  } catch (err) {
+    res
+      .status(N_500)
+      .json({ error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 export async function handleStartChat(options: {
   req: Request;
   res: Response;
@@ -156,7 +204,7 @@ export async function handleStartChat(options: {
       res.status(N_404).json({ error: "session not found" });
       return;
     }
-    const running = await turns.getRunningBySessionId(sessionId);
+    const running = await reconcileRunningTurn(turns, sessionId);
     if (running) {
       res.status(N_409).json({
         error: "A turn is already running for this session",

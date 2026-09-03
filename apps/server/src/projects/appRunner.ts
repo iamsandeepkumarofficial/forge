@@ -21,11 +21,12 @@ import {
   readBackgroundJobLogs,
   startBackgroundJob,
   stopBackgroundJob,
+  freeListeningPort,
   waitUntilHostTcpListening,
   waitUntilJobRunning,
   waitUntilTcpListening
 } from "./backgroundJob.js";
-import { normalizeLaunchCwd, resolveLaunchAppDir } from "./launchCwd.js";
+import { normalizeLaunchCwd, resolveLaunchAppDir, safeRelDir } from "./launchCwd.js";
 
 export type AppType = "web" | "api" | "worker";
 export interface ForgeApp {
@@ -75,13 +76,49 @@ function qualifyApp(app: ForgeApp, repo: string): ForgeApp {
   const cwd =
     localCwd === "." || localCwd === ""
       ? repo
-      : `${repo}/${localCwd.replace(/^\.\//, "")}`;
+      : localCwd === repo || localCwd.startsWith(`${repo}/`)
+        ? localCwd.replace(/^\.\//, "")
+        : `${repo}/${localCwd.replace(/^\.\//, "")}`;
+  const name =
+    app.name.startsWith(`${repo}/`) ? app.name : `${repo}/${app.name}`;
   return {
     ...app,
-    name: `${repo}/${app.name}`,
+    name,
     cwd,
     repo
   };
+}
+
+/** Normalize a workspace root launch.json app into in-memory form. */
+function normalizeWorkspaceRootApp(
+  app: ForgeApp,
+  memberRepos: string[]
+): ForgeApp | null {
+  const repo =
+    inferWorkspaceRepo({ app, memberRepos }) ??
+    (typeof app.repo === "string" && memberRepos.includes(app.repo)
+      ? app.repo
+      : null);
+  if (!repo) return null;
+  return qualifyApp({ ...app, repo }, repo);
+}
+
+function assertCwdUnderRepo(
+  cwd: string,
+  repo: string,
+  memberRepos: string[]
+): string {
+  const cleaned = safeRelDir(cwd || ".") || ".";
+  if (cleaned === "." || cleaned === repo) return repo;
+  if (cleaned.startsWith(`${repo}/`)) return cleaned;
+  const first = cleaned.split("/")[0]!;
+  if (memberRepos.includes(first) && first !== repo) {
+    throw new Error(
+      `cwd "${cwd}" belongs to member "${first}", not "${repo}". Use "${repo}" or "${repo}/apps/web".`
+    );
+  }
+  // Repo-relative path (e.g. apps/web) → session-relative
+  return `${repo}/${cleaned.replace(/^\.\//, "")}`;
 }
 
 async function readLaunchAt(
@@ -122,21 +159,24 @@ export async function readForgeConfig(sessionId: string): Promise<{
 }> {
   const { containerName, workingDir, worktrees } = await ctx(sessionId);
   const trees = worktrees && Object.keys(worktrees).length > 0 ? worktrees : null;
+  const memberRepos = trees ? Object.keys(trees).sort() : [];
 
-  if (trees && Object.keys(trees).length > 0) {
+  // Workspace: only session-root /workspace/.forge/launch.json
+  if (trees) {
+    const rootFound = await readLaunchAt(containerName, workingDir);
+    if (!rootFound) {
+      return { exists: false, source: "none", config: { apps: [] } };
+    }
     const apps: ForgeApp[] = [];
-    let source: LaunchConfigSource = "none";
-    for (const [repo, mount] of Object.entries(trees)) {
-      const found = await readLaunchAt(containerName, mount);
-      if (!found) continue;
-      source = found.source === "none" ? source : found.source;
-      for (const app of found.config.apps) {
-        apps.push(qualifyApp(app, repo));
-      }
+    for (const app of rootFound.config.apps) {
+      const normalized = normalizeWorkspaceRootApp(app, memberRepos);
+      if (normalized) apps.push(normalized);
     }
-    if (apps.length > 0) {
-      return { exists: true, source, config: { apps } };
-    }
+    return {
+      exists: apps.length > 0 || rootFound.source !== "none",
+      source: rootFound.source,
+      config: { apps }
+    };
   }
 
   const found = await readLaunchAt(containerName, workingDir);
@@ -145,40 +185,61 @@ export async function readForgeConfig(sessionId: string): Promise<{
   }
   return { exists: false, source: "none", config: { apps: [] } };
 }
+
+/** Serialize an in-memory workspace app for session-root launch.json. */
+function toWorkspaceRootApp(
+  app: ForgeApp,
+  repo: string,
+  memberRepos: string[]
+): ForgeApp {
+  const local = unqualifyApp(app, repo);
+  const cwdInput = app.cwd?.startsWith(repo)
+    ? app.cwd
+    : local.cwd === "."
+      ? repo
+      : `${repo}/${local.cwd}`;
+  const cwd = assertCwdUnderRepo(cwdInput, repo, memberRepos);
+  return {
+    name: local.name,
+    cwd,
+    command: app.command,
+    type: app.type,
+    repo,
+    ...(app.port != null ? { port: app.port } : {})
+  };
+}
+
 export async function writeForgeConfig(
   sessionId: string,
   config: ForgeConfig
 ): Promise<void> {
   const { containerName, workingDir, worktrees } = await ctx(sessionId);
-  const byRepo = new Map<string, ForgeApp[]>();
-  const unscoped: ForgeApp[] = [];
-  for (const app of config.apps) {
-    if (app.repo) {
-      const list = byRepo.get(app.repo) ?? [];
-      list.push(app);
-      byRepo.set(app.repo, list);
-    } else {
-      unscoped.push(app);
-    }
-  }
+  const memberRepos = worktrees ? Object.keys(worktrees).sort() : [];
+  const isWorkspace = memberRepos.length > 0;
 
-  if (byRepo.size > 0) {
-    for (const [repo, apps] of byRepo) {
-      const mount = worktrees?.[repo] ?? `${workingDir}/${repo}`;
-      const localApps = apps.map((a) => unqualifyApp(a, repo));
-      await writeFileToSandbox({
-        container: containerName,
-        absPath: `${mount}/${LAUNCH_FILE}`,
-        content: JSON.stringify({ apps: localApps }, null, 2) + "\n"
-      });
+  if (isWorkspace) {
+    const rootApps: ForgeApp[] = [];
+    for (const app of config.apps) {
+      const repo = inferWorkspaceRepo({ app, memberRepos });
+      if (!repo) {
+        throw new Error(
+          `Workspace launch apps require a member repo. Set cwd under a member (e.g. "${memberRepos[0]}") or pass repo. Members: ${memberRepos.join(", ")}`
+        );
+      }
+      rootApps.push(toWorkspaceRootApp({ ...app, repo }, repo, memberRepos));
     }
+    await writeFileToSandbox({
+      container: containerName,
+      absPath: `${workingDir}/${LAUNCH_FILE}`,
+      content: JSON.stringify({ apps: rootApps }, null, 2) + "\n"
+    });
     return;
   }
 
   await writeFileToSandbox({
     container: containerName,
     absPath: `${workingDir}/${LAUNCH_FILE}`,
-    content: JSON.stringify({ apps: unscoped }, null, 2) + "\n"
+    content: JSON.stringify({ apps: config.apps }, null, 2) + "\n"
   });
 }
 
@@ -194,34 +255,120 @@ function unqualifyApp(app: ForgeApp, repo: string): ForgeApp {
   return { ...rest, name, cwd };
 }
 
+/** Infer which workspace member owns this launch app. */
+export function inferWorkspaceRepo(options: {
+  app: Pick<ForgeApp, "name" | "cwd" | "repo">;
+  memberRepos: string[];
+}): string | null {
+  const members = options.memberRepos;
+  if (options.app.repo && members.includes(options.app.repo)) {
+    return options.app.repo;
+  }
+  const cwd = safeRelDir(options.app.cwd || ".") || ".";
+  if (cwd !== ".") {
+    const first = cwd.split("/")[0]!;
+    if (members.includes(first)) return first;
+  }
+  const nameFirst = options.app.name.split("/")[0]!;
+  if (members.includes(nameFirst)) return nameFirst;
+  if (members.length === 1) return members[0]!;
+  return null;
+}
+
 export async function upsertLaunchApp(
   sessionId: string,
   app: ForgeApp
 ): Promise<ForgeConfig> {
-  const { repoDir } = await ctx(sessionId);
+  const { repoDir, worktrees } = await ctx(sessionId);
+  const memberRepos = worktrees ? Object.keys(worktrees).sort() : [];
+  const isWorkspace = memberRepos.length > 0;
+
+  let nextApp: ForgeApp = { ...app };
+  if (isWorkspace) {
+    const repo = inferWorkspaceRepo({ app: nextApp, memberRepos });
+    if (!repo) {
+      throw new Error(
+        `Workspace upsert requires a member repo. Set cwd to a member path (e.g. "${memberRepos[0]}") or pass repo. Members: ${memberRepos.join(", ")}`
+      );
+    }
+    const cwd = assertCwdUnderRepo(nextApp.cwd || repo, repo, memberRepos);
+    const localName = nextApp.name.startsWith(`${repo}/`)
+      ? nextApp.name.slice(repo.length + 1)
+      : nextApp.name;
+    nextApp = {
+      ...nextApp,
+      repo,
+      name: `${repo}/${localName}`,
+      cwd
+    };
+  } else {
+    nextApp = {
+      ...nextApp,
+      cwd: normalizeLaunchCwd({ cwd: nextApp.cwd, repoDir })
+    };
+  }
+
   const { config } = await readForgeConfig(sessionId);
-  const usedPorts = config.apps
-    .filter((a) => a.name !== app.name && a.port != null)
+  const localName = nextApp.repo
+    ? unqualifyApp(nextApp, nextApp.repo).name
+    : nextApp.name;
+
+  const others = config.apps.filter((a) => {
+    if (!nextApp.repo) return a.name !== nextApp.name;
+    if (a.repo !== nextApp.repo && !a.name.startsWith(`${nextApp.repo}/`)) {
+      return true;
+    }
+    const aLocal = a.repo
+      ? unqualifyApp(a, a.repo).name
+      : a.name.slice(nextApp.repo.length + 1);
+    return aLocal !== localName;
+  });
+  const existing = config.apps.find((a) => {
+    if (!nextApp.repo) return a.name === nextApp.name;
+    if (a.repo !== nextApp.repo && !a.name.startsWith(`${nextApp.repo}/`)) {
+      return false;
+    }
+    const aLocal = a.repo
+      ? unqualifyApp(a, a.repo).name
+      : a.name.slice(nextApp.repo!.length + 1);
+    return aLocal === localName;
+  });
+  const usedPorts = others
+    .filter((a) => a.port != null)
     .map((a) => a.port as number);
-  const nextApp: ForgeApp = {
-    ...app,
-    cwd: normalizeLaunchCwd({ cwd: app.cwd, repoDir }),
-    port: normalizeLaunchPort(app.port, usedPorts)
+
+  // Omit port on update → keep existing. Explicit port must be free in 3000–3009.
+  const portInput =
+    nextApp.port == null && existing?.port != null
+      ? existing.port
+      : nextApp.port;
+  nextApp = {
+    ...nextApp,
+    port: resolveLaunchPort(portInput, usedPorts)
   };
-  const nextApps = config.apps.filter((a) => a.name !== nextApp.name);
-  nextApps.push(nextApp);
+
+  const nextApps = [...others, nextApp];
   const next = { apps: nextApps };
   await writeForgeConfig(sessionId, next);
   return next;
 }
 
-function normalizeLaunchPort(
+function resolveLaunchPort(
   port: number | undefined,
   usedPorts: number[]
 ): number | undefined {
   if (port == null) return undefined;
-  if (isReservedAppPort(port) && !usedPorts.includes(port)) return port;
-  return allocateReservedAppPort(usedPorts) ?? FIRST_APP_PORT;
+  if (!isReservedAppPort(port)) {
+    throw new Error(
+      `Port ${port} is outside published range ${FIRST_APP_PORT}–${LAST_APP_PORT}. Use a free port in that range.`
+    );
+  }
+  if (usedPorts.includes(port)) {
+    throw new Error(
+      `Port ${port} is already used by another app. Choose a free port in ${FIRST_APP_PORT}–${LAST_APP_PORT}.`
+    );
+  }
+  return port;
 }
 
 async function persistAppPort(options: {
@@ -337,15 +484,59 @@ export async function runApp(
     }
     await publishAppPreview({ sessionId, containerName, port: app.port });
   }
-  return statusForApp({ sessionId, app: nextApp, containerName });
+  const status = await statusForApp({ sessionId, app: nextApp, containerName });
+  if (status.running) {
+    void persistSuccessfulEnvironment(sessionId);
+  }
+  return status;
+}
+
+/** Best-effort: save launch.json + capture node_modules for the next chat. */
+async function persistSuccessfulEnvironment(sessionId: string): Promise<void> {
+  try {
+    const {
+      promoteLaunchToWorkspace,
+      captureWorkspaceDepsForSession
+    } = await import("./workspaceEnvironment.js");
+    await promoteLaunchToWorkspace(sessionId);
+    await captureWorkspaceDepsForSession(sessionId);
+  } catch (err) {
+    console.warn(
+      `[runApp] persist environment ${sessionId}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
 }
 
 async function resolveAppExtraEnv(
   sessionId: string,
   app: ForgeApp
 ): Promise<Record<string, string>> {
-  const base: Record<string, string> =
-    app.port != null ? { PORT: String(app.port) } : {};
+  const base: Record<string, string> = {
+    HOST: "0.0.0.0",
+    ...(app.port != null ? { PORT: String(app.port) } : {})
+  };
+  try {
+    const { resolveSessionEnv } = await import(
+      "../services/parameters/resolveSessionEnv.js"
+    );
+    const sessionEnv = await resolveSessionEnv(sessionId);
+    Object.assign(base, sessionEnv.containerEnv);
+    if (app.repo && sessionEnv.byRepo[app.repo]) {
+      Object.assign(base, sessionEnv.byRepo[app.repo]);
+    }
+  } catch (err) {
+    console.warn(
+      `[runApp] session env resolve failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  try {
+    const { sessionAppDbEnvFor } = await import("./sessionAppDb.js");
+    Object.assign(base, sessionAppDbEnvFor(sessionId));
+  } catch {
+    /* optional */
+  }
   if (!app.repo) return base;
   try {
     const { loadWorkspaceSessionContext } = await import(
@@ -414,6 +605,15 @@ async function startAppProcess(options: {
 }): Promise<{ ok: true } | { ok: false; failure: AppStartFailure }> {
   const { sessionId, containerName, app, appDir } = options;
   const extraEnv = await resolveAppExtraEnv(sessionId, app);
+  // Always replace a prior run; Next orphans often keep the port after pid death.
+  await stopBackgroundJob({
+    containerName,
+    kind: "app",
+    name: app.name
+  }).catch(() => undefined);
+  if (app.port != null) {
+    await freeListeningPort({ containerName, port: app.port });
+  }
   await startBackgroundJob({
     containerName,
     kind: "app",
@@ -660,6 +860,9 @@ export async function listAppStatuses(sessionId: string): Promise<{
   const apps = await Promise.all(
     config.apps.map((a) => statusForApp({ sessionId, app: a, containerName }))
   );
+  void import("./sessionActivity.js")
+    .then(({ touchSessionActivity }) => touchSessionActivity(sessionId))
+    .catch(() => undefined);
   return { exists, source, apps };
 }
 

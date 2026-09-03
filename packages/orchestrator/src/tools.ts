@@ -194,9 +194,17 @@ function previewTools(run: ToolRun): Record<string, Tool> {
       description: formatToolDescription("upsert_launch_app"),
       inputSchema: z.object({
         name: z.string(),
-        cwd: z.string(),
+        cwd: z.string().describe(
+          "App working directory. In workspaces, start with the member repo (e.g. bp-frontend or bp-frontend/apps/web)."
+        ),
         command: z.string(),
         type: z.enum(["web", "api", "worker"]),
+        repo: z
+          .string()
+          .optional()
+          .describe(
+            "Workspace member repo name (optional if cwd starts with the member name)."
+          ),
         port: z
           .number()
           .optional()
@@ -222,6 +230,41 @@ function skillTools(run: ToolRun): Record<string, Tool> {
       inputSchema: z.object({ skillId: z.string() }),
       execute: async (input) =>
         run("invoke_skill", input as Record<string, unknown>)
+    })
+  };
+}
+
+function setupTools(run: ToolRun): Record<string, Tool> {
+  return {
+    upsert_workspace_parameter: tool({
+      description: formatToolDescription("upsert_workspace_parameter"),
+      inputSchema: z.object({
+        key: z.string(),
+        value: z.string(),
+        secret: z.boolean().optional()
+      }),
+      execute: async (input) =>
+        run("upsert_workspace_parameter", input as Record<string, unknown>)
+    }),
+    docker_image_lookup: tool({
+      description: formatToolDescription("docker_image_lookup"),
+      inputSchema: z.object({
+        query: z.string().optional(),
+        engineId: z.enum(["postgres", "mongo"]).optional()
+      }),
+      execute: async (input) =>
+        run("docker_image_lookup", input as Record<string, unknown>)
+    }),
+    provision_app_engine: tool({
+      description: formatToolDescription("provision_app_engine"),
+      inputSchema: z.object({
+        engineId: z.enum(["postgres", "mongo"]),
+        userApproved: z
+          .boolean()
+          .describe("Must be true only after the user explicitly approved.")
+      }),
+      execute: async (input) =>
+        run("provision_app_engine", input as Record<string, unknown>)
     })
   };
 }
@@ -256,6 +299,114 @@ function switchModeTool(currentMode: AgentMode): Record<string, Tool> {
       }),
       execute: async (input) => executeSwitchMode({ currentMode, input })
     })
+  };
+}
+
+const askUserOptionSchema = z.object({
+  id: z.string(),
+  label: z.string()
+});
+const askUserFieldSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  secret: z.boolean().optional(),
+  placeholder: z.string().optional(),
+  /** Prefill shown in the widget — use a sensible default whenever known. */
+  value: z.string().optional()
+});
+
+function askUserTool(): Record<string, Tool> {
+  return {
+    ask_user: tool({
+      description: formatToolDescription("ask_user"),
+      inputSchema: z.object({
+        kind: z.enum(["mcq", "form"]),
+        prompt: z.string(),
+        options: z.array(askUserOptionSchema).optional(),
+        fields: z.array(askUserFieldSchema).optional()
+      }),
+      execute: async (input) => executeAskUser(input)
+    })
+  };
+}
+
+export type AskUserInput = {
+  kind: string;
+  prompt: string;
+  options?: Array<{ id: string; label: string }>;
+  fields?: Array<{
+    id: string;
+    label: string;
+    secret?: boolean;
+    placeholder?: string;
+    value?: string;
+  }>;
+};
+
+export function executeAskUser(input: AskUserInput): {
+  success: boolean;
+  output: string;
+  metadata?: Record<string, unknown>;
+} {
+  const kind = input.kind === "form" ? "form" : input.kind === "mcq" ? "mcq" : null;
+  const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+  if (!kind || !prompt) {
+    return {
+      success: false,
+      output: "ask_user requires kind (mcq|form) and a non-empty prompt."
+    };
+  }
+  if (kind === "mcq") {
+    const options = (input.options ?? [])
+      .filter((o) => o?.id?.trim() && o?.label?.trim())
+      .map((o) => ({ id: o.id.trim(), label: o.label.trim() }));
+    if (options.length < 2) {
+      return {
+        success: false,
+        output: "ask_user mcq requires at least two options with id and label."
+      };
+    }
+    return {
+      success: true,
+      output:
+        "Waiting for the user to answer in the chat widget. Stop now — do not call more tools this turn.",
+      metadata: {
+        needsUserInput: true,
+        kind: "mcq",
+        prompt,
+        options
+      }
+    };
+  }
+  const fields = (input.fields ?? [])
+    .filter((f) => f?.id?.trim() && f?.label?.trim())
+    .map((f) => ({
+      id: f.id.trim(),
+      label: f.label.trim(),
+      ...(f.secret === true ? { secret: true } : {}),
+      ...(typeof f.placeholder === "string" && f.placeholder.trim()
+        ? { placeholder: f.placeholder.trim() }
+        : {}),
+      ...(typeof f.value === "string"
+        ? { value: f.value }
+        : {})
+    }));
+  if (fields.length < 1) {
+    return {
+      success: false,
+      output: "ask_user form requires at least one field with id and label."
+    };
+  }
+  return {
+    success: true,
+    output:
+      "Waiting for the user to answer in the chat widget. Stop now — do not call more tools this turn. Form fields should include value defaults when known.",
+    metadata: {
+      needsUserInput: true,
+      kind: "form",
+      prompt,
+      fields
+    }
   };
 }
 
@@ -312,8 +463,10 @@ function toolRegistry(
     ...shellTools(run),
     ...previewTools(run),
     ...skillTools(run),
+    ...setupTools(run),
     ...optionalWebTools(run),
-    ...switchModeTool(currentMode)
+    ...switchModeTool(currentMode),
+    ...askUserTool()
   };
 }
 
@@ -382,6 +535,9 @@ export async function executeNamedTool(opts: {
   if (opts.toolName === "switch_mode") {
     const target = typeof opts.args.target === "string" ? opts.args.target : "";
     return executeSwitchMode({ currentMode: agentMode, input: { target } });
+  }
+  if (opts.toolName === "ask_user") {
+    return executeAskUser(opts.args as AskUserInput);
   }
   const denied = denyChatToolExecute({
     agentMode,

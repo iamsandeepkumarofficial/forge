@@ -4,6 +4,7 @@ import path from "node:path";
 
 const DEFAULT_FORGE_HOME = path.join(os.homedir(), ".forge");
 const DEFAULT_PROJECTS_ROOT = path.join(DEFAULT_FORGE_HOME, "projects");
+const DEFAULT_SESSIONS_ROOT = path.join(DEFAULT_FORGE_HOME, "sessions");
 
 function expandHome(raw: string): string {
   if (raw.startsWith("~/")) {
@@ -15,11 +16,13 @@ function expandHome(raw: string): string {
   return raw;
 }
 
-/** Canonical project copies live under ~/.forge/projects (RFC 0004). */
-export function resolveProjectsRoot(): string {
-  const raw = process.env.FORGE_PROJECTS_ROOT?.trim();
+function resolveAbsoluteRoot(
+  envValue: string | undefined,
+  fallback: string
+): string {
+  const raw = envValue?.trim();
   if (!raw) {
-    return DEFAULT_PROJECTS_ROOT;
+    return fallback;
   }
   const expanded = expandHome(raw);
   return path.isAbsolute(expanded)
@@ -27,12 +30,41 @@ export function resolveProjectsRoot(): string {
     : path.resolve(process.cwd(), expanded);
 }
 
+/** Canonical project copies live under ~/.forge/projects (RFC 0004). */
+export function resolveProjectsRoot(): string {
+  return resolveAbsoluteRoot(
+    process.env.FORGE_PROJECTS_ROOT,
+    DEFAULT_PROJECTS_ROOT
+  );
+}
+
+/** Per-session local worktrees live under ~/.forge/sessions (RFC 0005). */
+export function resolveSessionsRoot(): string {
+  return resolveAbsoluteRoot(
+    process.env.FORGE_SESSIONS_ROOT,
+    DEFAULT_SESSIONS_ROOT
+  );
+}
+
 export function projectCanonicalDir(projectId: string): string {
   return path.join(resolveProjectsRoot(), projectId);
 }
 
+export function sessionWorktreeDir(
+  projectId: string,
+  sessionId: string
+): string {
+  return path.join(resolveSessionsRoot(), projectId, sessionId);
+}
+
 export async function ensureProjectsRoot(): Promise<string> {
   const root = resolveProjectsRoot();
+  await fs.mkdir(root, { recursive: true });
+  return root;
+}
+
+export async function ensureSessionsRoot(): Promise<string> {
+  const root = resolveSessionsRoot();
   await fs.mkdir(root, { recursive: true });
   return root;
 }

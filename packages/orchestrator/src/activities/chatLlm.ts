@@ -200,7 +200,7 @@ async function emitLlmStepChunks(opts: {
 
 async function generateLlmStepText(opts: {
   provider: ChatLlmProvider;
-  model: ReturnType<typeof resolveChatLanguageModel>;
+  model: Awaited<ReturnType<typeof resolveChatLanguageModel>>;
   baseSystem: string;
   messages: StoredMessage[];
   toolsForModel: Record<string, unknown>;

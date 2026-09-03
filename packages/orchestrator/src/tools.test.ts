@@ -5,6 +5,7 @@ import {
   buildChatTools,
   buildTools,
   executeNamedTool,
+  executeAskUser,
   executeSwitchMode,
   webToolsEnabled,
   withWebToolsIfEnabled
@@ -56,6 +57,7 @@ describe("tools", () => {
     assert.ok(names.includes("upsert_launch_app"));
     assert.ok(names.includes("list_skills"));
     assert.ok(names.includes("switch_mode"));
+    assert.ok(names.includes("ask_user"));
     assert.equal(names.includes("web_search"), false);
     assert.equal(names.includes("git_clone"), false);
     assert.equal(names.includes("jira_get_ticket"), false);
@@ -234,5 +236,34 @@ describe("tools", () => {
     });
     assert.equal(auto.metadata?.applied, true);
     assert.equal(auto.metadata?.mode, "plan");
+  });
+
+  it("executeAskUser returns needsUserInput metadata for mcq and form", () => {
+    const mcq = executeAskUser({
+      kind: "mcq",
+      prompt: "Provision Mongo?",
+      options: [
+        { id: "yes", label: "Yes" },
+        { id: "no", label: "No" }
+      ]
+    });
+    assert.equal(mcq.metadata?.needsUserInput, true);
+    assert.equal(mcq.metadata?.kind, "mcq");
+    const form = executeAskUser({
+      kind: "form",
+      prompt: "Enter secrets",
+      fields: [
+        {
+          id: "JWT_SECRET",
+          label: "JWT secret",
+          secret: true,
+          value: "dev-jwt"
+        }
+      ]
+    });
+    assert.equal(form.metadata?.needsUserInput, true);
+    assert.equal(form.metadata?.kind, "form");
+    const fields = form.metadata?.fields as Array<{ value?: string }>;
+    assert.equal(fields[0]?.value, "dev-jwt");
   });
 });

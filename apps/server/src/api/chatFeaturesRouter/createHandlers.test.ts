@@ -42,6 +42,11 @@ describe("chatFeatures createHandlers", () => {
         autoStartPreview: async () => undefined
       }
     });
+    mock.module("../../projects/sessionProvision.js", {
+      exports: {
+        finalizeSessionProvision: async () => undefined
+      }
+    });
     ({ handleGetChat } = await import("./createHandlers.js"));
   });
 

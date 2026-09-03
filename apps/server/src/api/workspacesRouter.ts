@@ -6,11 +6,19 @@ import {
 import { WorkspaceService } from "../services/workspace/workspace.service.js";
 import { ChatFeatureService } from "../projects/chatFeatureService.js";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
-import { provisionSessionSandbox } from "../projects/sessionSandbox.js";
-import { autoStartPreview } from "../projects/appRunner.js";
+import {
+  destroySessionSandbox,
+  provisionSessionSandbox
+} from "../projects/sessionSandbox.js";
+import { finalizeSessionProvision } from "../projects/sessionProvision.js";
 import type { WorkspaceRoute } from "@forge/db";
+import { ParameterRepository } from "../catalog/parameterRepository.js";
+import { WorkspaceHealthRepository } from "../catalog/workspaceHealthRepository.js";
+import { runWorkspaceAnalyzeAndPrepare } from "../services/workspace/workspaceHealthJob.js";
 
 const N_201 = 201;
+const N_202 = 202;
+const N_204 = 204;
 const N_400 = 400;
 const N_403 = 403;
 const N_404 = 404;
@@ -266,13 +274,272 @@ export function createWorkspacesRouter(): Router {
         title
       });
       void provisionSessionSandbox(chat.sessionId)
-        .then(() => autoStartPreview(chat.sessionId))
+        .then(() => finalizeSessionProvision(chat.sessionId))
         .catch((err) => {
           console.warn(
             `[workspace chat ${chat.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`
           );
         });
       res.status(N_201).json(chat);
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.delete("/:workspaceId/chats/:chatId", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      const chatId = String(req.params.chatId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const chat = await chatRepo.getById(chatId);
+      if (
+        !chat ||
+        chat.workspaceId !== workspaceId ||
+        chat.userId !== userId
+      ) {
+        return res.status(N_404).json({ error: "Chat not found" });
+      }
+      await chatRepo.deleteChatFeature(chatId);
+      void destroySessionSandbox(chat.sessionId).catch((err) => {
+        console.warn(
+          `[workspace chat ${chatId}] sandbox teardown failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
+      res.status(N_204).end();
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.get("/:workspaceId/health", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const healthRepo = new WorkspaceHealthRepository();
+      const row = await healthRepo.get(workspaceId);
+      res.json(
+        row ?? {
+          workspaceId,
+          status: "computing",
+          report: {},
+          computedAt: null
+        }
+      );
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.post("/:workspaceId/analyze", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const healthRepo = new WorkspaceHealthRepository();
+      await healthRepo.setComputing(workspaceId);
+      void runWorkspaceAnalyzeAndPrepare(workspaceId, userId).catch((err) => {
+        console.warn(
+          `[workspace analyze ${workspaceId}]: ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
+      const row = await healthRepo.get(workspaceId);
+      res.status(N_202).json(
+        row ?? {
+          workspaceId,
+          status: "computing",
+          report: {},
+          computedAt: null
+        }
+      );
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.get("/:workspaceId/parameters", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const paramRepo = new ParameterRepository();
+      const parameters = await paramRepo.listWorkspaceParameters(workspaceId);
+      res.json({
+        parameters: parameters.map((p) => ({
+          key: p.key,
+          value: p.secret ? (p.value ? "••••••••" : "") : p.value,
+          secret: p.secret,
+          hasValue: p.value.length > 0
+        }))
+      });
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.put("/:workspaceId/parameters", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      const value = typeof req.body?.value === "string" ? req.body.value : "";
+      const secret = Boolean(req.body?.secret);
+      if (!key) {
+        return res.status(N_400).json({ error: "key is required" });
+      }
+      const paramRepo = new ParameterRepository();
+      const saved = await paramRepo.upsertWorkspaceParameter({
+        workspaceId,
+        key,
+        value,
+        secret
+      });
+      res.json({
+        key: saved.key,
+        value: saved.secret ? "••••••••" : saved.value,
+        secret: saved.secret
+      });
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.delete("/:workspaceId/parameters/:key", pocAuth, (async (
+    req,
+    res
+  ) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const paramRepo = new ParameterRepository();
+      await paramRepo.deleteWorkspaceParameter(
+        workspaceId,
+        String(req.params.key)
+      );
+      res.status(N_204).end();
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.get("/:workspaceId/databases", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const { loadWorkspaceAppDbStatus } = await import(
+        "../projects/sessionAppDb.js"
+      );
+      res.json(await loadWorkspaceAppDbStatus(workspaceId));
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.post("/:workspaceId/databases", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const engineId =
+        typeof req.body?.engineId === "string" ? req.body.engineId.trim() : "";
+      if (engineId !== "postgres" && engineId !== "mongo") {
+        return res
+          .status(N_400)
+          .json({ error: "engineId must be postgres or mongo" });
+      }
+      const { attachWorkspaceDatabase } = await import(
+        "../projects/sessionAppDb.js"
+      );
+      const provisioned = await attachWorkspaceDatabase(workspaceId, engineId);
+      res.status(N_201).json({
+        engineId: provisioned.engineId,
+        label: provisioned.label,
+        image: provisioned.image,
+        database: provisioned.database,
+        envKey: provisioned.envKey,
+        networkAlias: provisioned.networkAlias,
+        hostPort: provisioned.hostPort,
+        reused: provisioned.reused,
+        pulled: provisioned.pulled
+      });
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.delete("/:workspaceId/databases/:engineId", pocAuth, (async (
+    req,
+    res
+  ) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      const engineId = String(req.params.engineId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      if (engineId !== "postgres" && engineId !== "mongo") {
+        return res
+          .status(N_400)
+          .json({ error: "engineId must be postgres or mongo" });
+      }
+      const { detachWorkspaceDatabase } = await import(
+        "../projects/sessionAppDb.js"
+      );
+      await detachWorkspaceDatabase(workspaceId, engineId);
+      res.status(N_204).end();
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.get("/:workspaceId/environment", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const { getWorkspaceEnvironmentStatus } = await import(
+        "../projects/workspaceEnvironment.js"
+      );
+      res.json(await getWorkspaceEnvironmentStatus(workspaceId));
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.delete("/:workspaceId/environment/launch", pocAuth, (async (
+    req,
+    res
+  ) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const { clearWorkspaceLaunch } = await import(
+        "../projects/workspaceEnvironment.js"
+      );
+      await clearWorkspaceLaunch(workspaceId);
+      res.status(N_204).end();
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.delete("/:workspaceId/environment/deps-cache", pocAuth, (async (
+    req,
+    res
+  ) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const { clearWorkspacePackageCache } = await import(
+        "../projects/workspaceEnvironment.js"
+      );
+      await clearWorkspacePackageCache(workspaceId);
+      res.status(N_204).end();
     } catch (error: unknown) {
       res.status(statusFromError(error)).json({ error: errorMessage(error) });
     }

@@ -7,6 +7,7 @@ import {
   AUTO_MODEL_KEY,
   TERMINAL_OPEN_KEY,
   TERMINAL_HEIGHT_KEY,
+  DOCK_MODE_KEY,
   loadStoredProvider,
   loadStoredModelMap,
   loadStoredMode,
@@ -14,8 +15,10 @@ import {
   loadStoredAutoModel,
   loadTerminalOpen,
   loadTerminalHeight,
+  loadDockMode,
   persistTerminalOpen,
-  persistTerminalHeight
+  persistTerminalHeight,
+  persistDockMode
 } from "./storage";
 
 describe("chat-workbench storage", () => {
@@ -31,6 +34,7 @@ describe("chat-workbench storage", () => {
     expect(loadStoredModelMap()).toEqual({});
     expect(loadTerminalOpen()).toBe(false);
     expect(loadTerminalHeight()).toBeGreaterThan(0);
+    expect(loadDockMode()).toBe("terminal");
   });
 
   it("reads stored values from localStorage", () => {
@@ -46,8 +50,11 @@ describe("chat-workbench storage", () => {
     expect(loadStoredModelMap()).toEqual({ openai: "gpt-4o" });
     persistTerminalOpen(true);
     persistTerminalHeight(loadTerminalHeight());
+    persistDockMode("devtools");
     expect(localStorage.getItem(TERMINAL_OPEN_KEY)).toBe("1");
+    expect(localStorage.getItem(DOCK_MODE_KEY)).toBe("devtools");
     expect(loadTerminalOpen()).toBe(true);
+    expect(loadDockMode()).toBe("devtools");
     expect(Number(localStorage.getItem(TERMINAL_HEIGHT_KEY))).toBe(
       loadTerminalHeight()
     );

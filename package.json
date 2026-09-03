@@ -16,7 +16,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
-    "docker:sandbox": "docker build -f Dockerfile.sandbox -t forge-sandbox:latest ."
+    "docker:sandbox": "docker build -f Dockerfile.sandbox -t forge-sandbox:latest . && docker build -f Dockerfile.sandbox-generic -t forge-sandbox-generic:latest ."
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",

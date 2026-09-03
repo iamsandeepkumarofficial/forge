@@ -5,9 +5,9 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   BUILD_MAX_BUFFER,
-  DEFAULT_SANDBOX_IMAGE,
   DOCKER_MAX_BUFFER,
   FIRST_APP_PORT,
+  GENERIC_SANDBOX_IMAGE,
   preferredSandboxImageName,
   RESERVED_PORTS,
   sandboxContainerName,
@@ -15,13 +15,17 @@ import {
   sessionVolumeName,
   WORKSPACE_MOUNT
 } from "./constants.js";
-import type { BindMount } from "../sandboxRuntime/types.js";
+import type { BindMount, NamedVolumeMount } from "../sandboxRuntime/types.js";
 
 const execFileAsync = promisify(execFile);
 
-function sandboxDockerfilePath(): string {
+function sandboxDockerfilePath(image: string): string {
   const here = fileURLToPath(import.meta.url);
-  return path.resolve(here, "../../../../Dockerfile.sandbox");
+  const name =
+    image === GENERIC_SANDBOX_IMAGE || image.includes("generic")
+      ? "Dockerfile.sandbox-generic"
+      : "Dockerfile.sandbox";
+  return path.resolve(here, `../../../../${name}`);
 }
 
 function repoRootForSandboxBuild(): string {
@@ -38,30 +42,32 @@ async function imageExists(image: string): Promise<boolean> {
   }
 }
 
-export async function resolveSandboxImage(): Promise<string> {
+export async function resolveSandboxImage(
+  preferred?: string
+): Promise<string> {
   const configured = process.env.FORGE_SANDBOX_IMAGE?.trim();
   if (configured) {
     return configured;
   }
-  const preferred = DEFAULT_SANDBOX_IMAGE;
-  if (await imageExists(preferred)) {
-    return preferred;
+  const target = preferred?.trim() || preferredSandboxImageName();
+  if (await imageExists(target)) {
+    return target;
   }
-  const dockerfile = sandboxDockerfilePath();
+  const dockerfile = sandboxDockerfilePath(target);
   try {
     await fs.access(dockerfile);
   } catch {
     throw new Error(
-      `Sandbox image ${preferred} not found and ${dockerfile} is missing. ` +
-        `Build with: docker build -f Dockerfile.sandbox -t ${preferred} .`
+      `Sandbox image ${target} not found and ${dockerfile} is missing. ` +
+        `Build with: pnpm docker:sandbox`
     );
   }
   await execFileAsync(
     "docker",
-    ["build", "-f", dockerfile, "-t", preferred, repoRootForSandboxBuild()],
+    ["build", "-f", dockerfile, "-t", target, repoRootForSandboxBuild()],
     { maxBuffer: BUILD_MAX_BUFFER }
   );
-  return preferred;
+  return target;
 }
 
 export async function docker(args: string[]): Promise<{
@@ -103,8 +109,9 @@ async function bootstrapSandboxTools(containerName: string): Promise<void> {
     "(command -v git >/dev/null 2>&1 || " +
       "(command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends git) || " +
       "apk add --no-cache git >/dev/null 2>&1 || true); " +
+      "(command -v node >/dev/null 2>&1 && " +
       "(node -e \"require('playwright')\" >/dev/null 2>&1 || " +
-      "(npm install -g playwright@1.49.1 && playwright install --with-deps chromium) || true); " +
+      "(npm install -g playwright@1.49.1 && playwright install --with-deps chromium) || true) || true); " +
       "git config --global --replace-all safe.directory '*' >/dev/null 2>&1 || true"
   ]);
 }
@@ -115,21 +122,23 @@ async function inspectContainer(name: string): Promise<{
   portBaseLabel: string;
   imageName: string;
   bindWorkspaceLabel: string;
+  depsVolLabel: string;
 }> {
   try {
     const { stdout } = await execFileAsync("docker", [
       "inspect",
       "-f",
-      '{{.State.Running}}|{{index .Config.Labels "forge.portbase"}}|{{.Config.Image}}|{{index .Config.Labels "forge.bindworkspace"}}',
+      '{{.State.Running}}|{{index .Config.Labels "forge.portbase"}}|{{.Config.Image}}|{{index .Config.Labels "forge.bindworkspace"}}|{{index .Config.Labels "forge.depsvol"}}',
       name
     ]);
-    const [running, label, image, bindWs] = stdout.trim().split("|");
+    const [running, label, image, bindWs, depsVol] = stdout.trim().split("|");
     return {
       exists: true,
       isRunning: running === "true",
       portBaseLabel: label ?? "",
       imageName: image ?? "",
-      bindWorkspaceLabel: bindWs ?? ""
+      bindWorkspaceLabel: bindWs ?? "",
+      depsVolLabel: depsVol ?? ""
     };
   } catch {
     return {
@@ -137,7 +146,8 @@ async function inspectContainer(name: string): Promise<{
       isRunning: false,
       portBaseLabel: "",
       imageName: "",
-      bindWorkspaceLabel: ""
+      bindWorkspaceLabel: "",
+      depsVolLabel: ""
     };
   }
 }
@@ -158,14 +168,30 @@ function workspaceBindHost(
   return bindMounts?.find((m) => m.containerPath === WORKSPACE_MOUNT)?.hostPath;
 }
 
+function namedVolumeArgs(vols: NamedVolumeMount[] | undefined): string[] {
+  if (!vols?.length) return [];
+  const args: string[] = [];
+  for (const v of vols) {
+    args.push("-v", `${v.volumeName}:${v.containerPath}`);
+  }
+  return args;
+}
+
+function depsVolLabelValue(vols: NamedVolumeMount[] | undefined): string {
+  return vols?.map((v) => v.volumeName).sort().join(",") ?? "";
+}
+
 async function createSandboxContainer(options: {
   sessionId: string;
   name: string;
   volumeName: string;
   portBase: number;
   bindMounts?: BindMount[];
+  namedVolumes?: NamedVolumeMount[];
+  containerEnv?: Record<string, string>;
+  image?: string;
 }): Promise<void> {
-  const sandboxImage = await resolveSandboxImage();
+  const sandboxImage = await resolveSandboxImage(options.image);
   const portArgs: string[] = [];
   for (let i = 0; i < RESERVED_PORTS; i++) {
     portArgs.push("-p", `${options.portBase + i}:${FIRST_APP_PORT + i}`);
@@ -175,6 +201,7 @@ async function createSandboxContainer(options: {
     ? []
     : (["-v", `${options.volumeName}:${WORKSPACE_MOUNT}`] as string[]);
   const extraBinds = bindMountArgs(options.bindMounts);
+  const extraNamed = namedVolumeArgs(options.namedVolumes);
   const labels: string[] = [
     "forge.sandbox=1",
     `forge.session=${options.sessionId}`,
@@ -183,19 +210,37 @@ async function createSandboxContainer(options: {
   if (wsHost) {
     labels.push(`forge.bindworkspace=${wsHost}`);
   }
+  const depsVol = depsVolLabelValue(options.namedVolumes);
+  if (depsVol) {
+    labels.push(`forge.depsvol=${depsVol}`);
+  }
   const labelArgs = labels.flatMap((l) => ["--label", l]);
+  const network = process.env.FORGE_SANDBOX_NETWORK?.trim() || "forge";
+  const envArgs: string[] = [
+    "-e",
+    "NODE_PATH=/usr/local/lib/node_modules",
+    "-e",
+    `HOST=0.0.0.0`,
+    "-e",
+    `FORGE_PUBLISHED_APP_PORTS=${FIRST_APP_PORT}-${FIRST_APP_PORT + RESERVED_PORTS - 1}`
+  ];
+  for (const [k, v] of Object.entries(options.containerEnv ?? {})) {
+    envArgs.push("-e", `${k}=${v}`);
+  }
   await docker([
     "run",
     "-d",
     "--init",
     "--name",
     options.name,
+    "--network",
+    network,
     ...labelArgs,
-    "-e",
-    "NODE_PATH=/usr/local/lib/node_modules",
+    ...envArgs,
     ...portArgs,
     ...volumeArgs,
     ...extraBinds,
+    ...extraNamed,
     "-w",
     WORKSPACE_MOUNT,
     sandboxImage,
@@ -207,6 +252,9 @@ async function createSandboxContainer(options: {
 
 export type EnsureContainerOpts = {
   bindMounts?: BindMount[];
+  namedVolumes?: NamedVolumeMount[];
+  containerEnv?: Record<string, string>;
+  image?: string;
 };
 
 export async function ensureContainer(
@@ -216,8 +264,10 @@ export async function ensureContainer(
 ): Promise<string> {
   const name = sandboxContainerName(sessionId);
   const portBase = sessionHostPortBase(sessionId);
-  const preferredImage = preferredSandboxImageName();
+  const preferredImage =
+    opts?.image?.trim() || preferredSandboxImageName();
   const desiredBind = workspaceBindHost(opts?.bindMounts) ?? "";
+  const desiredDeps = depsVolLabelValue(opts?.namedVolumes);
   let state = await inspectContainer(name);
   const wrongPorts = state.exists && state.portBaseLabel !== String(portBase);
   const wrongImage =
@@ -226,14 +276,17 @@ export async function ensureContainer(
     state.imageName !== preferredImage;
   const wrongBind =
     state.exists && (state.bindWorkspaceLabel || "") !== desiredBind;
-  if (wrongPorts || wrongImage || wrongBind) {
+  const wrongDeps =
+    state.exists && (state.depsVolLabel || "") !== desiredDeps;
+  if (wrongPorts || wrongImage || wrongBind || wrongDeps) {
     await execFileAsync("docker", ["rm", "-f", name]).catch(() => {});
     state = {
       exists: false,
       isRunning: false,
       portBaseLabel: "",
       imageName: "",
-      bindWorkspaceLabel: ""
+      bindWorkspaceLabel: "",
+      depsVolLabel: ""
     };
   }
   let needsBootstrap = false;
@@ -243,7 +296,10 @@ export async function ensureContainer(
       name,
       volumeName,
       portBase,
-      bindMounts: opts?.bindMounts
+      bindMounts: opts?.bindMounts,
+      namedVolumes: opts?.namedVolumes,
+      containerEnv: opts?.containerEnv,
+      image: preferredImage
     });
     needsBootstrap = true;
   } else if (!state.isRunning) {
@@ -265,14 +321,23 @@ export async function ensureContainer(
 
 /**
  * Docker Desktop (esp. gVisor) can drop published host ports while the
- * container keeps running. Restart once if the reserved preview ports are gone.
+ * container keeps running. Restart once if a port that has a listener
+ * inside the container is unreachable on the host.
  */
 export async function repairHostPortBindings(options: {
   containerName: string;
   portBase: number;
 }): Promise<boolean> {
-  const { isHostTcpListening } = await import("../backgroundJob.js");
-  const missing = await missingHostPorts(options.portBase, isHostTcpListening);
+  const { isHostTcpListening, isTcpListening } = await import(
+    "../backgroundJob.js"
+  );
+  const missing = await publishedHostPortsNeedingRepair({
+    containerName: options.containerName,
+    portBase: options.portBase,
+    isHostOpen: isHostTcpListening,
+    isContainerOpen: (port) =>
+      isTcpListening({ containerName: options.containerName, port })
+  });
   if (missing.length === 0) return false;
   console.warn(
     `[sandbox] host ports missing for ${options.containerName}: ${missing.join(", ")}; restarting container to rebind`
@@ -280,21 +345,33 @@ export async function repairHostPortBindings(options: {
   await docker(["restart", options.containerName]);
   // Give Docker Desktop a moment to re-attach port proxies.
   for (let i = 0; i < 20; i += 1) {
-    const stillMissing = await missingHostPorts(
-      options.portBase,
-      isHostTcpListening
-    );
+    const stillMissing = await publishedHostPortsNeedingRepair({
+      containerName: options.containerName,
+      portBase: options.portBase,
+      isHostOpen: isHostTcpListening,
+      isContainerOpen: (port) =>
+        isTcpListening({ containerName: options.containerName, port })
+    });
     if (stillMissing.length === 0) return true;
     await new Promise((r) => setTimeout(r, 250));
   }
   return true;
 }
 
-async function missingHostPorts(
-  portBase: number,
-  isOpen: (port: number) => Promise<boolean>
-): Promise<number[]> {
-  const ports = Array.from({ length: RESERVED_PORTS }, (_, i) => portBase + i);
-  const flags = await Promise.all(ports.map((p) => isOpen(p)));
-  return ports.filter((_, i) => !flags[i]);
+export async function publishedHostPortsNeedingRepair(options: {
+  containerName: string;
+  portBase: number;
+  isHostOpen: (port: number) => Promise<boolean>;
+  isContainerOpen: (port: number) => Promise<boolean>;
+}): Promise<number[]> {
+  const needed: number[] = [];
+  for (let i = 0; i < RESERVED_PORTS; i++) {
+    const containerPort = FIRST_APP_PORT + i;
+    if (await options.isContainerOpen(containerPort)) {
+      needed.push(options.portBase + i);
+    }
+  }
+  if (needed.length === 0) return [];
+  const flags = await Promise.all(needed.map((p) => options.isHostOpen(p)));
+  return needed.filter((_, i) => !flags[i]);
 }

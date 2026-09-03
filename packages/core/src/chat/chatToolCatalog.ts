@@ -11,7 +11,7 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "read_file",
     toolName: "Read file",
     description:
-      "Read a file under `/workspace` (example: `package.json`, not `<repo>/package.json`).",
+      "Read a file under `/workspace`. In workspaces paths must start with a member repo (e.g. `bp-frontend/package.json`).",
     exampleUsecases: [
       "You need the contents of a known path before editing or answering."
     ],
@@ -61,7 +61,7 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "run_terminal",
     toolName: "Run terminal",
     description:
-      "Run a shell command. Default cwd is `/workspace` (the git root). Pass workingDirectory only for a subdirectory. Set background:true for long installs/tests; poll with action logs|status|stop and jobName.",
+      "Run a shell command. Default cwd is `/workspace`. In workspaces pass `workingDirectory` as a member repo (e.g. `bp-frontend`). Set background:true for long installs/tests.",
     exampleUsecases: [
       "git, pnpm, tests, typecheck, or Playwright scripts from a skill.",
       "Long pnpm install or test suites: background:true, then action=logs."
@@ -90,13 +90,14 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "preview_start",
     toolName: "Preview start",
     description:
-      "Start a `.forge/launch.json` app in this sandbox. Name must already be listed. Succeeds only after the process is up and its published port (3000–3009) is listening; otherwise returns failure with logs.",
+      "Start a `.forge/launch.json` app on the network plane. Name must already be listed. Succeeds only after the process is up and its published port (3000–3009) is listening; otherwise returns failure with logs. Confirm install and DATABASE_URL/migrations for APIs before calling.",
     exampleUsecases: [
       "Starting a declared web/api app to get its preview URL."
     ],
     negativeUsecases: [
       "App is not in launch.json — upsert_launch_app first.",
-      "Do not invent one-off processes outside launch.json."
+      "Do not invent one-off processes outside launch.json.",
+      "Do not start until install succeeded and required env/DB (including migrations) are ready."
     ]
   },
   {
@@ -110,14 +111,15 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "upsert_launch_app",
     toolName: "Upsert launch app",
     description:
-      "Add or update one app in `.forge/launch.json` when missing or incomplete (no user confirmation required). For web/api apps set port in 3000–3009 (prefer 3000 for the first app).",
+      "Add or update one app in `.forge/launch.json` when missing or incomplete (no user confirmation required). For web/api apps set port in 3000–3009 (prefer 3000 for the first app). In workspaces, Forge writes the session-root `/workspace/.forge/launch.json` — set cwd under the member (e.g. bp-frontend or bp-frontend/apps/web) and optionally repo.",
     exampleUsecases: [
       "Launch.json missing or app not listed; then preview_start that name."
     ],
     negativeUsecases: [
       "Do not use this to edit source files.",
       "Ask mode cannot call this — switch modes first.",
-      "Do not use ports outside 3000–3009 (e.g. 4000, 5173) — they are not published."
+      "Do not use ports outside 3000–3009 (e.g. 4000, 5173) — they are not published.",
+      "Do not install databases/system packages instead of preview_start."
     ]
   },
   {
@@ -180,6 +182,61 @@ const CATALOG: ChatToolCatalogItem[] = [
     negativeUsecases: [
       "Unknown skillId — list_skills first.",
       "Do not call this just to list skills."
+    ]
+  },
+  {
+    toolId: "upsert_workspace_parameter",
+    toolName: "Upsert workspace parameter",
+    description:
+      "Create or update a workspace Parameter store key (injected into sandbox env). Workspace sessions only.",
+    exampleUsecases: [
+      "Finalize an env key after confirming the value with the user or from a non-secret .env.example."
+    ],
+    negativeUsecases: [
+      "Guessing secrets — ask the user.",
+      "Project-only chats without a workspace."
+    ]
+  },
+  {
+    toolId: "docker_image_lookup",
+    toolName: "Docker image lookup",
+    description:
+      "Look up allowlisted Forge sandbox and app-database Docker images to propose to the user.",
+    exampleUsecases: [
+      "Before proposing Postgres/Mongo provision or explaining sandbox image choice."
+    ],
+    negativeUsecases: [
+      "Pulling or running arbitrary images — only returns allowlisted metadata."
+    ]
+  },
+  {
+    toolId: "provision_app_engine",
+    toolName: "Provision app engine",
+    description:
+      "Attach a Forge-managed Postgres or Mongo database to the workspace. Requires userApproved: true after the user explicitly agrees.",
+    exampleUsecases: [
+      "User approved provisioning Postgres/Mongo for DATABASE_URL / MONGODB_URI."
+    ],
+    negativeUsecases: [
+      "Calling without userApproved: true.",
+      "Installing database servers inside the sandbox via apt."
+    ]
+  },
+  {
+    toolId: "ask_user",
+    toolName: "Ask user",
+    description:
+      "Pause the turn and show an interactive MCQ or form widget in the chat composer. Use for setup consent (params, secrets, infra, toolchain) — not free-form prose questions. For form fields always set `value` to a sensible default (example URL, generated secret, NODE_ENV=development, etc.) so the user can accept or edit.",
+    exampleUsecases: [
+      "Ask which Mongo connection string to store before upsert_workspace_parameter — prefill value from .env.example or a local mongo URL.",
+      "Confirm provision_app_engine (Postgres/Mongo) before calling with userApproved: true.",
+      "Ask the user to approve installing a missing runtime (e.g. python3)."
+    ],
+    negativeUsecases: [
+      "Do not ask in plain text when a widget would collect the answer.",
+      "Do not call mutating tools in the same turn after ask_user — stop and wait.",
+      "Do not use this for mode changes — use switch_mode.",
+      "Do not leave form value empty when a sensible default is known."
     ]
   },
   {

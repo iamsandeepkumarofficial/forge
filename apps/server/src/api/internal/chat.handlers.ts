@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { ChatFeatureRepository } from "../../catalog/chatFeatureRepository.js";
 import {
   ChatTurnChunkRepository,
   ChatTurnRepository,
@@ -179,6 +180,15 @@ export async function handleFinishTurn(options: {
     if (!turn) {
       res.status(N_404).json({ error: "turn not found" });
       return;
+    }
+    try {
+      const features = new ChatFeatureRepository();
+      const card = await features.getBySessionId(turn.sessionId);
+      if (card) await features.updateLastActivity(card.id);
+    } catch (err) {
+      console.warn(
+        `[chat] last activity after turn finish failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
     res.json(turn);
   } catch (err) {

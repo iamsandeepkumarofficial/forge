@@ -80,6 +80,7 @@ async function handleTerminalRun(options: {
     containerName: sandbox.containerName,
     repoDir: sandbox.repoDir,
     workingDir: sandbox.workingDir,
+    worktrees: sandbox.worktrees,
     command: commandTrimmed,
     workingDirectory: options.workingDirectory
   });
@@ -110,24 +111,47 @@ async function handleTerminalRun(options: {
   };
 }
 
-async function resolveTerminalCwd(options: {
+export async function resolveTerminalCwd(options: {
   containerName: string;
   repoDir: string;
   workingDir: string;
   command: string;
   workingDirectory?: string;
+  worktrees?: Record<string, string>;
 }): Promise<{ cwd: string } | { error: string }> {
   const wd = String(options.workingDirectory ?? "").trim();
-  const cwd =
-    !wd || wd === "." || wd === options.repoDir
-      ? options.workingDir
-      : resolveWorkspacePath(wd);
+  const worktrees = options.worktrees;
+  const knownRepos =
+    worktrees && Object.keys(worktrees).length > 0
+      ? new Set(Object.keys(worktrees))
+      : undefined;
+
+  let cwd: string;
+  if (!wd || wd === ".") {
+    if (worktrees) {
+      const mounts = Object.values(worktrees);
+      cwd = mounts.length === 1 ? mounts[0]! : options.workingDir;
+    } else {
+      cwd = options.workingDir;
+    }
+  } else if (worktrees?.[wd]) {
+    cwd = worktrees[wd];
+  } else if (!worktrees && wd === options.repoDir) {
+    // Project-scoped sessions treat repoDir as an alias for the workspace root.
+    cwd = options.workingDir;
+  } else {
+    cwd = resolveWorkspacePath(wd, { knownRepos });
+  }
+
   if (
     options.command.startsWith("git") &&
     !(await pathExistsInSandbox(options.containerName, `${cwd}/.git`))
   ) {
+    const hint = knownRepos
+      ? `Pass workingDirectory as a member repo (${[...knownRepos].sort().join(", ")}).`
+      : `Default cwd is ${options.workingDir}.`;
     return {
-      error: `Not a git repository: ${cwd}. Default cwd is ${options.workingDir}.`
+      error: `Not a git repository: ${cwd}. ${hint}`
     };
   }
   return { cwd };

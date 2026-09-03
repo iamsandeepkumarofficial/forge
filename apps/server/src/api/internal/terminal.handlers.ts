@@ -5,6 +5,7 @@ import {
   stopTerminalJob,
   terminalJobLogs
 } from "../../projects/terminalJobs.js";
+import { runTerminalInSession } from "../../tools/runTerminal.tool.js";
 
 const N_400 = 400;
 const N_500 = 500;
@@ -97,6 +98,39 @@ export async function handleTerminalStop(
     const { containerName } = await resolveSandbox(sessionId);
     await stopTerminalJob({ containerName, name });
     res.json({ ok: true });
+  } catch (err) {
+    res
+      .status(N_500)
+      .json({ error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+export async function handleTerminalRun(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const sessionId = sessionIdFrom(req);
+  const command =
+    typeof req.body?.command === "string" ? req.body.command.trim() : "";
+  if (!sessionId || !command) {
+    res.status(N_400).json({ error: "sessionId and command required" });
+    return;
+  }
+  const workingDirectory =
+    typeof req.body?.workingDirectory === "string"
+      ? req.body.workingDirectory.trim()
+      : undefined;
+  const jobName =
+    typeof req.body?.jobName === "string" ? req.body.jobName.trim() : undefined;
+  try {
+    const result = await runTerminalInSession({
+      sessionId,
+      command,
+      background: Boolean(req.body?.background),
+      workingDirectory: workingDirectory || undefined,
+      jobName: jobName || undefined
+    });
+    res.json(result);
   } catch (err) {
     res
       .status(N_500)

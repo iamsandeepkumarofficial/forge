@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 import {
   provisionSessionSandbox,
   getSessionRepoInfo,
-  WORKSPACE_MOUNT,
   type SessionRepoInfo
 } from "./sessionSandbox.js";
+import { WORKSPACE_MOUNT } from "./sessionSandbox/constants.js";
 
 const N_1024 = 1024;
 const N_16 = 16;

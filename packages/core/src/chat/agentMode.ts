@@ -17,7 +17,13 @@ const LAUNCH_TOOLS = ["upsert_launch_app"] as const;
 const SKILL_TOOLS = ["list_skills", "invoke_skill"] as const;
 const WEB_TOOLS = ["web_search", "web_fetch"] as const;
 const SWITCH_TOOLS = ["switch_mode"] as const;
+const ASK_USER_TOOLS = ["ask_user"] as const;
 const SUBTASK_TOOLS = ["create_subtask"] as const;
+const SETUP_TOOLS = [
+  "upsert_workspace_parameter",
+  "docker_image_lookup",
+  "provision_app_engine"
+] as const;
 
 function unionTools(...groups: readonly (readonly string[])[]): Set<string> {
   return new Set(groups.flat());
@@ -30,8 +36,10 @@ const AGENT_TOOLS = unionTools(
   PREVIEW_RUN_TOOLS,
   LAUNCH_TOOLS,
   SKILL_TOOLS,
+  SETUP_TOOLS,
   WEB_TOOLS,
-  SWITCH_TOOLS
+  SWITCH_TOOLS,
+  ASK_USER_TOOLS
 );
 
 const PLAN_TOOLS = unionTools(
@@ -41,16 +49,20 @@ const PLAN_TOOLS = unionTools(
   LAUNCH_TOOLS,
   SUBTASK_TOOLS,
   SKILL_TOOLS,
+  SETUP_TOOLS,
   WEB_TOOLS,
-  SWITCH_TOOLS
+  SWITCH_TOOLS,
+  ASK_USER_TOOLS
 );
 
 const ASK_TOOLS = unionTools(
   READ_TOOLS,
   PREVIEW_INSPECT_TOOLS,
   SKILL_TOOLS,
+  ["docker_image_lookup"] as const,
   WEB_TOOLS,
-  SWITCH_TOOLS
+  SWITCH_TOOLS,
+  ASK_USER_TOOLS
 );
 
 const MULTITASK_TOOLS = unionTools(
@@ -61,8 +73,10 @@ const MULTITASK_TOOLS = unionTools(
   LAUNCH_TOOLS,
   SUBTASK_TOOLS,
   SKILL_TOOLS,
+  SETUP_TOOLS,
   WEB_TOOLS,
-  SWITCH_TOOLS
+  SWITCH_TOOLS,
+  ASK_USER_TOOLS
 );
 
 export const MODE_TOOL_ALLOWLIST: Record<AgentMode, ReadonlySet<string>> = {

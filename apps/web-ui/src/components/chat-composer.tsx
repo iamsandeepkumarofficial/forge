@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, GitBranch, Loader2, Paperclip, Square, X } from "lucide-react";
 import type { LlmProvider } from "../lib/chat-agent.js";
 import type {
   ComposerAgentMode,
@@ -25,6 +25,7 @@ export { ModelPicker } from "./model-picker.js";
 
 export type ChatComposerProps = {
   sessionId: string;
+  branchName?: string;
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
@@ -258,7 +259,7 @@ export function ChatComposer(props: ChatComposerProps) {
     agentMode,
     attachments,
     onRemoveAttachment,
-    placeholder = "Plan, Build, / for skills, @ for context"
+    placeholder = "Ask Forge to plan, build, or debug…"
   } = props;
   const fileRef = useRef<HTMLInputElement>(null);
   const { contextWrapRef, contextOpen, setContextOpen } =
@@ -305,6 +306,16 @@ export function ChatComposer(props: ChatComposerProps) {
           usage={usage}
         />
       </div>
+      {props.branchName ? (
+        <p
+          title={props.branchName}
+          aria-label={`Branch ${props.branchName}`}
+          className="mt-1.5 flex min-w-0 items-center gap-1 px-1 font-mono text-[11px] text-muted-foreground"
+        >
+          <GitBranch className="size-3 shrink-0" />
+          <span className="truncate">{props.branchName}</span>
+        </p>
+      ) : null}
     </div>
   );
 }

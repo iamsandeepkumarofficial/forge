@@ -4,7 +4,8 @@ import {
   formatSkillsPromptBlock,
   loadSkillIndexForPrompt
 } from "../tools/skillIndex.js";
-import { formatRepoSetupBlock, loadLaunchReadiness } from "./repoReadiness.js";
+import { formatRepoSetupBlock, loadLaunchReadiness, loadWorkspaceLaunchReadiness } from "./repoReadiness.js";
+import { formatSetupAgentSopBlock } from "../services/workspace/health/types.js";
 
 const N_65536 = 65536;
 const N_2000000 = 2000000;
@@ -14,8 +15,21 @@ export type ChatAgentPromptPaths = {
   repoDir: string;
   workingDir: string;
   sessionId?: string;
-  /** Multi-repo workspace sessions: repoName -> absolute mount path. */
+  /** Multi-repo workspace sessions: repoName -> container mount path (for prompt text). */
   worktrees?: Record<string, string>;
+  /** Host paths for reading launch.json / AGENTS.md (local worktrees). */
+  hostWorktrees?: Record<string, string>;
+  hostWorkingDir?: string;
+  /** Pre-formatted repo inventory block (Part 1). */
+  inventoryBlock?: string;
+  /** Condensed workspace health block (Part 8). */
+  healthBlock?: string;
+  /** Workspace setup SOP (stack-agnostic; skills own stacks). */
+  setupSopBlock?: string;
+  /** Env key names available (no secret values). */
+  envKeyNames?: string[];
+  /** Optional precomputed launch readiness (workspace: from sandbox root launch.json). */
+  readiness?: import("./repoReadiness.js").LaunchReadiness;
 };
 
 const BASE_INSTRUCTIONS = [
@@ -75,20 +89,21 @@ function sandboxFilesystemBlock(paths: ChatAgentPromptPaths): string {
   const root = paths.workingDir || paths.sessionRoot;
   const worktrees = paths.worktrees;
   const names = worktrees ? Object.keys(worktrees).sort() : [];
-  if (names.length > 1) {
-    const lines = names.map((n) => `- \`${n}\` → \`${worktrees![n]}\``);
+  if (names.length > 0) {
+    const lines = names.map((n) => `- \`${n}/\` → \`${worktrees![n]}\` (git root)`);
     return [
-      "## Sandbox filesystem (authoritative — do not invent other roots)",
-      `- Session root: \`${root}\`. This workspace mounts multiple repositories:`,
+      "## Working repositories (authoritative)",
+      `- Session root: \`${root}\`. This is a **workspace** with ${names.length} mounted repo${names.length === 1 ? "" : "s"}:`,
       ...lines,
-      `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` and must start with a member repo name (example: \`frontend/package.json\`, \`backend/src/main.py\`). Never use host paths (\`/Users/…\`, \`/home/…\`).`,
-      `- \`run_terminal\` default cwd is \`${root}\`. Pass \`workingDirectory\` as a member repo (e.g. \`frontend\`) or subdirectory.`,
-      `- Each member has its own git root. Make coordinated cross-repo edits when the feature requires it; keep changes scoped to the repos that need them.`,
-      `- Launch config may live under each member's \`.forge/launch.json\`.`
+      `- Member folders are the git roots. Session root \`${root}\` is **not** a git repo.`,
+      `- Launch config is **only** at \`${root}/.forge/launch.json\` (session-root). Do **not** create per-member \`.forge/launch.json\` under \`${names[0]}/\` etc.`,
+      `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` and **must start with a member repo name** (example: \`${names[0]}/package.json\`). Never use host paths (\`/Users/…\`, \`/home/…\`).`,
+      `- \`run_terminal\` default cwd is \`${root}\`. Always pass \`workingDirectory\` as a member repo (e.g. \`${names[0]}\`) or a subdirectory under it.`,
+      "- Coordinated cross-repo edits are fine; keep changes scoped to the repos that need them."
     ].join("\n");
   }
   return [
-    "## Sandbox filesystem (authoritative — do not invent other roots)",
+    "## Working repository (authoritative)",
     `- Workspace and git root: \`${root}\`. The repository is mounted here directly — there is no extra repo folder.`,
     `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` (example: \`package.json\`, \`src/app.ts\`). Never use host paths (\`/Users/…\`, \`/home/…\`), never prefix with a repo folder name, never use absolute paths outside this sandbox.`,
     `- \`run_terminal\` default cwd is \`${root}\`. Pass \`workingDirectory\` only for a subdirectory (e.g. \`apps/web\`). Long installs/tests: \`background: true\`, then poll \`action: "logs"\`. Dev servers: preview_start.`,
@@ -100,20 +115,72 @@ function sandboxFilesystemBlock(paths: ChatAgentPromptPaths): string {
 export function composeChatAgentSystemPrompt(
   paths: ChatAgentPromptPaths
 ): string {
-  const agentsMd = loadAgentsMd(paths.workingDir);
+  const worktrees = paths.worktrees;
+  const memberNames = worktrees ? Object.keys(worktrees).sort() : [];
+  const isWorkspace = memberNames.length > 0;
+
+  const hostTrees = paths.hostWorktrees;
+  const readRootFor = (repo: string): string =>
+    hostTrees?.[repo] ?? worktrees?.[repo] ?? paths.workingDir;
+
+  const agentsMd = isWorkspace
+    ? memberNames
+        .map((name) => {
+          const body = loadAgentsMd(readRootFor(name));
+          return body ? `### ${name}\n${body}` : "";
+        })
+        .filter(Boolean)
+        .join("\n\n")
+    : loadAgentsMd(paths.hostWorkingDir ?? paths.workingDir);
+
+  const skillsRoot = isWorkspace
+    ? readRootFor(memberNames[0]!)
+    : (paths.hostWorkingDir ?? paths.workingDir);
   const skills = loadSkillIndexForPrompt({
     sessionId: paths.sessionId,
-    workingDir: paths.workingDir
+    workingDir: skillsRoot
   });
+
+  const readiness =
+    paths.readiness ??
+    (isWorkspace
+      ? loadWorkspaceLaunchReadiness({
+          sessionRoot: paths.workingDir || paths.sessionRoot,
+          memberRepos: memberNames
+        })
+      : loadLaunchReadiness(paths.hostWorkingDir ?? paths.workingDir));
+
   const parts = [
     ...BASE_INSTRUCTIONS,
     "",
     sandboxFilesystemBlock(paths),
-    "",
-    formatRepoSetupBlock({
-      readiness: loadLaunchReadiness(paths.workingDir)
-    })
+    ""
   ];
+  if (paths.inventoryBlock?.trim()) {
+    parts.push(paths.inventoryBlock.trim(), "");
+  }
+  if (paths.healthBlock?.trim()) {
+    parts.push(paths.healthBlock.trim(), "");
+  }
+  parts.push(
+    formatRepoSetupBlock({
+      readiness,
+      memberRepos: isWorkspace ? memberNames : undefined
+    })
+  );
+  if (isWorkspace) {
+    parts.push(
+      "",
+      paths.setupSopBlock?.trim() || formatSetupAgentSopBlock()
+    );
+  }
+  if (paths.envKeyNames && paths.envKeyNames.length > 0) {
+    parts.push(
+      "",
+      "## Environment",
+      `Env keys available (values injected at runtime, including DATABASE_URL / MONGODB_URI on the network plane): ${paths.envKeyNames.map((k) => `\`${k}\``).join(", ")}`
+    );
+  }
   if (agentsMd) {
     parts.push("", "## Repository instructions", agentsMd);
   }

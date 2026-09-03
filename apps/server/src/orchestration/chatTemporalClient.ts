@@ -64,6 +64,20 @@ export async function cancelInteractiveChatTurn(
   }
 }
 
+/** True only if Temporal still has a Running execution for this workflow id. */
+export async function isInteractiveChatTurnRunning(
+  workflowId: string
+): Promise<boolean> {
+  const client = await getClient();
+  try {
+    const desc = await client.workflow.getHandle(workflowId).describe();
+    return desc.status.name === "RUNNING";
+  } catch {
+    resetClient();
+    return false;
+  }
+}
+
 export function newTurnId(): string {
   return randomUUID();
 }

@@ -112,6 +112,22 @@ export async function fetchSessionMessages(
   };
   return Array.isArray(body.messages) ? body.messages : [];
 }
+export async function fetchRunningTurn(
+  sessionId: string
+): Promise<{ id: string; workflowId: string; status: string } | null> {
+  const res = await fetch(
+    `${runnerUrl()}/api/sessions/${encodeURIComponent(sessionId)}/turns/running`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to load running turn: ${res.status}`);
+  }
+  const body = (await res.json()) as {
+    turn?: { id: string; workflowId: string; status: string } | null;
+  };
+  return body.turn ?? null;
+}
+
 export async function startChatTurn(
   sessionId: string,
   input: {

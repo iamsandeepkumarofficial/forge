@@ -10,6 +10,10 @@ import {
   projectSourceEnum,
   projects,
   users,
+  workspaceDatabases,
+  workspaceEnvironments,
+  workspaceHealth,
+  workspaceParameters,
   workspaceProjects,
   workspaces
 } from "./schema.js";
@@ -20,6 +24,10 @@ describe("schema tables", () => {
     assert.equal(getTableName(projects), "projects");
     assert.equal(getTableName(workspaces), "workspaces");
     assert.equal(getTableName(workspaceProjects), "workspace_projects");
+    assert.equal(getTableName(workspaceParameters), "workspace_parameters");
+    assert.equal(getTableName(workspaceHealth), "workspace_health");
+    assert.equal(getTableName(workspaceDatabases), "workspace_databases");
+    assert.equal(getTableName(workspaceEnvironments), "workspace_environments");
     assert.equal(getTableName(chatFeatures), "chat_features");
     assert.equal(getTableName(documents), "documents");
   });
@@ -36,11 +44,16 @@ describe("schema tables", () => {
       "chatTurns",
       "conversations",
       "documents",
+      "projectParameters",
       "projects",
       "sessionMessages",
       "uiState",
       "userGithubAccounts",
       "users",
+      "workspaceDatabases",
+      "workspaceEnvironments",
+      "workspaceHealth",
+      "workspaceParameters",
       "workspaceProjects",
       "workspaces"
     ]);
