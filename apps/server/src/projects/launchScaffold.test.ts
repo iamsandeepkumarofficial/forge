@@ -6,6 +6,7 @@ describe("launchScaffold", { concurrency: false }, () => {
   let written = "";
   let packageByPath = new Map<string, string | null>();
   let appsListing = "";
+  let seedResult = false;
   let ensureLaunchConfig: typeof import("./launchScaffold.js").ensureLaunchConfig;
 
   before(async () => {
@@ -40,8 +41,30 @@ describe("launchScaffold", { concurrency: false }, () => {
         },
         writeFileToSandbox: async (opts: { content: string }) => {
           written = opts.content;
+          launchRaw = opts.content;
         },
         pathExistsInSandbox: async () => true
+      }
+    });
+    mock.module("./workspaceEnvironment.js", {
+      exports: {
+        seedLaunchFromWorkspace: async () => {
+          if (!seedResult) return false;
+          written = JSON.stringify({
+            apps: [
+              {
+                name: "saved-web",
+                cwd: "bp-frontend",
+                command: "yarn dev",
+                type: "web",
+                port: 3000,
+                repo: "bp-frontend"
+              }
+            ]
+          });
+          launchRaw = written;
+          return true;
+        }
       }
     });
     ({ ensureLaunchConfig } = await import("./launchScaffold.js"));
@@ -60,15 +83,28 @@ describe("launchScaffold", { concurrency: false }, () => {
       ]
     });
     written = "";
+    seedResult = true;
     appsListing = "web";
     const r = await ensureLaunchConfig("s1");
     assert.deepEqual(r, { ready: true, scaffolded: false });
     assert.equal(written, "");
   });
 
+  it("seeds from workspace when session launch is empty", async () => {
+    launchRaw = null;
+    written = "";
+    seedResult = true;
+    appsListing = "";
+    packageByPath = new Map();
+    const r = await ensureLaunchConfig("s2");
+    assert.deepEqual(r, { ready: true, scaffolded: false, seeded: true });
+    assert.match(written, /saved-web/);
+  });
+
   it("writes when missing and detectApps finds apps", async () => {
     launchRaw = null;
     written = "";
+    seedResult = false;
     appsListing = "web";
     packageByPath = new Map([
       [
@@ -89,6 +125,7 @@ describe("launchScaffold", { concurrency: false }, () => {
   it("does not write empty launch.json when nothing detected", async () => {
     launchRaw = null;
     written = "";
+    seedResult = false;
     appsListing = "";
     packageByPath = new Map();
     const r = await ensureLaunchConfig("s1");

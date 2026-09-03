@@ -7,6 +7,7 @@ describe("backgroundJob", { concurrency: false }, () => {
   let startJobScript: typeof import("./backgroundJob.js").startJobScript;
   let sanitizeJobName: typeof import("./backgroundJob.js").sanitizeJobName;
   let jobPidFile: typeof import("./backgroundJob.js").jobPidFile;
+  let freeListeningPortScript: typeof import("./backgroundJob.js").freeListeningPortScript;
   let waitUntilJobRunning: typeof import("./backgroundJob.js").waitUntilJobRunning;
   let waitUntilTcpListening: typeof import("./backgroundJob.js").waitUntilTcpListening;
 
@@ -34,6 +35,7 @@ describe("backgroundJob", { concurrency: false }, () => {
       startJobScript,
       sanitizeJobName,
       jobPidFile,
+      freeListeningPortScript,
       waitUntilJobRunning,
       waitUntilTcpListening
     } = await import("./backgroundJob.js"));
@@ -58,6 +60,14 @@ describe("backgroundJob", { concurrency: false }, () => {
       jobPidFile({ kind: "term", name: "t1" }),
       "/tmp/forge-term-t1.pid"
     );
+  });
+
+  it("freeListeningPortScript targets the port via /proc inodes", () => {
+    const script = freeListeningPortScript(3001);
+    assert.match(script, /port=3001/);
+    assert.match(script, /\/proc\/net\/tcp/);
+    assert.match(script, /socket:\[\$inode\]/);
+    assert.match(script, /kill -KILL/);
   });
 
   it("waitUntilJobRunning returns false then true", async () => {

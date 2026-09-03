@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { RefreshCw } from "lucide-react";
 import { VirtualFileTree } from "../../components/virtual-file-tree.js";
 import {
   executeTool,
@@ -23,17 +24,17 @@ export function FilesTab({
     [sessionId]
   );
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-2 py-1.5">
-        <span className="text-xs text-muted-foreground">Files</span>
-        <button
-          onClick={() => setRefreshKey((k) => k + 1)}
-          className="text-xs text-primary hover:underline"
-        >
-          Refresh
-        </button>
-      </div>
-      <div className="min-h-0 flex-1 py-1">
+    <div className="relative flex h-full flex-col">
+      <button
+        type="button"
+        aria-label="Refresh files"
+        title="Refresh files"
+        onClick={() => setRefreshKey((k) => k + 1)}
+        className="absolute right-1.5 top-1.5 z-10 inline-flex size-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground"
+      >
+        <RefreshCw className="size-3.5" />
+      </button>
+      <div className="min-h-0 flex-1 py-1 pr-8">
         <VirtualFileTree
           getChildren={getChildren}
           onSelectFile={onOpen}

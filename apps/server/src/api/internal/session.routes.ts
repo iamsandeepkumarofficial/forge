@@ -15,8 +15,11 @@ import {
 import {
   handleTerminalJobs,
   handleTerminalLogs,
+  handleTerminalRun,
   handleTerminalStop
 } from "./terminal.handlers.js";
+import { handleAppHttpRequest } from "./httpRequest.handlers.js";
+import { handleAppRoutes } from "./appRoutes.handlers.js";
 
 function mountSessionCoreRoutes(router: Router) {
   router.post("/session/start", (req, res) => {
@@ -60,6 +63,15 @@ function mountSessionAppRoutes(router: Router) {
   });
   router.post("/terminal/stop", (req, res) => {
     return handleTerminalStop(req, res);
+  });
+  router.post("/terminal/run", (req, res) => {
+    return handleTerminalRun(req, res);
+  });
+  router.post("/apps/http", (req, res) => {
+    return handleAppHttpRequest(req, res);
+  });
+  router.get("/apps/routes", (req, res) => {
+    return handleAppRoutes(req, res);
   });
   router.post("/session/push", (req, res) => {
     return handleSessionPush(req, res);

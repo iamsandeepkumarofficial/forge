@@ -10,6 +10,7 @@ export const AUTO_MODEL_KEY = "forge.workbench.auto-model";
 export const SPLIT_KEY = "forge.workbench.split";
 export const TERMINAL_OPEN_KEY = "forge.workbench.terminal-open";
 export const TERMINAL_HEIGHT_KEY = "forge.workbench.terminal-height";
+export const DOCK_MODE_KEY = "forge.workbench.dock-mode";
 
 const N_120 = 120;
 const N_220 = 220;
@@ -49,6 +50,23 @@ export function persistTerminalOpen(open: boolean): void {
 export function persistTerminalHeight(height: number): void {
   try {
     localStorage.setItem(TERMINAL_HEIGHT_KEY, String(Math.round(height)));
+  } catch {
+    void 0;
+  }
+}
+
+export function loadDockMode(): "terminal" | "devtools" {
+  try {
+    if (localStorage.getItem(DOCK_MODE_KEY) === "devtools") return "devtools";
+  } catch {
+    void 0;
+  }
+  return "terminal";
+}
+
+export function persistDockMode(mode: "terminal" | "devtools"): void {
+  try {
+    localStorage.setItem(DOCK_MODE_KEY, mode);
   } catch {
     void 0;
   }

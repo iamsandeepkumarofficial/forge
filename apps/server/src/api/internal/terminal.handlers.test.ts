@@ -32,6 +32,7 @@ describe("terminal.handlers", { concurrency: false }, () => {
   let handleTerminalJobs: typeof import("./terminal.handlers.js").handleTerminalJobs;
   let handleTerminalLogs: typeof import("./terminal.handlers.js").handleTerminalLogs;
   let handleTerminalStop: typeof import("./terminal.handlers.js").handleTerminalStop;
+  let handleTerminalRun: typeof import("./terminal.handlers.js").handleTerminalRun;
 
   before(async () => {
     mock.module("../../projects/sandboxExec.js", {
@@ -48,8 +49,21 @@ describe("terminal.handlers", { concurrency: false }, () => {
         stopTerminalJob: async () => undefined
       }
     });
-    ({ handleTerminalJobs, handleTerminalLogs, handleTerminalStop } =
-      await import("./terminal.handlers.js"));
+    mock.module("../../tools/runTerminal.tool.js", {
+      exports: {
+        runTerminalInSession: async () => ({
+          success: true,
+          output: "ok\n",
+          metadata: { jobName: "u-ls" }
+        })
+      }
+    });
+    ({
+      handleTerminalJobs,
+      handleTerminalLogs,
+      handleTerminalStop,
+      handleTerminalRun
+    } = await import("./terminal.handlers.js"));
   });
 
   it("requires sessionId", async () => {
@@ -116,5 +130,16 @@ describe("terminal.handlers", { concurrency: false }, () => {
       stop.res as never
     );
     assert.deepEqual(stop.state.body, { ok: true });
+
+    const run = mockRes();
+    await handleTerminalRun(
+      { query: {}, body: { sessionId: "s1", command: "ls" } } as never,
+      run.res as never
+    );
+    assert.deepEqual(run.state.body, {
+      success: true,
+      output: "ok\n",
+      metadata: { jobName: "u-ls" }
+    });
   });
 });
