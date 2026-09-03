@@ -1,22 +1,37 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { isDesktop, pickFolder } from "./desktop";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { electronPreview, isDesktop, isElectronPreview, pickFolder } from "./desktop";
 
 describe("desktop", () => {
   afterEach(() => {
-    delete (window as { __TAURI__?: unknown }).__TAURI__;
-    delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    delete (window as { forgeDesktop?: unknown }).forgeDesktop;
+    vi.resetModules();
   });
 
-  it("isDesktop is false without Tauri globals", () => {
+  it("isDesktop is false without desktop globals", () => {
     expect(isDesktop()).toBe(false);
+    expect(isElectronPreview()).toBe(false);
   });
 
-  it("isDesktop is true when __TAURI_INTERNALS__ is present", () => {
-    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+  it("isDesktop is true when forgeDesktop is present", () => {
+    window.forgeDesktop = { pickFolder: async () => "/tmp" };
     expect(isDesktop()).toBe(true);
+  });
+
+  it("isElectronPreview is true only with preview bridge", () => {
+    window.forgeDesktop = {
+      pickFolder: async () => "/tmp",
+      preview: { setVisible: async () => undefined } as never
+    };
+    expect(isElectronPreview()).toBe(true);
+    expect(electronPreview()).toBe(window.forgeDesktop.preview);
   });
 
   it("pickFolder returns null when not desktop", async () => {
     await expect(pickFolder()).resolves.toBeNull();
+  });
+
+  it("pickFolder uses forgeDesktop when present", async () => {
+    window.forgeDesktop = { pickFolder: async () => "/picked" };
+    await expect(pickFolder()).resolves.toBe("/picked");
   });
 });

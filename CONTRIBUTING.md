@@ -31,7 +31,7 @@ pnpm test
 pnpm build
 ```
 
-The Tauri desktop supervisor is scaffold/WIP. Prefer compose + `pnpm dev` for day-to-day contribution. See [RFC 0002](./docs/rfcs/0002-local-desktop-runtime.md).
+The desktop supervisor is Electron (`pnpm desktop`). Prefer compose + `pnpm dev` for day-to-day contribution. See [RFC 0002](./docs/rfcs/0002-local-desktop-runtime.md).
 
 ## Code layout
 
@@ -42,7 +42,7 @@ Monorepo managed with **pnpm** and **Turborepo**.
 | `apps/server` | Tool-plane HTTP API, sandbox lifecycle, tools, in-process preview proxy |
 | `apps/web-ui` | Chat workbench (React) |
 | `apps/preview-plane` | Optional standalone preview proxy (`PREVIEW_IN_PROCESS=0` / k8s) |
-| `apps/desktop` | Tauri supervisor |
+| `apps/electron` | Electron desktop supervisor (`pnpm desktop`) |
 | `packages/orchestrator` | Temporal worker and chat turn workflows |
 | `packages/core` | Shared backend domain logic |
 | `packages/db` | Schema and migrations |

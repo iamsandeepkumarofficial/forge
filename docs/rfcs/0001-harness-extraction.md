@@ -6,7 +6,7 @@
 
 ## Summary
 
-Extract a **chat-only, locally runnable coding-agent harness** named **Forge** into a new Apache-2.0 open-source repository. Forge packages the chat UI, tool-plane server, Temporal orchestrator, Docker sandbox runtime, and local preview proxy into a product that developers can run on their own machines—optionally wrapped in a Tauri desktop app that supervises docker-compose and Node processes.
+Extract a **chat-only, locally runnable coding-agent harness** named **Forge** into a new Apache-2.0 open-source repository. Forge packages the chat UI, tool-plane server, Temporal orchestrator, Docker sandbox runtime, and local preview proxy into a product that developers can run on their own machines—optionally wrapped in an Electron desktop app that supervises docker-compose and Node processes.
 
 This RFC records the extraction decisions, keep/drop boundaries, target architecture, and the major rework items required to turn the Forge Agent monorepo slice into a clean public project.
 
@@ -25,7 +25,7 @@ Open-sourcing the full product would force contributors and users through unrela
 
 1. Ship a **chat-only** harness: connect a repo, chat with an agent, run tools in a Docker sandbox, preview the app locally.
 2. Be **locally runnable** via docker-compose (Postgres, Temporal, MinIO) plus Node processes for server, orchestrator, preview-plane, and web UI.
-3. Provide a **Tauri desktop** path that supervises compose + processes and opens the chat UI in a webview.
+3. Provide an **Electron desktop** path that supervises compose + processes and opens the chat UI in Chromium.
 4. Let users supply **LLM keys** through an in-app Settings UI (no mandatory `.env` editing for end users).
 5. Support **local folder** and **git clone** as repo sources (no GitHub OAuth in v1).
 6. Keep the **preview-plane** for `*.preview.localhost`.
@@ -43,9 +43,9 @@ Open-sourcing the full product would force contributors and users through unrela
 
 ```mermaid
 flowchart TB
-  subgraph desktop [Forge Desktop app - Tauri]
-    ui[Chat UI - React webview]
-    supervisor[Rust supervisor: compose lifecycle + settings store]
+  subgraph desktop [Forge Desktop app - Electron]
+    ui[Chat UI - React]
+    supervisor[Supervisor: compose lifecycle + settings store]
   end
   subgraph infra [Local infra - docker compose]
     pg[(Postgres/pgvector)]
@@ -79,7 +79,7 @@ flowchart TB
 | **preview-plane (`apps/preview-plane`)** | Local reverse proxy for session preview hosts (`*.preview.localhost`). |
 | **Docker sandbox** | Isolated per-session workspace where the agent runs shell/file tools and (optionally) a dev server. |
 | **web-ui (`apps/web-ui`)** | Chat workbench: composer, tool call display, model/mode pickers, Settings, Connect repo. |
-| **Tauri desktop (`apps/desktop`)** | Supervisor: Docker detection, compose up/down, sandbox image build, spawn Node processes, inject loopback auth token, open webview. See [RFC 0002](./0002-local-desktop-runtime.md). |
+| **Electron desktop (`apps/electron`)** | Supervisor: Docker detection, compose up/down, sandbox image build, spawn Node processes, inject loopback auth token, open Chromium. See [RFC 0002](./0002-local-desktop-runtime.md). |
 
 ### Deployable mental model
 
@@ -92,7 +92,7 @@ flowchart TB
 | Decision | Choice | Rationale |
 | -------- | ------ | --------- |
 | Repository | New clean public repo (no git history from upstream) | Clear license boundary; no accidental proprietary history or secrets. |
-| Desktop | Tauri + docker-compose supervisor | Native folder pickers and process supervision without Electron weight; compose already defines local infra. |
+| Desktop | Electron + docker-compose supervisor | Native folder pickers, process supervision, and official Chromium DevTools for preview; compose already defines local infra. |
 | Product scope | Chat-only | Smallest useful coding-agent loop; defer board/pipeline to other products. |
 | LLM credentials | Settings UI → `~/.forge/config.json` (and optional OS secure store) | End users should not edit `.env`; contributors still can for headless/dev. |
 | Repo connection | Local folder bind-mount **or** git clone (URL + optional token) | Covers the two common workflows without OAuth in v1. |
@@ -149,9 +149,9 @@ Replace shared POC bearer + email header UX with a **supervisor-generated loopba
 
 In-app Settings for provider, model, base URL, and API key. Supervisor materializes values into env for server and orchestrator (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_COMPATIBLE_*`, and Forge-prefixed aliases after rebrand).
 
-### 5. Tauri supervisor
+### 5. Desktop supervisor
 
-`apps/desktop` owns Docker preflight, `docker compose up`, sandbox image build, spawning server + orchestrator (+ preview-plane), token injection, and webview load. Details in [RFC 0002](./0002-local-desktop-runtime.md).
+`apps/electron` owns Docker preflight, `docker compose up`, sandbox image build, spawning server + orchestrator (+ preview-plane), token injection, and Chromium load. Details in [RFC 0002](./0002-local-desktop-runtime.md).
 
 ### 6. Rebrand
 
@@ -168,7 +168,7 @@ Rename scopes and artifacts for the public project:
 3. Trim orchestrator to interactive chat workflow only.
 4. Strip web-ui to the chat workbench; add Settings and Connect-repo screens.
 5. Add local-folder materialization to the sandbox.
-6. Build the Tauri supervisor.
+6. Build the Electron supervisor.
 7. Rebrand packages/env/images; docs, license, CI, release artifacts.
 8. Verify with `pnpm typecheck`, `pnpm build`, `pnpm lint`, `pnpm test`, then an end-to-end desktop launch.
 
@@ -183,7 +183,7 @@ Rename scopes and artifacts for the public project:
 | Alternative | Why not |
 | ----------- | ------- |
 | Open-source the full upstream monorepo | Too much product and cloud surface; poor onboarding. |
-| Electron instead of Tauri | Heavier runtime; Tauri fits a thin supervisor + webview. |
+| Tauri instead of Electron | Initially preferred for a thin webview; Electron was chosen so preview can be real Chromium plus official DevTools. |
 | CLI-only (no desktop) | Valid for contributors; desktop remains the primary end-user path. Headless `pnpm` + compose stays supported. |
 | GitHub OAuth in v1 | Delays launch; local folder + clone covers core needs. |
 
