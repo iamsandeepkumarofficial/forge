@@ -4,15 +4,12 @@ import { MemoryRouter } from "react-router-dom";
 import { DashboardEmptyStateView } from "./dashboard-empty-state-view";
 
 describe("DashboardEmptyStateView", () => {
-  it("renders the build prompt", () => {
+  it("renders the build prompt and local folder cta", () => {
     const state = {
       buildText: "",
       setBuildText: vi.fn(),
       pendingTitle: "",
       suggestions: ["Contact Form"],
-      showGithubPicker: false,
-      setShowGithubPicker: vi.fn(),
-      connectingSlug: null,
       buildHint: false,
       loading: null,
       error: null,
@@ -24,7 +21,6 @@ describe("DashboardEmptyStateView", () => {
       setSuggestionSet: vi.fn(),
       busy: false,
       handleBuild: vi.fn(),
-      handleGithubSelect: vi.fn(),
       handleSelectFolder: vi.fn(),
       handleConnectPath: vi.fn()
     };
@@ -37,6 +33,8 @@ describe("DashboardEmptyStateView", () => {
       </MemoryRouter>
     );
     expect(screen.getByPlaceholderText(/I want to build/i)).toBeTruthy();
-    expect(screen.getByText(/Select folder/i)).toBeTruthy();
+    expect(screen.getByLabelText("Select folder")).toBeTruthy();
+    expect(screen.getByLabelText("Settings")).toBeTruthy();
+    expect(screen.queryByText(/Workspaces/i)).toBeNull();
   });
 });

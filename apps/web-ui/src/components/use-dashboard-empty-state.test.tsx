@@ -21,7 +21,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("useDashboardEmptyState", () => {
-  it("opens github picker from handleBuild", () => {
+  it("sets build hint from handleBuild without github picker", () => {
     const { result } = renderHook(
       () => useDashboardEmptyState({ onConnected: vi.fn() }),
       { wrapper }
@@ -32,7 +32,7 @@ describe("useDashboardEmptyState", () => {
     act(() => {
       result.current.handleBuild();
     });
-    expect(result.current.showGithubPicker).toBe(true);
+    expect(result.current.buildHint).toBe(true);
     expect(result.current.pendingTitle).toBe("My app");
   });
 });
