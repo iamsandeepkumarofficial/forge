@@ -53,14 +53,16 @@ function mountToolsPrepareRoutes(
     }
     try {
       await ensureLaunchConfig(sessionId).catch(() => undefined);
-      const { workingDir, repoDir, sessionRoot, worktrees } =
+      const { workingDir, repoDir, sessionRoot, worktrees, hostWorktrees, hostWorkingDir } =
         await getSessionRepoInfo(sessionId);
       const prompt = composeChatAgentSystemPrompt({
         sessionRoot,
         repoDir,
         workingDir,
         sessionId,
-        worktrees
+        worktrees,
+        hostWorktrees,
+        hostWorkingDir
       });
       res.type("text/plain; charset=utf-8").send(prompt);
     } catch (err) {

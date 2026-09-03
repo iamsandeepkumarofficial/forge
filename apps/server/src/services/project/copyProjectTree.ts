@@ -3,7 +3,7 @@ import path from "node:path";
 
 const SKIP_DIR_SEGMENTS = new Set([
   "node_modules",
-  ".git",
+  // Keep .git so canonical local copies remain real repos (RFC 0005).
   ".svn",
   ".hg",
   "dist",

@@ -25,7 +25,7 @@ import {
   waitUntilJobRunning,
   waitUntilTcpListening
 } from "./backgroundJob.js";
-import { normalizeLaunchCwd, resolveLaunchAppDir } from "./launchCwd.js";
+import { normalizeLaunchCwd, resolveLaunchAppDir, safeRelDir } from "./launchCwd.js";
 
 export type AppType = "web" | "api" | "worker";
 export interface ForgeApp {
@@ -172,14 +172,17 @@ export async function writeForgeConfig(
         content: JSON.stringify({ apps: localApps }, null, 2) + "\n"
       });
     }
-    return;
+  } else if (worktrees && Object.keys(worktrees).length > 0 && unscoped.length > 0) {
+    throw new Error(
+      `Cannot write launch.json at session root in a workspace. Tag apps with repo (${Object.keys(worktrees).sort().join(", ")}).`
+    );
+  } else {
+    await writeFileToSandbox({
+      container: containerName,
+      absPath: `${workingDir}/${LAUNCH_FILE}`,
+      content: JSON.stringify({ apps: unscoped }, null, 2) + "\n"
+    });
   }
-
-  await writeFileToSandbox({
-    container: containerName,
-    absPath: `${workingDir}/${LAUNCH_FILE}`,
-    content: JSON.stringify({ apps: unscoped }, null, 2) + "\n"
-  });
 }
 
 function unqualifyApp(app: ForgeApp, repo: string): ForgeApp {
@@ -194,21 +197,89 @@ function unqualifyApp(app: ForgeApp, repo: string): ForgeApp {
   return { ...rest, name, cwd };
 }
 
+/** Infer which workspace member owns this launch app. */
+export function inferWorkspaceRepo(options: {
+  app: Pick<ForgeApp, "name" | "cwd" | "repo">;
+  memberRepos: string[];
+}): string | null {
+  const members = options.memberRepos;
+  if (options.app.repo && members.includes(options.app.repo)) {
+    return options.app.repo;
+  }
+  const cwd = safeRelDir(options.app.cwd || ".") || ".";
+  if (cwd !== ".") {
+    const first = cwd.split("/")[0]!;
+    if (members.includes(first)) return first;
+  }
+  const nameFirst = options.app.name.split("/")[0]!;
+  if (members.includes(nameFirst)) return nameFirst;
+  if (members.length === 1) return members[0]!;
+  return null;
+}
+
 export async function upsertLaunchApp(
   sessionId: string,
   app: ForgeApp
 ): Promise<ForgeConfig> {
-  const { repoDir } = await ctx(sessionId);
+  const { repoDir, worktrees } = await ctx(sessionId);
+  const memberRepos = worktrees ? Object.keys(worktrees).sort() : [];
+  const isWorkspace = memberRepos.length > 0;
+
+  let nextApp: ForgeApp = { ...app };
+  if (isWorkspace) {
+    const repo = inferWorkspaceRepo({ app: nextApp, memberRepos });
+    if (!repo) {
+      throw new Error(
+        `Workspace upsert requires a member repo. Set cwd to a member path (e.g. "${memberRepos[0]}") or pass repo. Members: ${memberRepos.join(", ")}`
+      );
+    }
+    const local = unqualifyApp({ ...nextApp, repo }, repo);
+    nextApp = {
+      ...local,
+      repo,
+      name: `${repo}/${local.name}`
+    };
+  } else {
+    nextApp = {
+      ...nextApp,
+      cwd: normalizeLaunchCwd({ cwd: nextApp.cwd, repoDir })
+    };
+  }
+
   const { config } = await readForgeConfig(sessionId);
+  const localName = nextApp.repo
+    ? unqualifyApp(nextApp, nextApp.repo).name
+    : nextApp.name;
+
   const usedPorts = config.apps
-    .filter((a) => a.name !== app.name && a.port != null)
+    .filter((a) => {
+      if (!nextApp.repo) return a.name !== nextApp.name;
+      if (a.repo !== nextApp.repo && !a.name.startsWith(`${nextApp.repo}/`)) {
+        return true;
+      }
+      const aLocal = a.repo
+        ? unqualifyApp(a, a.repo).name
+        : a.name.slice(nextApp.repo.length + 1);
+      return aLocal !== localName;
+    })
+    .filter((a) => a.port != null)
     .map((a) => a.port as number);
-  const nextApp: ForgeApp = {
-    ...app,
-    cwd: normalizeLaunchCwd({ cwd: app.cwd, repoDir }),
-    port: normalizeLaunchPort(app.port, usedPorts)
+
+  nextApp = {
+    ...nextApp,
+    port: normalizeLaunchPort(nextApp.port, usedPorts)
   };
-  const nextApps = config.apps.filter((a) => a.name !== nextApp.name);
+
+  const nextApps = config.apps.filter((a) => {
+    if (!nextApp.repo) return a.name !== nextApp.name;
+    if (a.repo !== nextApp.repo && !a.name.startsWith(`${nextApp.repo}/`)) {
+      return true;
+    }
+    const aLocal = a.repo
+      ? unqualifyApp(a, a.repo).name
+      : a.name.slice(nextApp.repo!.length + 1);
+    return aLocal !== localName;
+  });
   nextApps.push(nextApp);
   const next = { apps: nextApps };
   await writeForgeConfig(sessionId, next);

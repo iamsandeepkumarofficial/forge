@@ -110,14 +110,15 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "upsert_launch_app",
     toolName: "Upsert launch app",
     description:
-      "Add or update one app in `.forge/launch.json` when missing or incomplete (no user confirmation required). For web/api apps set port in 3000–3009 (prefer 3000 for the first app).",
+      "Add or update one app in `.forge/launch.json` when missing or incomplete (no user confirmation required). For web/api apps set port in 3000–3009 (prefer 3000 for the first app). In workspaces, set cwd under the member repo (e.g. bp-frontend) so the file is written to that repo — never to /workspace/.forge/.",
     exampleUsecases: [
       "Launch.json missing or app not listed; then preview_start that name."
     ],
     negativeUsecases: [
       "Do not use this to edit source files.",
       "Ask mode cannot call this — switch modes first.",
-      "Do not use ports outside 3000–3009 (e.g. 4000, 5173) — they are not published."
+      "Do not use ports outside 3000–3009 (e.g. 4000, 5173) — they are not published.",
+      "Do not install databases/system packages instead of preview_start."
     ]
   },
   {

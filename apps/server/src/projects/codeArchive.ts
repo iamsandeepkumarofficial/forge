@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { resolveSandbox } from "./sandboxExec.js";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
 import { ProjectRepository } from "../catalog/projectRepository.js";
-import { EXCLUDES, promoteGithubBranch } from "./codeArchive/promote.js";
+import { EXCLUDES, promoteGithubBranch, promoteLocalBranch } from "./codeArchive/promote.js";
 
 export async function spawnRepoTarGz(sessionId: string): Promise<{
   child: ChildProcessWithoutNullStreams;
@@ -50,6 +50,10 @@ export async function promoteToCanonical(sessionId: string): Promise<{
       branch: chat.branchName
     });
   }
-  // Local projects are bind-mounted to ~/.forge/projects/{id} — already canonical.
-  return { target: "local" };
+  return promoteLocalBranch({
+    containerName,
+    workingDir,
+    project,
+    branch: chat.branchName
+  });
 }

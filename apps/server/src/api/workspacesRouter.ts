@@ -6,11 +6,15 @@ import {
 import { WorkspaceService } from "../services/workspace/workspace.service.js";
 import { ChatFeatureService } from "../projects/chatFeatureService.js";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
-import { provisionSessionSandbox } from "../projects/sessionSandbox.js";
+import {
+  destroySessionSandbox,
+  provisionSessionSandbox
+} from "../projects/sessionSandbox.js";
 import { autoStartPreview } from "../projects/appRunner.js";
 import type { WorkspaceRoute } from "@forge/db";
 
 const N_201 = 201;
+const N_204 = 204;
 const N_400 = 400;
 const N_403 = 403;
 const N_404 = 404;
@@ -273,6 +277,32 @@ export function createWorkspacesRouter(): Router {
           );
         });
       res.status(N_201).json(chat);
+    } catch (error: unknown) {
+      res.status(statusFromError(error)).json({ error: errorMessage(error) });
+    }
+  }) as RequestHandler);
+
+  router.delete("/:workspaceId/chats/:chatId", pocAuth, (async (req, res) => {
+    try {
+      const userId = (req as AuthedRequest).forgeUser.id;
+      const workspaceId = String(req.params.workspaceId);
+      const chatId = String(req.params.chatId);
+      await workspaceService.getWorkspaceDetail(workspaceId, userId);
+      const chat = await chatRepo.getById(chatId);
+      if (
+        !chat ||
+        chat.workspaceId !== workspaceId ||
+        chat.userId !== userId
+      ) {
+        return res.status(N_404).json({ error: "Chat not found" });
+      }
+      await chatRepo.deleteChatFeature(chatId);
+      void destroySessionSandbox(chat.sessionId).catch((err) => {
+        console.warn(
+          `[workspace chat ${chatId}] sandbox teardown failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
+      res.status(N_204).end();
     } catch (error: unknown) {
       res.status(statusFromError(error)).json({ error: errorMessage(error) });
     }
