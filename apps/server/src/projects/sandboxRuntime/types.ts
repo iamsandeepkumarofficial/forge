@@ -28,10 +28,17 @@ export interface BindMount {
   readOnly?: boolean;
 }
 
+export interface NamedVolumeMount {
+  volumeName: string;
+  containerPath: string;
+}
+
 export interface CreateOpts {
   image?: string;
   labels?: Record<string, string>;
   bindMounts?: BindMount[];
+  namedVolumes?: NamedVolumeMount[];
+  containerEnv?: Record<string, string>;
 }
 
 export interface ExecOpts {

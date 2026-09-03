@@ -94,7 +94,10 @@ export function createDockerSandboxRuntime(): SandboxRuntime {
       try {
         const volumeName = await ensureVolume(sessionId);
         await ensureContainer(sessionId, volumeName, {
-          bindMounts: opts?.bindMounts
+          bindMounts: opts?.bindMounts,
+          namedVolumes: opts?.namedVolumes,
+          containerEnv: opts?.containerEnv,
+          image: opts?.image
         });
         return {
           sessionId,

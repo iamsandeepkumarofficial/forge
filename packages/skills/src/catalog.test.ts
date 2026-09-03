@@ -20,6 +20,33 @@ describe("packaged skills catalog", () => {
     );
   });
 
+  it("lists packaged skills including stack pack", () => {
+    const ids = listPackagedSkillIds();
+    assert.ok(ids.includes("playwright"));
+    for (const id of [
+      "frontend-app",
+      "backend-app",
+      "nodejs-app",
+      "python-app",
+      "reactjs-app",
+      "nextjs-app",
+      "vuejs-app",
+      "db-migrations"
+    ]) {
+      assert.ok(ids.includes(id), `missing skill ${id}`);
+      const peek = peekPackagedSkill(id);
+      assert.ok(peek?.description?.length);
+      assert.ok(readPackagedSkillBody(id)?.includes("#"));
+    }
+  });
+
+  it("python-app allows toolchain install after user approval", () => {
+    const body = readPackagedSkillBody("python-app") ?? "";
+    assert.match(body, /user approval/i);
+    assert.match(body, /Propose/i);
+    assert.doesNotMatch(body, /cannot run Python backends yet/i);
+  });
+
   it("lists playwright and peeks description only", () => {
     assert.ok(listPackagedSkillIds().includes("playwright"));
     const peek = peekPackagedSkill("playwright");

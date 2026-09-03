@@ -224,3 +224,210 @@ export async function deleteWorkspaceChat(
   );
   if (!res.ok) throw new Error(await readError(res));
 }
+
+export type WorkspaceHealthFinding = {
+  code: string;
+  severity: "error" | "warning" | "info";
+  repo?: string;
+  message: string;
+  hint?: string;
+};
+
+export type WorkspaceHealthReport = {
+  status: "ready" | "blocked" | "warnings" | "computing";
+  computedAt?: string;
+  members?: unknown[];
+  findings?: WorkspaceHealthFinding[];
+};
+
+export type WorkspaceHealthResponse = {
+  workspaceId: string;
+  status: string;
+  report: WorkspaceHealthReport | Record<string, unknown>;
+  computedAt: string | null;
+};
+
+export async function getWorkspaceHealth(
+  workspaceId: string
+): Promise<WorkspaceHealthResponse> {
+  const res = await fetch(`${BASE_URL}/api/workspaces/${workspaceId}/health`);
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as WorkspaceHealthResponse;
+}
+
+export async function analyzeWorkspace(
+  workspaceId: string
+): Promise<WorkspaceHealthResponse> {
+  const res = await fetch(`${BASE_URL}/api/workspaces/${workspaceId}/analyze`, {
+    method: "POST"
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as WorkspaceHealthResponse;
+}
+
+export type WorkspaceParameter = {
+  key: string;
+  value: string;
+  secret: boolean;
+  hasValue?: boolean;
+};
+
+export async function listWorkspaceParameters(
+  workspaceId: string
+): Promise<WorkspaceParameter[]> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/parameters`
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  const body = (await res.json()) as { parameters?: WorkspaceParameter[] };
+  return body.parameters ?? [];
+}
+
+export async function upsertWorkspaceParameter(
+  workspaceId: string,
+  input: { key: string; value: string; secret?: boolean }
+): Promise<WorkspaceParameter> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/parameters`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    }
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as WorkspaceParameter;
+}
+
+export async function deleteWorkspaceParameter(
+  workspaceId: string,
+  key: string
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/parameters/${encodeURIComponent(key)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok && res.status !== 204) throw new Error(await readError(res));
+}
+
+export type WorkspaceDatabaseEngine = {
+  id: "postgres" | "mongo";
+  label: string;
+  image: string;
+  envKey: string;
+  networkAlias: string;
+  hostPort: number;
+  engineRunning: boolean;
+  attached: boolean;
+  database: string | null;
+};
+
+export type WorkspaceDatabaseStatus = {
+  enabled: boolean;
+  network: string;
+  engines: WorkspaceDatabaseEngine[];
+};
+
+export async function getWorkspaceDatabases(
+  workspaceId: string
+): Promise<WorkspaceDatabaseStatus> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/databases`
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as WorkspaceDatabaseStatus;
+}
+
+export async function provisionWorkspaceDatabase(
+  workspaceId: string,
+  engineId: "postgres" | "mongo"
+): Promise<{
+  engineId: string;
+  label: string;
+  image: string;
+  database: string;
+  envKey: string;
+  networkAlias: string;
+  hostPort: number;
+  reused: boolean;
+  pulled: boolean;
+}> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/databases`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engineId })
+    }
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as {
+    engineId: string;
+    label: string;
+    image: string;
+    database: string;
+    envKey: string;
+    networkAlias: string;
+    hostPort: number;
+    reused: boolean;
+    pulled: boolean;
+  };
+}
+
+export async function detachWorkspaceDatabase(
+  workspaceId: string,
+  engineId: "postgres" | "mongo"
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/databases/${engineId}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok && res.status !== 204) throw new Error(await readError(res));
+}
+
+export type WorkspaceEnvironmentLaunchApp = {
+  name?: string;
+  cwd?: string;
+  command?: string;
+  port?: number;
+  type?: string;
+  repo?: string;
+  [key: string]: unknown;
+};
+
+export type WorkspaceEnvironmentStatus = {
+  launch: { apps: WorkspaceEnvironmentLaunchApp[] };
+  updatedAt: string | null;
+  sourceSessionId: string | null;
+  depsVolumeName: string;
+};
+
+export async function getWorkspaceEnvironment(
+  workspaceId: string
+): Promise<WorkspaceEnvironmentStatus> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/environment`
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as WorkspaceEnvironmentStatus;
+}
+
+export async function clearWorkspaceEnvironmentLaunch(
+  workspaceId: string
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/environment/launch`,
+    { method: "DELETE" }
+  );
+  if (!res.ok && res.status !== 204) throw new Error(await readError(res));
+}
+
+export async function clearWorkspaceEnvironmentDepsCache(
+  workspaceId: string
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${workspaceId}/environment/deps-cache`,
+    { method: "DELETE" }
+  );
+  if (!res.ok && res.status !== 204) throw new Error(await readError(res));
+}

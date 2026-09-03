@@ -44,7 +44,8 @@ describe("repoReadiness", () => {
       const readiness = loadLaunchReadiness(root);
       assert.equal(readiness.ready, true);
       assert.equal(readiness.source, "launch");
-      assert.deepEqual(readiness.apps, [{ name: "web", type: "web" }]);
+      assert.equal(readiness.apps[0]?.name, "web");
+      assert.equal(readiness.apps[0]?.type, "web");
       const block = formatRepoSetupBlock({ readiness });
       assert.match(block, /Eval: agent-ready/);
       assert.match(block, /`web` \(web\)/);
@@ -82,22 +83,36 @@ describe("repoReadiness", () => {
     }
   });
 
-  it("scans each workspace member mount", async () => {
+  it("reads workspace launch.json from session root only", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "forge-ws-ready-"));
-    const fe = path.join(root, "bp-frontend");
-    const be = path.join(root, "bp-backend");
-    await fs.mkdir(path.join(fe, ".forge"), { recursive: true });
-    await fs.mkdir(be, { recursive: true });
+    await fs.mkdir(path.join(root, ".forge"), { recursive: true });
     await fs.writeFile(
-      path.join(fe, ".forge", "launch.json"),
+      path.join(root, ".forge", "launch.json"),
       JSON.stringify({
-        apps: [{ name: "web", type: "web", cwd: ".", command: "yarn dev" }]
+        apps: [
+          {
+            name: "web",
+            repo: "bp-frontend",
+            type: "web",
+            cwd: "bp-frontend",
+            command: "yarn dev",
+            port: 3000
+          },
+          {
+            name: "api",
+            repo: "bp-backend",
+            type: "api",
+            cwd: "bp-backend",
+            command: "pnpm run start",
+            port: 3001
+          }
+        ]
       })
     );
     try {
       const readiness = loadWorkspaceLaunchReadiness({
-        "bp-frontend": fe,
-        "bp-backend": be
+        sessionRoot: root,
+        memberRepos: ["bp-backend", "bp-frontend"]
       });
       assert.equal(readiness.ready, true);
       assert.equal(readiness.members?.length, 2);
@@ -107,16 +122,20 @@ describe("repoReadiness", () => {
       );
       assert.equal(
         readiness.members?.find((m) => m.repo === "bp-backend")?.ready,
-        false
+        true
       );
       const block = formatRepoSetupBlock({
         readiness,
         memberRepos: ["bp-backend", "bp-frontend"]
       });
       assert.match(block, /multiple repositories/);
-      assert.match(block, /bp-frontend/);
-      assert.match(block, /missing/);
-      assert.match(block, /Never write launch config at the session root/);
+      assert.match(block, /session root/);
+      assert.match(block, /\/workspace\/\.forge\/launch\.json/);
+      assert.match(block, /invoke_skill/);
+      assert.match(block, /network plane/);
+      assert.match(block, /provision_app_engine/);
+      assert.doesNotMatch(block, /Never write launch config at the session root/);
+      assert.doesNotMatch(block, /Each has its own/);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

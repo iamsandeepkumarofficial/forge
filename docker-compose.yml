@@ -10,11 +10,47 @@ services:
       - "5432:5432"
     volumes:
       - forge-data:/var/lib/postgresql/data
+    networks:
+      - forge
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  postgres-apps:
+    image: postgres:16
+    container_name: forge-postgres-apps
+    profiles: ["app-dbs"]
+    environment:
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: forge
+      POSTGRES_DB: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - forge-apps-pg-data:/var/lib/postgresql/data
+    networks:
+      - forge
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo-apps:
+    image: mongo:7
+    container_name: forge-mongo-apps
+    profiles: ["app-dbs"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: forge
+      MONGO_INITDB_ROOT_PASSWORD: forge
+    ports:
+      - "27017:27017"
+    volumes:
+      - forge-apps-mongo-data:/data/db
+    networks:
+      - forge
 
   temporal:
     image: temporalio/temporal:latest
@@ -23,6 +59,8 @@ services:
       - "7233:7233"
       - "8233:8233"
     command: ["server", "start-dev", "--ip", "0.0.0.0"]
+    networks:
+      - forge
 
   forge-sandbox:
     build:
@@ -30,7 +68,36 @@ services:
       dockerfile: Dockerfile.sandbox
     image: forge-sandbox:latest
     profiles: ["sandbox-image"]
+    networks:
+      - forge
+
+  forge-sandbox-generic:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox-generic
+    image: forge-sandbox-generic:latest
+    profiles: ["sandbox-image"]
+    networks:
+      - forge
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: forge-phoenix
+    profiles: ["phoenix"]
+    ports:
+      - "6006:6006"
+      - "4317:4317"
+    networks:
+      - forge
+
+networks:
+  forge:
+    name: forge
 
 volumes:
   forge-data:
+    driver: local
+  forge-apps-pg-data:
+    driver: local
+  forge-apps-mongo-data:
     driver: local

@@ -18,12 +18,44 @@ describe("useInitialPromptSend", () => {
           historyLoaded: true,
           status: "ready",
           messageCount: 0,
-          projectId: "p1",
-          chatId: "c1",
+          clearStatePath: "/projects/p1/chats/c1",
           sendText
         }),
       { wrapper }
     );
     expect(sendText).toHaveBeenCalledWith("hello");
+  });
+
+  it("sends without navigate when clearStatePath omitted", () => {
+    const sendText = vi.fn();
+    renderHook(
+      () =>
+        useInitialPromptSend({
+          initialPrompt: "fix workspace",
+          historyLoaded: true,
+          status: "ready",
+          messageCount: 0,
+          sendText
+        }),
+      { wrapper }
+    );
+    expect(sendText).toHaveBeenCalledWith("fix workspace");
+  });
+
+  it("can send even when history is not empty", () => {
+    const sendText = vi.fn();
+    renderHook(
+      () =>
+        useInitialPromptSend({
+          initialPrompt: "fix again",
+          historyLoaded: true,
+          status: "ready",
+          messageCount: 3,
+          sendEvenIfNotEmpty: true,
+          sendText
+        }),
+      { wrapper }
+    );
+    expect(sendText).toHaveBeenCalledWith("fix again");
   });
 });

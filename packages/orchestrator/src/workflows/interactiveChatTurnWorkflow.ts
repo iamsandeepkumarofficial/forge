@@ -130,14 +130,14 @@ async function runToolCallsRound(opts: {
   toolCalls: ToolCallLike[];
   toolNameSet: Set<string>;
   currentMode: { value: ChatAgentMode };
-}): Promise<{ count: number; pauseForModeConfirm: boolean }> {
+}): Promise<{ count: number; pauseForUserInput: boolean }> {
   await appendAssistantToolInvocations(opts);
   const toolResultParts: unknown[] = [];
-  let pauseForModeConfirm = false;
+  let pauseForUserInput = false;
   for (let i = 0; i < opts.toolCalls.length; i++) {
     const tc = opts.toolCalls[i]!;
     opts.toolNameSet.add(tc.toolName);
-    if (pauseForModeConfirm) {
+    if (pauseForUserInput) {
       await skipRemainingTools({
         args: opts.args,
         toolCalls: opts.toolCalls,
@@ -161,7 +161,12 @@ async function runToolCallsRound(opts: {
         const next = parseAppliedMode(meta);
         if (next) opts.currentMode.value = next;
       } else if (meta?.needsConfirmation === true) {
-        pauseForModeConfirm = true;
+        pauseForUserInput = true;
+      }
+    } else if (tc.toolName === "ask_user") {
+      const meta = result.metadata as Record<string, unknown> | undefined;
+      if (meta?.needsUserInput === true) {
+        pauseForUserInput = true;
       }
     }
     toolResultParts.push({
@@ -174,7 +179,7 @@ async function runToolCallsRound(opts: {
     });
   }
   await appendToolResultParts({ args: opts.args, parts: toolResultParts });
-  return { count: opts.toolCalls.length, pauseForModeConfirm };
+  return { count: opts.toolCalls.length, pauseForUserInput };
 }
 
 async function rejectTruncatedToolCalls(opts: {
@@ -182,7 +187,7 @@ async function rejectTruncatedToolCalls(opts: {
   text: string;
   toolCalls: ToolCallLike[];
   toolNameSet: Set<string>;
-}): Promise<{ count: number; pauseForModeConfirm: boolean }> {
+}): Promise<{ count: number; pauseForUserInput: boolean }> {
   await appendAssistantToolInvocations(opts);
   const toolResultParts: unknown[] = [];
   for (const tc of opts.toolCalls) {
@@ -203,7 +208,7 @@ async function rejectTruncatedToolCalls(opts: {
     });
   }
   await appendToolResultParts({ args: opts.args, parts: toolResultParts });
-  return { count: opts.toolCalls.length, pauseForModeConfirm: false };
+  return { count: opts.toolCalls.length, pauseForUserInput: false };
 }
 
 async function handleTurnFailure(opts: {
@@ -253,7 +258,7 @@ async function applyToolStep(opts: {
   toolCalls: ToolCallLike[];
   toolNameSet: Set<string>;
   currentMode: { value: ChatAgentMode };
-}): Promise<{ count: number; pauseForModeConfirm: boolean }> {
+}): Promise<{ count: number; pauseForUserInput: boolean }> {
   if (isLengthFinishReason(opts.finishReason)) {
     return rejectTruncatedToolCalls(opts);
   }
@@ -298,7 +303,7 @@ async function runToolRoundLoop(opts: {
       currentMode: opts.currentMode
     });
     toolCallCount += applied.count;
-    if (applied.pauseForModeConfirm) {
+    if (applied.pauseForUserInput) {
       pendingToolsAtCap = false;
       break;
     }

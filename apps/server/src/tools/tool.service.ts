@@ -18,6 +18,9 @@ import {
 } from "./toolExecutors.js";
 import { executeListSkills } from "./listSkills.tool.js";
 import { executeInvokeSkill } from "./invokeSkill.tool.js";
+import { executeUpsertWorkspaceParameter } from "./upsertWorkspaceParameter.tool.js";
+import { executeDockerImageLookup } from "./dockerImageLookup.tool.js";
+import { executeProvisionAppEngine } from "./provisionAppEngine.tool.js";
 
 const N_200 = 200;
 const N_400 = 400;
@@ -98,6 +101,30 @@ export class ToolService {
     if (toolName === "invoke_skill") {
       const skillId = typeof args.skillId === "string" ? args.skillId : "";
       const body = await executeInvokeSkill({ sessionId, skillId });
+      return {
+        kind: "result",
+        status: body.success ? N_200 : N_400,
+        body
+      };
+    }
+    if (toolName === "upsert_workspace_parameter") {
+      const body = await executeUpsertWorkspaceParameter({ sessionId, args });
+      return {
+        kind: "result",
+        status: body.success ? N_200 : N_400,
+        body
+      };
+    }
+    if (toolName === "docker_image_lookup") {
+      const body = await executeDockerImageLookup({ args });
+      return {
+        kind: "result",
+        status: body.success ? N_200 : N_400,
+        body
+      };
+    }
+    if (toolName === "provision_app_engine") {
+      const body = await executeProvisionAppEngine({ sessionId, args });
       return {
         kind: "result",
         status: body.success ? N_200 : N_400,

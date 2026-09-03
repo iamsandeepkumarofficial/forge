@@ -77,4 +77,63 @@ describe("appRunner", { concurrency: false }, () => {
     assert.equal(next.apps[0]!.cwd, ".");
     assert.match(written, /"cwd": "\."/);
   });
+
+  it("upsertLaunchApp updates port and keeps port when omitted", async () => {
+    sandboxInfo = {
+      containerName: "c",
+      workingDir: "/workspace",
+      repoDir: "repo"
+    };
+    readFileImpl = async () =>
+      JSON.stringify({
+        apps: [
+          {
+            name: "web",
+            cwd: ".",
+            command: "npm run dev",
+            type: "web",
+            port: 3000
+          }
+        ]
+      });
+    written = "";
+    const updated = await upsertLaunchApp("s1", {
+      name: "web",
+      cwd: ".",
+      command: "npm run dev",
+      type: "web",
+      port: 3002
+    });
+    assert.equal(updated.apps[0]!.port, 3002);
+
+    readFileImpl = async () => written;
+    written = "";
+    const kept = await upsertLaunchApp("s1", {
+      name: "web",
+      cwd: ".",
+      command: "npm run dev",
+      type: "web"
+    });
+    assert.equal(kept.apps[0]!.port, 3002);
+  });
+
+  it("upsertLaunchApp rejects ports outside 3000–3009", async () => {
+    sandboxInfo = {
+      containerName: "c",
+      workingDir: "/workspace",
+      repoDir: "repo"
+    };
+    readFileImpl = async () => JSON.stringify({ apps: [] });
+    await assert.rejects(
+      () =>
+        upsertLaunchApp("s1", {
+          name: "web",
+          cwd: ".",
+          command: "npm run dev",
+          type: "web",
+          port: 3010
+        }),
+      /outside published range/
+    );
+  });
 });

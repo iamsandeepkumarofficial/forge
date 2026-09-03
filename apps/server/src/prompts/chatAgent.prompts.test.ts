@@ -47,7 +47,11 @@ describe("composeChatAgentSystemPrompt", () => {
     assert.match(prompt, /`bp-frontend\/` → `\/workspace\/bp-frontend`/);
     assert.match(prompt, /`bp-backend\/` → `\/workspace\/bp-backend`/);
     assert.match(prompt, /must start with a member repo name/);
-    assert.match(prompt, /Never write launch config at the session root/);
+    assert.match(prompt, /\/workspace\/\.forge\/launch\.json|session-root/);
+    assert.match(prompt, /Workspace setup SOP/);
+    assert.match(prompt, /invoke_skill/);
+    assert.doesNotMatch(prompt, /Each member has its own git root and its own/);
+    assert.doesNotMatch(prompt, /Never write launch config at the session root/);
     assert.doesNotMatch(prompt, /There is exactly one connected repository/);
   });
 
