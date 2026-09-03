@@ -1,7 +1,7 @@
-import { Calculator, Gamepad2, ImageIcon, Mail, RefreshCw } from "lucide-react";
+import { Calculator, Gamepad2, ImageIcon, Mail, RefreshCw, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EmptyStateImportPanels } from "./empty-state-import-panels.js";
-import { GithubRepoPicker } from "./github-repo-picker.js";
+import { ForgeMarkLink } from "./forge-mark.js";
 import type { useDashboardEmptyState } from "./use-dashboard-empty-state.js";
 
 const SUGGESTION_ICONS = [Mail, ImageIcon, Gamepad2, Calculator] as const;
@@ -16,19 +16,21 @@ export function DashboardEmptyStateView(options: {
   const { state: s, onImportSectionRef } = options;
   return (
     <div className="min-h-screen px-6 py-10">
-      <div className="mx-auto max-w-5xl space-y-8">
+      <div className="mx-auto max-w-3xl space-y-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <Link
-              to="/"
-              className="text-sm text-muted-foreground hover:underline"
-            >
-              Forge
-            </Link>
+            <ForgeMarkLink size="md" />
             <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
               Let&apos;s build something new
             </h1>
           </div>
+          <Link
+            to="/settings"
+            aria-label="Settings"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Settings className="size-5" />
+          </Link>
         </div>
         <DashboardBuildPrompt state={s} />
         {s.error && (
@@ -44,23 +46,11 @@ export function DashboardEmptyStateView(options: {
             showPathInput={s.showPathInput}
             localPath={s.localPath}
             onLocalPathChange={s.setLocalPath}
-            onGithub={() => {
-              s.setError(null);
-              s.setShowGithubPicker(true);
-            }}
             onSelectFolder={() => void s.handleSelectFolder()}
             onConnectPath={() => void s.handleConnectPath()}
           />
         </div>
       </div>
-      <GithubRepoPicker
-        open={s.showGithubPicker}
-        onClose={() => {
-          if (!s.connectingSlug) s.setShowGithubPicker(false);
-        }}
-        onSelect={s.handleGithubSelect}
-        connectingSlug={s.connectingSlug}
-      />
     </div>
   );
 }
@@ -135,21 +125,12 @@ function ConnectHints(options: { state: ViewState }) {
   return (
     <>
       <p className="text-sm text-muted-foreground">
-        You can also{" "}
-        <button
-          type="button"
-          className="text-primary underline-offset-2 hover:underline"
-          disabled={s.busy}
-          onClick={() => void s.handleSelectFolder()}
-        >
-          select a folder
-        </button>{" "}
-        to connect a local project
+        Select a local project folder to get started
         {s.desktop ? "" : " (enter an absolute path below)"}.
       </p>
       {s.buildHint && (
         <p className="text-sm text-muted-foreground">
-          Connect a repo or select a folder to start
+          Connect a folder to start
           {s.pendingTitle ? (
             <>
               {" "}

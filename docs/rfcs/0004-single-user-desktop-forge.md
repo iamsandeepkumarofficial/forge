@@ -8,7 +8,7 @@
 
 ## Summary
 
-Forge is a **single-user, desktop-first** local product. There is no `FORGE_POC_TOKEN` or user-email identity. Connecting a project uses a native folder picker (browser: absolute-path fallback); the selected tree is **copied** into `~/.forge/projects/{id}/` as the canonical workspace and bind-mounted into the session sandbox. Starting a chat session provisions the sandbox and **auto-starts** web apps from `.forge/launch.json`. The Tauri supervisor boots compose + Node processes and hosts the web UI.
+Forge is a **single-user, desktop-first** local product. There is no `FORGE_POC_TOKEN` or user-email identity. Connecting a project uses a native folder picker (browser: absolute-path fallback); the selected tree is **copied** into `~/.forge/projects/{id}/` as the canonical workspace and bind-mounted into the session sandbox. Starting a chat session provisions the sandbox and **auto-starts** web apps from `.forge/launch.json`. The Electron supervisor boots compose + Node processes and hosts the web UI.
 
 ## Motivation
 
@@ -21,7 +21,7 @@ POC bearer auth and email headers were loopback scaffolding, not product require
 3. Desktop-first folder select → copy into `~/.forge/projects/{id}/` as canonical; remove ZIP upload and MinIO.
 4. Browser remains a fallback: path text input for import; infra started manually via compose + `pnpm`.
 5. Auto-run `.forge/launch.json` web apps when a chat session is provisioned/started.
-6. Implement the full Tauri supervisor (preflight, start/stop infra, native dialog) loading `@forge/web-ui`.
+6. Implement the full Electron supervisor (preflight, start/stop infra, native dialog) loading `@forge/web-ui`.
 
 ## Non-goals
 
@@ -34,7 +34,7 @@ POC bearer auth and email headers were loopback scaffolding, not product require
 
 ```mermaid
 flowchart TD
-  Desktop["Tauri desktop (supervisor)"] -->|"start_infra: docker compose up"| Infra["postgres + temporal"]
+  Desktop["Electron desktop (supervisor)"] -->|"start_infra: docker compose up"| Infra["postgres + temporal"]
   Desktop -->|"spawn node"| Server["apps/server"]
   Desktop -->|"spawn node"| Orch["orchestrator worker"]
   Desktop -->|"spawn node"| PP["preview-plane"]
@@ -68,16 +68,16 @@ This amends RFC 0002’s “generate loopback token / inject into webview” boo
 
 After `provisionSessionSandbox` succeeds (session start and chat/workbench create), best-effort `autoStartPreview(sessionId)`: for each `type: "web"` app in `.forge/launch.json` that is not running, call `runApp` (port wait + preview publish). Skip silently if no launch config. Run tab polling continues to reflect status.
 
-## D. Tauri desktop supervisor
+## D. Electron desktop supervisor
 
-- Point webview at web-ui (`devUrl` Vite / `frontendDist` web-ui dist); root `desktop` script.
-- Plugins: dialog, fs, shell; `pick_folder` / frontend dialog API.
-- Implement `preflight_docker`, `start_infra` (compose postgres+temporal, sandbox image, spawn server/orchestrator/preview-plane with keys from `~/.forge/config.json`), `stop_infra` on quit.
-- Web-ui bridge: `isDesktop()` / `pickFolder()` with lazy Tauri imports so browser builds work.
+- Point Chromium at web-ui (Vite in dev / web-ui dist in packaged builds); root `desktop` script.
+- Preload exposes `pickFolder` and `getStatus` on `window.forgeDesktop`.
+- Implement `preflightDocker`, `startInfra` (compose postgres+temporal, sandbox image, spawn server/orchestrator/preview-plane with keys from `~/.forge/config.json`), `stopInfra` on quit.
+- Web-ui bridge: `isDesktop()` / `pickFolder()` via `forgeDesktop` so browser builds work without Electron.
 
 ## Product stance
 
-**Desktop-first, browser as fallback.** Primary path: Tauri (native pick + supervised infra). Browser path: same UI, path-input import, manual `docker compose` + `pnpm dev`.
+**Desktop-first, browser as fallback.** Primary path: Electron (native pick + supervised infra). Browser path: same UI, path-input import, manual `docker compose` + `pnpm dev`.
 
 ## Compatibility / migration
 
@@ -88,7 +88,7 @@ After `provisionSessionSandbox` succeeds (session start and chat/workbench creat
 
 1. Boot without `FORGE_POC_TOKEN` / user email env.
 2. Desktop: pick folder → `~/.forge/projects/{id}` populated → chat session provisions sandbox and starts web preview when launch.json exists.
-3. Browser: absolute path import works; build succeeds without Tauri runtime.
+3. Browser: absolute path import works; build succeeds without Electron runtime.
 4. No `Authorization` / `X-Forge-User-Email` on API traffic; preview-plane open locally.
 
 ## Open questions

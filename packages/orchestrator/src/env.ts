@@ -5,7 +5,7 @@ import { config } from "dotenv";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../..");
 const packageRoot = path.resolve(here, "..");
-config({ path: path.join(repoRoot, ".env") });
+config({ path: path.join(repoRoot, ".env"), override: true });
 config({ path: path.join(packageRoot, ".env"), override: true });
 
 export const REPO_ROOT = repoRoot;

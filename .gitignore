@@ -12,7 +12,6 @@ managed-repos/
 data/
 .wrangler/
 target/
-apps/desktop/src-tauri/target/
 *.app
 *.dmg
 *.AppImage
