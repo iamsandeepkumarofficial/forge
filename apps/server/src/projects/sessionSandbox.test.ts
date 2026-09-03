@@ -8,7 +8,8 @@ import {
   FIRST_APP_PORT,
   RESERVED_PORTS,
   DEFAULT_SANDBOX_IMAGE,
-  WORKSPACE_MOUNT
+  WORKSPACE_MOUNT,
+  mountsForSandboxReadyCheck
 } from "./sessionSandbox.js";
 
 describe("sessionSandbox helpers", () => {
@@ -45,5 +46,21 @@ describe("sessionSandbox helpers", () => {
     assert.equal(sandboxContainerName("s1"), "forge-sandbox-s1");
     assert.match(sessionVolumeName("weird/name!here"), /^forge-session-/);
     assert.doesNotMatch(sessionVolumeName("a/b"), /\//);
+  });
+
+  it("mountsForSandboxReadyCheck uses member mounts for workspaces", () => {
+    assert.deepEqual(mountsForSandboxReadyCheck(undefined), ["/workspace"]);
+    assert.deepEqual(mountsForSandboxReadyCheck({}), ["/workspace"]);
+    assert.deepEqual(
+      mountsForSandboxReadyCheck({ frontend: "/workspace/frontend" }),
+      ["/workspace/frontend"]
+    );
+    assert.deepEqual(
+      mountsForSandboxReadyCheck({
+        frontend: "/workspace/frontend",
+        backend: "/workspace/backend"
+      }),
+      ["/workspace/frontend", "/workspace/backend"]
+    );
   });
 });

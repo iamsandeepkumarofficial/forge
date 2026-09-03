@@ -489,13 +489,35 @@ export async function getSessionSandboxStatus(
   } catch {
     return { status: "absent", workingDir, running: false };
   }
-  const empty = running ? !(await isRepoInitialized(containerName)) : true;
+  let empty = true;
+  if (running) {
+    try {
+      const info = await getSessionRepoInfo(sessionId);
+      const mounts = mountsForSandboxReadyCheck(info.worktrees);
+      const checks = await Promise.all(
+        mounts.map((mount) => isRepoInitializedAt(containerName, mount))
+      );
+      empty = !checks.some(Boolean);
+    } catch {
+      empty = !(await isRepoInitialized(containerName));
+    }
+  }
   return {
     status: empty ? "empty" : "ready",
     workingDir,
     containerId,
     running
   };
+}
+
+/** Workspace sessions check member mounts; project sessions check `/workspace`. */
+export function mountsForSandboxReadyCheck(
+  worktrees?: Record<string, string>
+): string[] {
+  if (worktrees && Object.keys(worktrees).length > 0) {
+    return Object.values(worktrees);
+  }
+  return [WORKSPACE_MOUNT];
 }
 
 export async function destroySessionSandbox(sessionId: string): Promise<void> {
