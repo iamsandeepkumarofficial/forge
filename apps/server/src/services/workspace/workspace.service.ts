@@ -189,7 +189,7 @@ export class WorkspaceService {
       throw httpError(N_404, "Project is not a member of this workspace");
     }
     await this.workspaceRepo.removeMember(workspaceId, projectId);
-    // Drop dependsOn / route references to the removed repo.
+    
     const remaining = await this.workspaceRepo.listMembers(workspaceId);
     for (const m of remaining) {
       if (m.dependsOn.includes(member.repoName)) {
@@ -273,7 +273,7 @@ export class WorkspaceService {
             )
           }
     );
-    // When renaming, rewrite other members' dependsOn references.
+    
     if (nextRepoName !== member.repoName) {
       for (const m of members) {
         if (m.projectId === projectId) continue;

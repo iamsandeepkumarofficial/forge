@@ -1,6 +1,6 @@
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
 
-/** Avoid a DB write on every apps poll while the workbench is open. */
+
 export const SESSION_ACTIVITY_TOUCH_MS = 2 * 60 * 1000;
 
 const lastTouch = new Map<string, number>();

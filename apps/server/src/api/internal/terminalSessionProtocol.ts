@@ -43,8 +43,8 @@ export function parseStreamId(stream: string): ParsedStream | null {
   }
   if (kind === "shell" && name.includes(":")) return null;
   if (kind === "app" || kind === "job") {
-    // Workspace apps are "repo/name"; log files map "/" → "_".
-    // Reject other characters that sanitize would rewrite (spaces, etc.).
+    
+    
     const sanitized = sanitizeJobName(name);
     if (!sanitized || sanitized !== name.replace(/\//g, "_")) {
       return null;

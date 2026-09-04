@@ -62,8 +62,8 @@ const bindHost =
     ? "127.0.0.1"
     : process.env.FORGE_BIND_HOST?.trim() || "127.0.0.1";
 
-// Hostname preview proxy shares this process (local/desktop). Set
-// PREVIEW_IN_PROCESS=0 to use a standalone @forge/preview-plane instead.
+
+
 startInProcessPreview(bindHost);
 
 const server = http.createServer(app);

@@ -4,9 +4,9 @@ export type AppDbEngine = {
   id: AppDbEngineId;
   label: string;
   image: string;
-  /** Stable docker container name for the shared Forge-managed instance. */
+  
   containerName: string;
-  /** Hostname sandboxes use on the forge network. */
+  
   networkAlias: string;
   containerPort: number;
   hostPort: number;
@@ -14,7 +14,7 @@ export type AppDbEngine = {
   envKey: "DATABASE_URL" | "MONGODB_URI";
   user: string;
   password: string;
-  /** Older compose container name; reuse if already running. */
+  
   legacyContainerNames: string[];
 };
 
@@ -82,7 +82,7 @@ export function connectionUrlFor(
   return `mongodb://${user}:${password}@${networkAlias}:${containerPort}/${database}?authSource=admin`;
 }
 
-/** Infer which allowlisted engines a repo likely needs. */
+
 export function detectEnginesFromFacts(facts: {
   envKeysReferenced?: string[];
   detectedStack?: string[];

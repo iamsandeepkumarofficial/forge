@@ -55,7 +55,7 @@ function asForgeConfig(launch: { apps: unknown[] }): ForgeConfig {
   return { apps };
 }
 
-/** Seed session launch.json from workspace catalog when session file is empty. */
+
 export async function seedLaunchFromWorkspace(
   sessionId: string
 ): Promise<boolean> {
@@ -110,7 +110,7 @@ export async function seedLaunchFromWorkspace(
   return true;
 }
 
-/** Persist session launch.json to workspace catalog after a successful app start. */
+
 export async function promoteLaunchToWorkspace(
   sessionId: string
 ): Promise<void> {
@@ -141,7 +141,7 @@ async function memberRepoNames(sessionId: string): Promise<string[]> {
   return members.map((m) => m.repoName);
 }
 
-/** Restore node_modules from the workspace deps volume into each member. */
+
 export async function restoreWorkspaceDepsForSession(
   sessionId: string
 ): Promise<void> {
@@ -157,7 +157,7 @@ export async function restoreWorkspaceDepsForSession(
   }
 }
 
-/** Capture node_modules onto the workspace deps volume after a successful start. */
+
 export async function captureWorkspaceDepsForSession(
   sessionId: string
 ): Promise<void> {

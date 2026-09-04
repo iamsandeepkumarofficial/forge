@@ -137,7 +137,7 @@ export async function resolveTerminalCwd(options: {
   } else if (worktrees?.[wd]) {
     cwd = worktrees[wd];
   } else if (!worktrees && wd === options.repoDir) {
-    // Project-scoped sessions treat repoDir as an alias for the workspace root.
+    
     cwd = options.workingDir;
   } else {
     cwd = resolveWorkspacePath(wd, { knownRepos });

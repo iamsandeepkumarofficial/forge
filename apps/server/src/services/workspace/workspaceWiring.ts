@@ -1,10 +1,7 @@
 import { assertSafeRepoDirectoryName } from "@forge/core";
 import type { WorkspaceRoute } from "@forge/db";
 
-/**
- * Detect cycles in dependsOn edges among workspace members.
- * Returns a path that forms a cycle, or null if acyclic.
- */
+
 export function findDependsOnCycle(
   members: Array<{ repoName: string; dependsOn: string[] }>
 ): string[] | null {
@@ -42,7 +39,7 @@ export function findDependsOnCycle(
   return null;
 }
 
-/** Topological order of repoNames given dependsOn edges. Throws on cycle. */
+
 export function topoSortRepoNames(
   members: Array<{ repoName: string; dependsOn: string[] }>
 ): string[] {
@@ -86,10 +83,7 @@ export function normalizeRepoName(raw: string): string {
   return name;
 }
 
-/**
- * Validate gateway routes: unique non-empty prefixes, targets must exist,
- * catch-all `/` (if present) must be last.
- */
+
 export function validateWorkspaceRoutes(
   routes: WorkspaceRoute[],
   memberRepoNames: Set<string>
@@ -136,7 +130,7 @@ export function validateWorkspaceRoutes(
   return normalized;
 }
 
-/** Resolve {{svc.internalUrl}} / {{svc.publicUrl}} placeholders in env templates. */
+
 export function resolveEnvTemplates(
   templates: Record<string, string>,
   services: Record<string, { internalUrl: string; publicUrl: string }>

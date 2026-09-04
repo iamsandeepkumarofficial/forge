@@ -15,20 +15,20 @@ export type ChatAgentPromptPaths = {
   repoDir: string;
   workingDir: string;
   sessionId?: string;
-  /** Multi-repo workspace sessions: repoName -> container mount path (for prompt text). */
+  
   worktrees?: Record<string, string>;
-  /** Host paths for reading launch.json / AGENTS.md (local worktrees). */
+  
   hostWorktrees?: Record<string, string>;
   hostWorkingDir?: string;
-  /** Pre-formatted repo inventory block (Part 1). */
+  
   inventoryBlock?: string;
-  /** Condensed workspace health block (Part 8). */
+  
   healthBlock?: string;
-  /** Workspace setup SOP (stack-agnostic; skills own stacks). */
+  
   setupSopBlock?: string;
-  /** Env key names available (no secret values). */
+  
   envKeyNames?: string[];
-  /** Optional precomputed launch readiness (workspace: from sandbox root launch.json). */
+  
   readiness?: import("./repoReadiness.js").LaunchReadiness;
 };
 

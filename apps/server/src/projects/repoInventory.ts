@@ -129,7 +129,7 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
   return lines.join("\n");
 }
 
-/** Load inventory from host paths (pre-session / prompt with hostWorktrees). */
+
 export function loadRepoInventoryFromHost(options: {
   members: Array<{ repo: string; hostPath: string; analyzable?: boolean }>;
   dependsOnGraph?: Array<{ repo: string; dependsOn: string[] }>;
@@ -156,7 +156,7 @@ async function readSandboxFile(
   return readFileFromSandbox(containerName, absPath);
 }
 
-/** Load inventory by reading from sandbox container (works for GitHub clones). */
+
 export async function loadRepoInventoryFromSandbox(options: {
   containerName: string;
   worktrees: Record<string, string>;

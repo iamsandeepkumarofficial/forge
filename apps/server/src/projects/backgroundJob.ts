@@ -80,10 +80,7 @@ export async function stopBackgroundJob(options: {
   });
 }
 
-/**
- * Kill whatever is listening on a container TCP port (orphaned next/node children
- * often survive after the forge job pid file is gone).
- */
+
 export function freeListeningPortScript(port: number): string {
   const p = Math.floor(port);
   return `
@@ -234,7 +231,7 @@ export async function waitUntilTcpListening(options: {
   return false;
 }
 
-/** Host-side check: Docker Desktop sometimes drops published port proxies. */
+
 export async function isHostTcpListening(port: number): Promise<boolean> {
   const net = await import("node:net");
   return await new Promise((resolve) => {

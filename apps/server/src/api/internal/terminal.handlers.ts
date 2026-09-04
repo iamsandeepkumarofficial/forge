@@ -68,7 +68,7 @@ export async function handleTerminalRun(
   req: Request,
   res: Response
 ): Promise<void> {
-  // Agent/tool-plane only. Interactive user shells use WS /internal/terminal/session.
+  
   const sessionId = sessionIdFrom(req);
   const command =
     typeof req.body?.command === "string" ? req.body.command.trim() : "";

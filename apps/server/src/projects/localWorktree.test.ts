@@ -107,7 +107,7 @@ describe("localWorktree", () => {
     );
     assert.ok(pointer.includes("/worktrees/"));
 
-    // Branch exists on canonical (shared refs)
+    
     const branches = await git(canonical, ["branch", "--list", "chat-session-1"]);
     assert.match(branches, /chat-session-1/);
 

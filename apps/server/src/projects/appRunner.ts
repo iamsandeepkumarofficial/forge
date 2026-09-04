@@ -35,7 +35,7 @@ export interface ForgeApp {
   command: string;
   port?: number;
   type: AppType;
-  /** Member repoName when this app comes from a workspace mount. */
+  
   repo?: string;
 }
 export interface ForgeConfig {
@@ -89,7 +89,7 @@ function qualifyApp(app: ForgeApp, repo: string): ForgeApp {
   };
 }
 
-/** Normalize a workspace root launch.json app into in-memory form. */
+
 function normalizeWorkspaceRootApp(
   app: ForgeApp,
   memberRepos: string[]
@@ -117,7 +117,7 @@ function assertCwdUnderRepo(
       `cwd "${cwd}" belongs to member "${first}", not "${repo}". Use "${repo}" or "${repo}/apps/web".`
     );
   }
-  // Repo-relative path (e.g. apps/web) → session-relative
+  
   return `${repo}/${cleaned.replace(/^\.\//, "")}`;
 }
 
@@ -161,7 +161,7 @@ export async function readForgeConfig(sessionId: string): Promise<{
   const trees = worktrees && Object.keys(worktrees).length > 0 ? worktrees : null;
   const memberRepos = trees ? Object.keys(trees).sort() : [];
 
-  // Workspace: only session-root /workspace/.forge/launch.json
+  
   if (trees) {
     const rootFound = await readLaunchAt(containerName, workingDir);
     if (!rootFound) {
@@ -186,7 +186,7 @@ export async function readForgeConfig(sessionId: string): Promise<{
   return { exists: false, source: "none", config: { apps: [] } };
 }
 
-/** Serialize an in-memory workspace app for session-root launch.json. */
+
 function toWorkspaceRootApp(
   app: ForgeApp,
   repo: string,
@@ -255,7 +255,7 @@ function unqualifyApp(app: ForgeApp, repo: string): ForgeApp {
   return { ...rest, name, cwd };
 }
 
-/** Infer which workspace member owns this launch app. */
+
 export function inferWorkspaceRepo(options: {
   app: Pick<ForgeApp, "name" | "cwd" | "repo">;
   memberRepos: string[];
@@ -337,7 +337,7 @@ export async function upsertLaunchApp(
     .filter((a) => a.port != null)
     .map((a) => a.port as number);
 
-  // Omit port on update → keep existing. Explicit port must be free in 3000–3009.
+  
   const portInput =
     nextApp.port == null && existing?.port != null
       ? existing.port
@@ -491,7 +491,7 @@ export async function runApp(
   return status;
 }
 
-/** Best-effort: save launch.json + capture node_modules for the next chat. */
+
 async function persistSuccessfulEnvironment(sessionId: string): Promise<void> {
   try {
     const {
@@ -535,7 +535,7 @@ async function resolveAppExtraEnv(
     const { sessionAppDbEnvFor } = await import("./sessionAppDb.js");
     Object.assign(base, sessionAppDbEnvFor(sessionId));
   } catch {
-    /* optional */
+    
   }
   if (!app.repo) return base;
   try {
@@ -605,7 +605,7 @@ async function startAppProcess(options: {
 }): Promise<{ ok: true } | { ok: false; failure: AppStartFailure }> {
   const { sessionId, containerName, app, appDir } = options;
   const extraEnv = await resolveAppExtraEnv(sessionId, app);
-  // Always replace a prior run; Next orphans often keep the port after pid death.
+  
   await stopBackgroundJob({
     containerName,
     kind: "app",
@@ -644,7 +644,7 @@ async function startAppProcess(options: {
   return { ok: true };
 }
 
-/** Rebind Docker host ports if Desktop dropped them, then relaunch the app. */
+
 async function ensurePreviewHostPort(options: {
   sessionId: string;
   containerName: string;
@@ -750,7 +750,7 @@ function previewUrlIfConfigured(
   return previewUrlForHostname(hostname, scheme);
 }
 
-/** Prefer proxied preview URL over raw host port when preview domain is configured. */
+
 export function resolveRunningAppUrl(options: {
   running: boolean;
   sessionId: string;
@@ -790,7 +790,7 @@ async function isPreviewPlaneHealthy(): Promise<boolean> {
   }
 }
 
-/** Re-upsert preview routes lost on server restart (throttled). */
+
 async function ensurePreviewPublished(options: {
   sessionId: string;
   containerName: string;
@@ -833,7 +833,7 @@ async function statusForApp(options: {
     port: app.port,
     hostPort
   });
-  // Avoid blank iframe when status advertises a proxy URL but plane is down.
+  
   if (
     running &&
     url &&
@@ -866,7 +866,7 @@ export async function listAppStatuses(sessionId: string): Promise<{
   return { exists, source, apps };
 }
 
-/** Lightweight app list for terminal tabs (no preview URLs or plane health). */
+
 export async function listAppRunningFlags(
   sessionId: string
 ): Promise<Array<{ name: string; running: boolean }>> {
@@ -893,7 +893,7 @@ export async function listAppRunningFlags(
   return flags.filter((f): f is { name: string; running: boolean } => f != null);
 }
 
-/** Best-effort: start apps after sandbox provision. Never throws. */
+
 export async function autoStartPreview(sessionId: string): Promise<void> {
   try {
     const { apps } = await listAppStatuses(sessionId);
@@ -918,21 +918,21 @@ export async function autoStartPreview(sessionId: string): Promise<void> {
         ordered = order.flatMap((repo) =>
           apps.filter((a) => a.repo === repo)
         );
-        // Append any apps without a repo tag.
+        
         const seen = new Set(ordered.map((a) => a.name));
         for (const a of apps) {
           if (!seen.has(a.name)) ordered.push(a);
         }
       }
     } catch {
-      /* project-scoped: keep list order */
+      
     }
 
     const isWorkspace = ordered.some((a) => a.repo);
     for (const app of ordered) {
       const isWeb = app.type == null || app.type === "web";
       const isApi = app.type === "api";
-      // Workspace sessions also auto-start APIs so dependsOn wiring works.
+      
       if (isWorkspace) {
         if (!isWeb && !isApi) continue;
       } else if (!isWeb) {
@@ -960,7 +960,7 @@ export async function autoStartPreview(sessionId: string): Promise<void> {
   }
 }
 
-/** Register single-origin path routes on the primary preview hostname. */
+
 export async function registerWorkspaceGateway(
   sessionId: string
 ): Promise<void> {
@@ -997,7 +997,7 @@ export async function registerWorkspaceGateway(
   }
   if (pathRoutes.length === 0) return;
 
-  // Default backend = catch-all "/" target, else first route.
+  
   const catchAll =
     pathRoutes.find((r) => r.pathPrefix === "/") ?? pathRoutes[0];
   await registerPreviewRoute({

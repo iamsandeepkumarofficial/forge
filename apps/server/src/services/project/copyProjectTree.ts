@@ -3,7 +3,7 @@ import path from "node:path";
 
 const SKIP_DIR_SEGMENTS = new Set([
   "node_modules",
-  // Keep .git so canonical local copies remain real repos (RFC 0005).
+  
   ".svn",
   ".hg",
   "dist",
@@ -26,10 +26,7 @@ function shouldSkipName(name: string, isDirectory: boolean): boolean {
   return false;
 }
 
-/**
- * Copy a project tree into destDir, skipping heavy/generated directories.
- * Does not follow symlinks outside the source (copies link targets as files when possible).
- */
+
 export async function copyProjectTree(
   sourceDir: string,
   destDir: string

@@ -107,10 +107,7 @@ export type EnsureEngineResult = {
   pulled: boolean;
 };
 
-/**
- * Ensure one shared container for this engine image is running on the forge network.
- * Reuses a running instance (including legacy compose names); otherwise pull + start.
- */
+
 export async function ensureEngineRunning(
   engine: AppDbEngine
 ): Promise<EnsureEngineResult> {

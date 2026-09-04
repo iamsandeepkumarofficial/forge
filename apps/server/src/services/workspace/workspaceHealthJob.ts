@@ -5,7 +5,7 @@ import { emitSetupPrepareEval } from "../eval/phoenix.js";
 
 const healthRepo = new WorkspaceHealthRepository();
 
-/** Fire-and-forget workspace health recompute (no sandbox/install). Never throws. */
+
 export function scheduleWorkspaceHealthAnalysis(workspaceId: string): void {
   void runWorkspaceHealthAnalysis(workspaceId).catch((err) => {
     console.warn(
@@ -22,10 +22,7 @@ export async function runWorkspaceHealthAnalysis(
   await healthRepo.saveReport(workspaceId, report.status, report);
 }
 
-/**
- * Analyze = evidence / shadows only.
- * Does not seed params, provision DBs, or install deps.
- */
+
 export async function runWorkspaceAnalyzeAndPrepare(
   workspaceId: string,
   _userId: string

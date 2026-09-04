@@ -26,7 +26,7 @@ function mergeParams(
   }
 }
 
-/** Resolve layered env: Forge system → project → workspace → member templates (templates applied at app start). */
+
 export async function resolveSessionEnv(
   sessionId: string
 ): Promise<ResolvedSessionEnv> {
@@ -88,7 +88,7 @@ export async function resolveSessionEnv(
   return { containerEnv, byRepo, envKeyNames: [...keyNames].sort() };
 }
 
-/** Env keys Forge injects for a workspace based on attached engines. */
+
 export async function forgeProvidedKeysForWorkspace(
   workspaceId: string
 ): Promise<Set<string>> {

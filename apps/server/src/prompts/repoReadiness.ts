@@ -14,7 +14,7 @@ export type LaunchReadiness = {
   ready: boolean;
   source: "launch" | "legacy" | "none";
   apps: LaunchAppPeek[];
-  /** Present for multi-repo workspace sessions (apps grouped by repo). */
+  
   members?: Array<{
     repo: string;
     ready: boolean;
@@ -89,10 +89,7 @@ export function loadLaunchReadiness(workingDir: string): LaunchReadiness {
   };
 }
 
-/**
- * Workspace readiness from session-root `.forge/launch.json` only.
- * Pass the session root (host path if readable, or use readinessFromForgeApps from sandbox).
- */
+
 export function loadWorkspaceLaunchReadiness(options: {
   sessionRoot: string;
   memberRepos: string[];
@@ -106,7 +103,7 @@ export function loadWorkspaceLaunchReadiness(options: {
   });
 }
 
-/** Build readiness from in-memory forge apps (e.g. after sandbox readForgeConfig). */
+
 export function readinessFromForgeApps(options: {
   apps: Array<{
     name: string;
@@ -182,7 +179,7 @@ function formatAppList(apps: LaunchAppPeek[]): string {
 
 export function formatRepoSetupBlock(options: {
   readiness: LaunchReadiness;
-  /** Member repo names for workspace sessions. */
+  
   memberRepos?: string[];
 }): string {
   const { readiness, memberRepos } = options;

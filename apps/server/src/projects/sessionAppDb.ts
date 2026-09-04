@@ -35,7 +35,7 @@ export type SessionAppDbEnv = {
   MONGODB_URI?: string;
 };
 
-/** Env for engines attached to this workspace (does not start containers). */
+
 export async function workspaceAppDbEnv(
   workspaceId: string
 ): Promise<SessionAppDbEnv> {
@@ -52,11 +52,11 @@ export async function workspaceAppDbEnv(
   return env;
 }
 
-/** Sync URLs for project sessions: only if postgres is already running / provisioned on demand. */
+
 export function sessionAppDbEnvFor(sessionId: string): SessionAppDbEnv {
   if (!appDbEnabled()) return {};
-  // Project chats use postgres only when that engine is available; URL is built
-  // after ensure in provisionSessionAppDatabases.
+  
+  
   const engine = getAppDbEngine("postgres");
   if (!engine) return {};
   return {
@@ -98,7 +98,7 @@ async function injectParam(
   });
 }
 
-/** Attach engine to workspace: ensure shared container, create db, record + param. */
+
 export async function attachWorkspaceDatabase(
   workspaceId: string,
   engineId: AppDbEngineId
@@ -128,7 +128,7 @@ export async function detachWorkspaceDatabase(
   }
 }
 
-/** Ensure already-attached engines are up (chat start / analyze). */
+
 export async function provisionWorkspaceAppDatabases(
   workspaceId: string
 ): Promise<SessionAppDbEnv> {
@@ -145,7 +145,7 @@ export async function provisionWorkspaceAppDatabases(
   return env;
 }
 
-/** Attach engines detected from member repos (Analyze). Does not attach unused engines. */
+
 export async function provisionDetectedWorkspaceDatabases(
   workspaceId: string,
   engineIds: AppDbEngineId[]
@@ -159,7 +159,7 @@ export async function provisionDetectedWorkspaceDatabases(
   return env;
 }
 
-/** Project chat: ensure shared postgres + per-session database. */
+
 export async function provisionSessionAppDatabases(
   sessionId: string
 ): Promise<SessionAppDbEnv> {
@@ -240,7 +240,7 @@ export async function destroySessionAppDatabases(
   }
 }
 
-/** @deprecated Prefer loadWorkspaceAppDbStatus engines[]. */
+
 export function describeWorkspaceAppDatabases(
   workspaceId: string,
   provisioned: { postgres: boolean; mongo: boolean }

@@ -36,10 +36,7 @@ export async function promoteGithubBranch(options: {
   return { target: "github", branch: options.branch };
 }
 
-/**
- * Commit dirty work in the session worktree (in-container), then merge the
- * session branch into the canonical default branch on the host (RFC 0005).
- */
+
 export async function promoteLocalBranch(options: {
   containerName: string;
   workingDir: string;

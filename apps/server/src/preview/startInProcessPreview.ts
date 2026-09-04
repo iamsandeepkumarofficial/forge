@@ -10,11 +10,11 @@ function truthyEnv(name: string): boolean | null {
   return null;
 }
 
-/** Local/desktop default: embed preview proxy in the tool-plane process. */
+
 export function previewInProcessEnabled(): boolean {
   const explicit = truthyEnv("PREVIEW_IN_PROCESS");
   if (explicit != null) return explicit;
-  // Opt out when PREVIEW_PLANE_URL points at a remote/non-loopback plane.
+  
   const url = process.env.PREVIEW_PLANE_URL?.trim() ?? "";
   if (url && !/127\.0\.0\.1|localhost/i.test(url)) return false;
   return true;
@@ -24,10 +24,7 @@ export function previewListenPort(): number {
   return Number(process.env.PREVIEW_PLANE_PORT || N_8081);
 }
 
-/**
- * Start hostname reverse-proxy on PREVIEW_PLANE_PORT (default 8081) inside
- * this process and ensure PREVIEW_PLANE_URL points at it for register/status.
- */
+
 export function startInProcessPreview(bindHost: string): void {
   if (!previewInProcessEnabled()) return;
 

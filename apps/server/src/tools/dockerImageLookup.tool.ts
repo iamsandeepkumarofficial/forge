@@ -7,7 +7,7 @@ import {
   GENERIC_SANDBOX_IMAGE
 } from "../projects/sessionSandbox/constants.js";
 
-/** Lookup allowlisted Docker images for app DBs and sandboxes (proposal helper). */
+
 export async function executeDockerImageLookup(options: {
   args: Record<string, unknown>;
 }): Promise<{ success: boolean; output: string; metadata?: Record<string, unknown> }> {

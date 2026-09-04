@@ -137,7 +137,7 @@ async function launchTurn(options: {
   return { turnId, workflowId };
 }
 
-/** Drop stale DB "running" rows when Temporal no longer has the workflow. */
+
 async function reconcileRunningTurn(
   turns: ChatTurnRepository,
   sessionId: string

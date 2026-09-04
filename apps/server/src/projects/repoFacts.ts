@@ -5,12 +5,12 @@ export type PackageManager = "pnpm" | "yarn" | "npm" | "bun";
 
 export type EcosystemId = "node" | "python" | "go" | "unknown";
 
-/** Neutral evidence for Phoenix / setup-agent (not applied by prepare). */
+
 export type EcosystemEvidence = {
   ecosystem: EcosystemId;
   manifests: string[];
   lockfiles: string[];
-  /** Shadow PM guess for eval only — do not auto-install from this. */
+  
   packageManagerGuess?: string;
 };
 
@@ -34,9 +34,9 @@ export type RepoFacts = {
   launchReady: boolean;
   detectedStack: string[];
   suggestedSkills: string[];
-  /** Keys sniffed from source (process.env / os.getenv / etc.). */
+  
   envKeysFromSource: string[];
-  /** Union of source + .env.example keys (inventory / shadows). */
+  
   envKeysReferenced: string[];
   envExampleValues: Record<string, string>;
   ecosystemEvidence: EcosystemEvidence[];
@@ -62,7 +62,7 @@ export function detectPackageManager(rootPath: string): PackageManager | undefin
         return pm;
       }
     } catch {
-      /* ignore */
+      
     }
   }
   if (fs.existsSync(path.join(rootPath, "pnpm-lock.yaml"))) return "pnpm";
@@ -117,7 +117,7 @@ function collectPackageJsonPaths(rootPath: string, prefix = ""): string[] {
       }
     }
   } catch {
-    /* no apps dir */
+    
   }
   return paths;
 }
@@ -159,7 +159,7 @@ function detectStack(rootPath: string): string[] {
       const fromNode = detectStackFromDeps(deps);
       if (fromNode.length > 0) return fromNode;
     } catch {
-      /* ignore */
+      
     }
   }
   if (fs.existsSync(path.join(rootPath, "manage.py"))) return ["django"];
@@ -286,7 +286,7 @@ function collectNodeLockfiles(rootPath: string): string[] {
   return names.filter((n) => fs.existsSync(path.join(rootPath, n)));
 }
 
-/** Build stack-agnostic ecosystem evidence (shadows only). */
+
 export function collectEcosystemEvidence(
   rootPath: string,
   options?: { packageManager?: PackageManager; packageJsonPaths?: string[] }
@@ -389,7 +389,7 @@ export function suggestSkillsForFacts(facts: RepoFacts): string[] {
   return [...skills].sort();
 }
 
-/** Read repo facts from a host filesystem root (canonical copy or worktree). */
+
 export function readRepoFactsFromHost(options: {
   rootPath: string;
   repoName?: string;

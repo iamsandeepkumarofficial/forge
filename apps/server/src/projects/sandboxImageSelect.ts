@@ -16,7 +16,7 @@ function factsRootForProject(project: {
   return { path: "", analyzable: false };
 }
 
-/** Any member with Node ecosystem evidence → Node image; else generic. */
+
 export async function selectSandboxImageForWorkspace(
   workspaceId: string
 ): Promise<string> {

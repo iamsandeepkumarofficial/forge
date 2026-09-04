@@ -94,7 +94,7 @@ async function dropPostgresDatabase(
   ]).catch(() => undefined);
 }
 
-/** Mongo creates the DB on first use; nothing to create eagerly. */
+
 async function ensureMongoReady(
   engine: AppDbEngine,
   containerName: string
@@ -169,7 +169,7 @@ export async function provisionWorkspaceEngine(
   };
 }
 
-/** Ensure engines already attached to the workspace are running + db exists. */
+
 export async function ensureAttachedWorkspaceEngines(
   workspaceId: string,
   engineIds: AppDbEngineId[]

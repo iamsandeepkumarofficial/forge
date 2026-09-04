@@ -35,7 +35,7 @@ export type MemberHealth = {
 export type ParamShadowCandidate = {
   key: string;
   secretLikely: boolean;
-  /** Example value redacted when secretLikely. */
+  
   exampleHint?: string;
   repo?: string;
 };
@@ -51,7 +51,7 @@ export type WorkspacePrepareShadows = {
 };
 
 export type WorkspacePrepareReport = {
-  /** Always empty on shadow-only prepare; kept for report shape compatibility. */
+  
   parametersSeeded: string[];
   databases: Record<string, string>;
   installs: Array<{
@@ -71,7 +71,7 @@ export type WorkspaceHealthReport = {
   findings: HealthFinding[];
   dependsOnGraph: Array<{ repo: string; dependsOn: string[] }>;
   prepare?: WorkspacePrepareReport;
-  /** Eval-only shadows (also mirrored on prepare when Analyze runs). */
+  
   shadows?: WorkspacePrepareShadows;
 };
 

@@ -406,7 +406,7 @@ export function workspacePrepareSessionId(workspaceId: string): string {
   return `wsa-${workspaceId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40)}`;
 }
 
-/** Ephemeral sandbox used by workspace Analyze: clone, install, cache. */
+
 export async function provisionWorkspacePrepareSandbox(options: {
   workspaceId: string;
   userId: string;
@@ -427,14 +427,11 @@ export interface SessionRepoInfo {
   repoDir: string;
   workingDir: string;
   sessionRoot: string;
-  /** Present for workspace-scoped sessions: map of repoName -> container mount path. */
+  
   worktrees?: Record<string, string>;
-  /**
-   * Host filesystem paths for local project worktrees (RFC 0005).
-   * Used by system-prompt composition to read launch.json / AGENTS.md on the host.
-   */
+  
   hostWorktrees?: Record<string, string>;
-  /** Host path for project-scoped local session worktree. */
+  
   hostWorkingDir?: string;
 }
 
@@ -534,7 +531,7 @@ export async function getSessionSandboxStatus(
   };
 }
 
-/** Workspace sessions check member mounts; project sessions check `/workspace`. */
+
 export function mountsForSandboxReadyCheck(
   worktrees?: Record<string, string>
 ): string[] {

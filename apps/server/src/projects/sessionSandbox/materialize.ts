@@ -69,7 +69,7 @@ export function cloneGithubWorkspaceScript(): string {
   ].join("; ");
 }
 
-/** Clone into /workspace/{repoName} for multi-repo workspace sessions. */
+
 export function cloneGithubIntoSubdirScript(repoName: string): string {
   assertSafeRepoDirectoryName(repoName);
   const target = `${WORKSPACE_MOUNT}/${repoName}`;
@@ -92,7 +92,7 @@ export async function isRepoInitializedAt(
   mountPath: string
 ): Promise<boolean> {
   try {
-    // Accept both a real .git directory and a worktree .git file (RFC 0005).
+    
     await execFileAsync("docker", [
       "exec",
       containerName,
@@ -120,7 +120,7 @@ export async function cloneGithubIntoVolume(options: {
   project: Project;
   branch: string;
   token?: string;
-  /** When set, clone into /workspace/{repoName} instead of /workspace. */
+  
   repoName?: string;
 }): Promise<void> {
   const { containerName, project, branch, token, repoName } = options;

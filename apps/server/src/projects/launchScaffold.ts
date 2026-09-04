@@ -69,7 +69,7 @@ async function detectAppsInDir(options: {
   containerName: string;
   baseDir: string;
   repo?: string;
-  /** When true, cwd is session-relative (repo or repo/apps/x). */
+  
   sessionRelativeCwd?: boolean;
   pm: string;
   nextPort: { value: number };
@@ -110,7 +110,7 @@ async function detectAppsInDir(options: {
         apps.push(app);
       }
     } catch {
-      /* ignore */
+      
     }
   }
 
@@ -206,7 +206,7 @@ async function chatWorkspaceId(sessionId: string): Promise<string | null> {
   return chat?.workspaceId ?? null;
 }
 
-/** Scaffold launch.json when missing/empty and detectApps finds apps. */
+
 export async function ensureLaunchConfig(sessionId: string): Promise<{
   ready: boolean;
   scaffolded: boolean;

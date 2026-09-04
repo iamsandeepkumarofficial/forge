@@ -113,7 +113,7 @@ async function bootstrapSandboxToolsRequired(containerName: string): Promise<voi
   ]);
 }
 
-/** Playwright install can take several minutes — must not block session provision. */
+
 function bootstrapSandboxToolsOptional(containerName: string): void {
   void docker([
     "exec",
@@ -336,11 +336,7 @@ export async function ensureContainer(
   return stdout.trim();
 }
 
-/**
- * Docker Desktop (esp. gVisor) can drop published host ports while the
- * container keeps running. Restart once if a port that has a listener
- * inside the container is unreachable on the host.
- */
+
 export async function repairHostPortBindings(options: {
   containerName: string;
   portBase: number;
@@ -360,7 +356,7 @@ export async function repairHostPortBindings(options: {
     `[sandbox] host ports missing for ${options.containerName}: ${missing.join(", ")}; restarting container to rebind`
   );
   await docker(["restart", options.containerName]);
-  // Give Docker Desktop a moment to re-attach port proxies.
+  
   for (let i = 0; i < 20; i += 1) {
     const stillMissing = await publishedHostPortsNeedingRepair({
       containerName: options.containerName,

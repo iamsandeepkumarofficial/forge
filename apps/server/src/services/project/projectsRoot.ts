@@ -30,7 +30,7 @@ function resolveAbsoluteRoot(
     : path.resolve(process.cwd(), expanded);
 }
 
-/** Canonical project copies live under ~/.forge/projects (RFC 0004). */
+
 export function resolveProjectsRoot(): string {
   return resolveAbsoluteRoot(
     process.env.FORGE_PROJECTS_ROOT,
@@ -38,7 +38,7 @@ export function resolveProjectsRoot(): string {
   );
 }
 
-/** Per-session local worktrees live under ~/.forge/sessions (RFC 0005). */
+
 export function resolveSessionsRoot(): string {
   return resolveAbsoluteRoot(
     process.env.FORGE_SESSIONS_ROOT,

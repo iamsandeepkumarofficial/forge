@@ -1,5 +1,5 @@
-// Forge v1 targets chat + workspaces. Board / SDLC pipeline tables below are
-// legacy and retained for first-boot compatibility (no schema rewrite yet).
+
+
 import {
   pgTable,
   text,
@@ -133,12 +133,12 @@ export const projects = pgTable(
   })
 );
 
-/** Ordered path-prefix rules for the workspace single-origin preview gateway. */
+
 export type WorkspaceRoute = {
   pathPrefix: string;
-  /** Member repoName that receives matching requests. */
+  
   target: string;
-  /** When true, strip pathPrefix before proxying (default false). */
+  
   stripPrefix?: boolean;
 };
 
@@ -150,7 +150,7 @@ export const workspaces = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
-    /** Gateway route map; specific prefixes before catch-all `/`. */
+    
     routes: jsonb("routes").$type<WorkspaceRoute[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -174,15 +174,12 @@ export const workspaceProjects = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    /** Mount directory name under /workspace/{repoName}. */
+    
     repoName: varchar("repo_name", { length: 255 }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
-    /** Other member repoNames this member depends on (startup order). */
+    
     dependsOn: jsonb("depends_on").$type<string[]>().notNull().default([]),
-    /**
-     * Env templates resolved at provision time.
-     * Placeholders: {{svc.internalUrl}}, {{svc.publicUrl}}.
-     */
+    
     env: jsonb("env")
       .$type<Record<string, string>>()
       .notNull()
@@ -281,7 +278,7 @@ export const workspaceHealth = pgTable("workspace_health", {
     .notNull()
 });
 
-/** Engines the workspace opted into (shared docker servers; per-workspace db name). */
+
 export const workspaceDatabases = pgTable(
   "workspace_databases",
   {
@@ -305,7 +302,7 @@ export const workspaceDatabases = pgTable(
   })
 );
 
-/** Durable session-root launch.json promoted from a successful chat env. */
+
 export const workspaceEnvironments = pgTable("workspace_environments", {
   workspaceId: uuid("workspace_id")
     .primaryKey()
@@ -324,11 +321,11 @@ export const chatFeatures = pgTable(
   "chat_features",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    /** Set for project-scoped chats; null when workspace-scoped. */
+    
     projectId: uuid("project_id").references(() => projects.id, {
       onDelete: "cascade"
     }),
-    /** Set for workspace-scoped chats; null when project-scoped. */
+    
     workspaceId: uuid("workspace_id").references(() => workspaces.id, {
       onDelete: "cascade"
     }),

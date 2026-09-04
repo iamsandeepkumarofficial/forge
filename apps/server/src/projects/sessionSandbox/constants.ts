@@ -5,12 +5,12 @@ const N_31 = 31;
 const N_64 = 64;
 
 export const DEFAULT_SANDBOX_IMAGE = "forge-sandbox:latest";
-/** Debian slim + git; used when no Node ecosystem evidence is present. */
+
 export const GENERIC_SANDBOX_IMAGE = "forge-sandbox-generic:latest";
 export const WORKSPACE_MOUNT = "/workspace";
 export const RESERVED_PORTS = 10;
 export const FIRST_APP_PORT = 3000;
-/** Inclusive upper bound of Docker-published app ports (3000–3009). */
+
 export const LAST_APP_PORT = FIRST_APP_PORT + RESERVED_PORTS - 1;
 const HOST_PORT_FLOOR = 40000;
 const HOST_PORT_BLOCKS = 250;
@@ -32,7 +32,7 @@ export function isReservedAppPort(port: number): boolean {
   );
 }
 
-/** Next free container port in the published 3000–3009 range, or null if full. */
+
 export function allocateReservedAppPort(
   usedPorts: Iterable<number>
 ): number | null {
@@ -71,11 +71,7 @@ export function preferredSandboxImageName(): string {
   return process.env.FORGE_SANDBOX_IMAGE?.trim() || DEFAULT_SANDBOX_IMAGE;
 }
 
-/**
- * Pick sandbox image from ecosystem evidence.
- * Any Node → Node image (Playwright present). Else generic; agent prepares env.
- * FORGE_SANDBOX_IMAGE overrides when set.
- */
+
 export function selectSandboxImageName(options?: {
   hasNodeEvidence?: boolean;
 }): string {

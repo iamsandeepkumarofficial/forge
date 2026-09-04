@@ -32,11 +32,7 @@ function repoAbs(repoName: string): string {
   return repoName ? `${WORKSPACE_MOUNT}/${repoName}` : WORKSPACE_MOUNT;
 }
 
-/**
- * Fingerprint package.json + one primary lockfile.
- * Prefer a single lockfile so dual yarn.lock+package-lock.json repos stay stable
- * across worktrees that only differ in the unused lockfile.
- */
+
 const LOCKHASH_SCRIPT = `
 primary_lock() {
   d="$1"
@@ -53,7 +49,7 @@ lockhash() {
 }
 `;
 
-/** Link or copy cached Linux node_modules into the repo. */
+
 export async function restoreCachedDeps(options: {
   containerName: string;
   repoName: string;
@@ -123,7 +119,7 @@ cp -a "${cache}/node_modules" "${abs}/node_modules" && echo restored-copy
   }
 }
 
-/** Store node_modules on the workspace cache volume for the next chat. */
+
 export async function captureCachedDeps(options: {
   containerName: string;
   repoName: string;
@@ -181,7 +177,7 @@ echo captured
   }
 }
 
-/** Wipe cached packages for a workspace (works even if volume is mounted elsewhere). */
+
 export async function clearWorkspaceDepsCache(
   workspaceId: string
 ): Promise<void> {

@@ -9,7 +9,7 @@ export type WorkspaceSessionContext = {
   routes: WorkspaceRoute[];
 };
 
-/** Load workspace membership + routes for a session, or null if project-scoped. */
+
 export async function loadWorkspaceSessionContext(
   sessionId: string
 ): Promise<WorkspaceSessionContext | null> {

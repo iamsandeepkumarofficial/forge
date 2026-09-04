@@ -10,7 +10,7 @@ export type AuthedRequest = Request & {
 
 type AuthArgs = [Request, Response, NextFunction];
 
-/** Node pg wraps refused connections as AggregateError with an empty `.message`. */
+
 export function formatAuthError(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   const nested =
@@ -34,9 +34,7 @@ export function formatAuthError(err: unknown): string {
   return code ? `Database error (${code})` : "Database request failed";
 }
 
-/**
- * Attach the singleton local user (RFC 0004). No bearer token or email header.
- */
+
 export function createLocalUserMiddleware(): RequestHandler {
   return async (...args: AuthArgs): Promise<void> => {
     const [req, res, next] = args;
@@ -52,6 +50,6 @@ export function createLocalUserMiddleware(): RequestHandler {
   };
 }
 
-/** @deprecated Use createLocalUserMiddleware — kept as alias during migration. */
+
 export const createPocAuth = (_pocToken?: string): RequestHandler =>
   createLocalUserMiddleware();

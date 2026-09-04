@@ -58,9 +58,7 @@ export class ProjectService {
     };
   }
 
-  /**
-   * Copy the selected folder into ~/.forge/projects/{id}/ as canonical (RFC 0004).
-   */
+  
   async connectLocalFolder(
     localPath: string,
     userId: string,

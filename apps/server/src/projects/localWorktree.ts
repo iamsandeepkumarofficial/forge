@@ -84,7 +84,7 @@ async function gitConfigSet(
       const msg = err instanceof Error ? err.message : String(err);
       const locked = /could not lock config file|\.lock/i.test(msg);
       if (!locked || attempt === maxAttempts - 1) {
-        // If another writer won the race but set the same value, treat as ok.
+        
         const current = await gitConfigGet(repoDir, key);
         if (current === value) return;
         throw err;
@@ -92,12 +92,12 @@ async function gitConfigSet(
       const lockPath = path.join(repoDir, ".git", "config.lock");
       try {
         const st = await fs.stat(lockPath);
-        // Stale lock from a crashed writer (common with host+container sharing .git).
+        
         if (Date.now() - st.mtimeMs > 5_000) {
           await fs.rm(lockPath, { force: true });
         }
       } catch {
-        /* no lock or can't stat */
+        
       }
       await new Promise((r) => setTimeout(r, 25 * (attempt + 1)));
     }
@@ -119,12 +119,7 @@ async function configureForgeIdentity(repoDir: string): Promise<void> {
   }
 }
 
-/**
- * Ensure a canonical local project dir is a real git repo.
- * If no .git exists: init, identity, add-all, initial commit (when non-empty).
- * Existing repos are left alone — Run tab polls provision often and must not
- * rewrite .git/config on every pass (shared with in-container mounts).
- */
+
 export async function ensureCanonicalGitRepo(
   canonicalKey: string
 ): Promise<void> {
@@ -142,7 +137,7 @@ export async function ensureCanonicalGitRepo(
   if (status.trim()) {
     await git(canonicalKey, ["commit", "-m", "forge: initial import"]);
   } else {
-    // worktree add requires at least one commit
+    
     await git(canonicalKey, [
       "commit",
       "--allow-empty",
@@ -194,10 +189,7 @@ export type SessionWorktree = {
   projectId: string;
 };
 
-/**
- * Ensure a per-session worktree exists for a local project, with the forward
- * .git pointer rewritten to the in-container /forge-git/{projectId} path.
- */
+
 export async function ensureSessionWorktree(options: {
   canonicalKey: string;
   projectId: string;
@@ -231,7 +223,7 @@ export async function ensureSessionWorktree(options: {
       await rewriteWorktreeGitdir({ workDir, projectId, adminName });
     }
   } else {
-    // Re-apply rewrite only when the pointer still uses a host path.
+    
     const pointer = path.join(workDir, ".git");
     try {
       const contents = await fs.readFile(pointer, "utf8");
@@ -245,19 +237,16 @@ export async function ensureSessionWorktree(options: {
           adminName: existing
         });
       }
-      // Already rewritten to /forge-git/... — nothing to do on poll/reprovision.
+      
     } catch {
-      /* leave as-is; provision will fail loudly if git is broken */
+      
     }
   }
 
   return { workDir, gitCanonicalHostPath, projectId };
 }
 
-/**
- * Remove a session worktree directory and prune the canonical repo's worktree list.
- * Best-effort: does not throw when already gone.
- */
+
 export async function removeSessionWorktree(options: {
   canonicalKey: string;
   projectId: string;
@@ -270,10 +259,7 @@ export async function removeSessionWorktree(options: {
   }
 }
 
-/**
- * Merge a session branch into the canonical default branch on the host.
- * Objects are already in the shared .git after an in-container commit.
- */
+
 export async function mergeSessionBranchIntoCanonical(options: {
   canonicalKey: string;
   branchName: string;
@@ -299,7 +285,7 @@ export async function mergeSessionBranchIntoCanonical(options: {
       ]);
       if (stdout.trim()) defaultBranch = stdout.trim();
     } catch {
-      /* keep main */
+      
     }
   }
 

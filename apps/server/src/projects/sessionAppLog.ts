@@ -5,7 +5,7 @@ import {
 } from "./backgroundJob.js";
 import { dockerLogFollowAttach } from "./dockerExecHttp.js";
 
-/** Replay on subscribe; single tail -F attach avoids gap between read and follow. */
+
 const INITIAL_TAIL = 500;
 const EXIT_POLL_MS = 2000;
 

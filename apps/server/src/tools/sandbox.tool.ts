@@ -69,7 +69,7 @@ function walk(dir) {
 walk(root);
 process.stdout.write(hits.join('\\n'));
 `;
-/** Workspace sessions mount each member at `/workspace/{repoName}` — even a single member. */
+
 export function pathOpts(worktrees?: Record<string, string>): {
   knownRepos?: Set<string>;
 } {
