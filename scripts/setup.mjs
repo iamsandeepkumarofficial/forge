@@ -1,5 +1,5 @@
 /**
  * Repo setup hooks run after install.
- * Husky is installed via the `prepare` script; keep this file for postinstall compat.
+ * Git hooks are installed via the `prepare` script (`husky`).
  */
 console.log("[setup] ready");
