@@ -106,7 +106,8 @@ describe("appRunner", { concurrency: false }, () => {
     });
     assert.equal(updated.apps[0]!.port, 3002);
 
-    readFileImpl = async () => written;
+    const saved = written;
+    readFileImpl = async () => saved;
     written = "";
     const kept = await upsertLaunchApp("s1", {
       name: "web",

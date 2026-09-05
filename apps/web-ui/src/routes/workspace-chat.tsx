@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { startSession } from "../lib/projects-api.js";
 import { fetchWorkspaceChat } from "../lib/workspaces-api.js";
@@ -23,17 +23,11 @@ function readInitialPrompt(state: unknown): string | undefined {
   return undefined;
 }
 
-/**
- * Workspace-scoped chat workbench. Session tools (files, apps, terminal)
- * work against this chat’s own multi-repo sandbox.
- */
-export function WorkspaceChatWorkbench() {
-  const params = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const workspaceId = params.workspaceId ?? "";
-  const chatId = params.chatId ?? "";
-  const initialPrompt = readInitialPrompt(location.state);
+function useWorkspaceChatSession(options: {
+  workspaceId: string;
+  chatId: string;
+}) {
+  const { workspaceId, chatId } = options;
   const [chat, setChat] = useState<{
     sessionId?: string;
     title?: string;
@@ -52,7 +46,6 @@ export function WorkspaceChatWorkbench() {
     setLoadingChat(true);
     setLeftMode("chat");
   }
-
   useEffect(() => {
     let cancelled = false;
     void fetchWorkspaceChat(workspaceId, chatId)
@@ -67,9 +60,8 @@ export function WorkspaceChatWorkbench() {
       cancelled = true;
     };
   }, [workspaceId, chatId]);
-
   const sessionId: string | undefined = chat?.sessionId;
-  const startSandbox = () => {
+  const startSandbox = useCallback(() => {
     if (!sessionId) return;
     setSandboxStatus("starting");
     void startSession(sessionId)
@@ -78,42 +70,65 @@ export function WorkspaceChatWorkbench() {
         console.error("Failed to start session sandbox:", err);
         setSandboxStatus("error");
       });
-  };
+  }, [sessionId]);
   useEffect(() => {
     if (!sessionId) return;
-    startSandbox();
-  }, [sessionId]);
-  const booting =
-    loadingChat || Boolean(sessionId && sandboxStatus === "starting");
+    void Promise.resolve().then(() => {
+      startSandbox();
+    });
+  }, [sessionId, startSandbox]);
+  return {
+    chat,
+    loadingChat,
+    sandboxStatus,
+    chrome,
+    setChrome,
+    leftMode,
+    setLeftMode,
+    sessionId,
+    startSandbox,
+    booting: loadingChat || Boolean(sessionId && sandboxStatus === "starting")
+  };
+}
 
+export function WorkspaceChatWorkbench() {
+  const params = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const workspaceId = params.workspaceId ?? "";
+  const chatId = params.chatId ?? "";
+  const initialPrompt = readInitialPrompt(location.state);
+  const wb = useWorkspaceChatSession({ workspaceId, chatId });
   return (
     <div className="flex h-screen flex-col">
       <SessionHeader
         onBack={() => navigate(`/workspaces/${workspaceId}/chats`)}
-        title={loadingChat ? "Loading…" : (chat?.title ?? "Workspace chat")}
-        turnStatus={chrome.turnStatus}
-        sandboxStatus={sessionId ? sandboxStatus : "starting"}
-        leftMode={leftMode}
-        onLeftMode={setLeftMode}
+        title={
+          wb.loadingChat ? "Loading…" : (wb.chat?.title ?? "Workspace chat")
+        }
+        turnStatus={wb.chrome.turnStatus}
+        sandboxStatus={wb.sessionId ? wb.sandboxStatus : "starting"}
+        leftMode={wb.leftMode}
+        onLeftMode={wb.setLeftMode}
       />
       <div className="min-h-0 flex-1">
-        {booting || sandboxStatus === "error" ? (
+        {wb.booting || wb.sandboxStatus === "error" ? (
           <SessionBootScreen
-            sandboxStatus={sandboxStatus === "error" ? "error" : "starting"}
-            onRetry={sandboxStatus === "error" ? startSandbox : undefined}
+            sandboxStatus={wb.sandboxStatus === "error" ? "error" : "starting"}
+            onRetry={wb.sandboxStatus === "error" ? wb.startSandbox : undefined}
           />
-        ) : sessionId ? (
+        ) : wb.sessionId ? (
           <Workbench
-            sessionId={sessionId}
+            sessionId={wb.sessionId}
             projectId=""
             chatId={chatId}
             workspaceId={workspaceId}
-            sessionKind={chat?.kind ?? "workbench"}
-            branchName={chat?.branchName}
+            sessionKind={wb.chat?.kind ?? "workbench"}
+            branchName={wb.chat?.branchName}
             initialPrompt={initialPrompt}
-            leftMode={leftMode}
-            onLeftModeChange={setLeftMode}
-            onChromeChange={setChrome}
+            leftMode={wb.leftMode}
+            onLeftModeChange={wb.setLeftMode}
+            onChromeChange={wb.setChrome}
           />
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">

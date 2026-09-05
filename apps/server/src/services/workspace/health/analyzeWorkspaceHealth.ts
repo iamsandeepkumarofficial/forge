@@ -7,7 +7,6 @@ import {
 } from "../../../projects/appDb/engines.js";
 import {
   factsHaveNodeEvidence,
-  factsHavePythonEvidence,
   isLikelySecretKey,
   readRepoFactsFromHost
 } from "../../../projects/repoFacts.js";
@@ -15,26 +14,16 @@ import { selectSandboxImageName } from "../../../projects/sessionSandbox/constan
 import { findDependsOnCycle } from "../workspaceWiring.js";
 import {
   deriveHealthStatus,
-  memberHealthFromFacts,
   type HealthFinding,
   type ParamShadowCandidate,
   type WorkspaceHealthReport,
   type WorkspacePrepareShadows
 } from "./types.js";
 import { forgeProvidedKeysForWorkspace } from "../../parameters/resolveSessionEnv.js";
-import { envKeySatisfied } from "../../parameters/envKeyAliases.js";
+import { collectMemberFindings } from "./collectMemberFindings.js";
 
 const RUNTIME_KEYS = new Set(["HOST", "PORT", "FORGE_PUBLISHED_APP_PORTS"]);
-
-function factsRootForProject(project: {
-  source: string;
-  canonicalKey: string | null;
-}): { path: string; analyzable: boolean } {
-  if (project.source === "local" && project.canonicalKey) {
-    return { path: project.canonicalKey, analyzable: true };
-  }
-  return { path: "", analyzable: false };
-}
+const N_40 = 40;
 
 export function buildPrepareShadows(options: {
   members: Array<{
@@ -65,7 +54,7 @@ export function buildPrepareShadows(options: {
         repo,
         exampleHint:
           raw && !secretLikely
-            ? raw.slice(0, 40)
+            ? raw.slice(0, N_40)
             : secretLikely
               ? "(secret)"
               : undefined
@@ -126,140 +115,19 @@ export async function analyzeWorkspaceHealth(
 
   for (const member of members) {
     const project = await projectRepo.getById(member.projectId);
-    if (!project) {
-      findings.push({
-        code: "missing-project",
-        severity: "error",
-        repo: member.repoName,
-        message: "Member project record is missing."
-      });
-      continue;
-    }
-
-    const { path: rootPath, analyzable } = factsRootForProject(project);
-    const facts = readRepoFactsFromHost({
-      rootPath: analyzable ? rootPath : "",
-      repoName: member.repoName,
-      analyzable
+    const collected = await collectMemberFindings({
+      member,
+      project,
+      paramRepo,
+      filledWorkspaceKeys,
+      provided,
+      memberNames,
+      usedPorts
     });
-    memberHealthList.push(memberHealthFromFacts(member.repoName, facts));
-    factsByMember.push({ repo: member.repoName, facts });
-
-    if (!facts.analyzable) {
-      findings.push({
-        code: "needs-clone",
-        severity: "warning",
-        repo: member.repoName,
-        message:
-          project.source === "github"
-            ? "GitHub member is not on disk until the first session clones it."
-            : "Member repo is not readable on the host.",
-        hint: "Start a workspace chat to clone and analyze fully."
-      });
-      continue;
-    }
-
-    const hasNode = factsHaveNodeEvidence(facts);
-    if (hasNode && !facts.hasPackageJson) {
-      findings.push({
-        code: "missing-package-json",
-        severity: "info",
-        repo: member.repoName,
-        message: "Node ecosystem evidence without a root package.json.",
-        hint: "Verify the project root or monorepo package paths."
-      });
-    } else if (
-      hasNode &&
-      !facts.scripts.includes("dev") &&
-      !facts.scripts.includes("start")
-    ) {
-      findings.push({
-        code: "missing-dev-script",
-        severity: "warning",
-        repo: member.repoName,
-        message: "package.json has no dev or start script.",
-        hint: "Add a dev/start script or configure launch via the setup agent / upsert_launch_app."
-      });
-    }
-
-    if (!facts.launchReady) {
-      findings.push({
-        code: "session-launch-pending",
-        severity: "info",
-        repo: member.repoName,
-        message:
-          "Workspace apps are declared in session-root `/workspace/.forge/launch.json` when a chat starts (not per-member).",
-        hint: "Open Workspace setup chat; agent scaffolds launch.json after invoke_skill."
-      });
-    }
-
-    for (const app of facts.launchApps) {
-      if (app.port != null) {
-        const other = usedPorts.get(app.port);
-        if (other && other !== member.repoName) {
-          findings.push({
-            code: "port-collision",
-            severity: "error",
-            repo: member.repoName,
-            message: `Port ${app.port} also used by \`${other}\`.`,
-            hint: "Assign unique ports in 3000–3009 per app."
-          });
-        } else {
-          usedPorts.set(app.port, member.repoName);
-        }
-      }
-    }
-
-    if (factsHavePythonEvidence(facts)) {
-      findings.push({
-        code: "toolchain-needed",
-        severity: "info",
-        repo: member.repoName,
-        message:
-          "Python stack evidence — invoke `python-app` skill; propose runtime install if python3 is missing.",
-        hint: "Do not treat this as a Node-only ceiling. After user approval, install toolchain via run_terminal."
-      });
-    }
-
-    const projectParams = await paramRepo.listProjectParameters(member.projectId);
-    const availableKeys = new Set([
-      ...filledWorkspaceKeys,
-      ...projectParams.filter((p) => p.value.trim()).map((p) => p.key),
-      ...Object.entries(member.env ?? {})
-        .filter(([, v]) => String(v).trim())
-        .map(([k]) => k),
-      ...provided
-    ]);
-    for (const key of facts.envKeysFromSource) {
-      if (provided.has(key)) continue;
-      if (RUNTIME_KEYS.has(key)) continue;
-      if (envKeySatisfied(availableKeys, key)) continue;
-      findings.push({
-        code: "missing-env-key",
-        severity: "warning",
-        repo: member.repoName,
-        message: `Referenced env key \`${key}\` is not in project/workspace parameters or member env.`,
-        hint:
-          key === "DATABASE_URL" ||
-          key === "MONGODB_URI" ||
-          key === "MONGODB_URL"
-            ? `Propose ${
-                key.startsWith("MONGO") ? "MongoDB" : "PostgreSQL"
-              } via provision_app_engine (user-approved), or ask_user then upsert_workspace_parameter.`
-            : `Use ask_user then upsert_workspace_parameter for \`${key}\`.`
-      });
-    }
-
-    for (const dep of member.dependsOn ?? []) {
-      if (!memberNames.has(dep)) {
-        findings.push({
-          code: "invalid-depends-on",
-          severity: "error",
-          repo: member.repoName,
-          message: `dependsOn references unknown member \`${dep}\`.`,
-          hint: "Update dependsOn to list valid member repoNames."
-        });
-      }
+    findings.push(...collected.findings);
+    if (collected.memberHealth) memberHealthList.push(collected.memberHealth);
+    if (collected.facts) {
+      factsByMember.push({ repo: member.repoName, facts: collected.facts });
     }
   }
 
@@ -277,9 +145,8 @@ export async function analyzeWorkspaceHealth(
     filledKeys: new Set([...filledWorkspaceKeys, ...provided])
   });
 
-  const status = deriveHealthStatus(findings);
   return {
-    status,
+    status: deriveHealthStatus(findings),
     computedAt: new Date().toISOString(),
     members: memberHealthList,
     findings,

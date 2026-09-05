@@ -12,7 +12,10 @@ import {
 
 export class WorkspaceRepository {
   async create(
-    input: Omit<WorkspaceInsert, "id" | "createdAt" | "lastActivityAt" | "routes"> & {
+    input: Omit<
+      WorkspaceInsert,
+      "id" | "createdAt" | "lastActivityAt" | "routes"
+    > & {
       routes?: WorkspaceRoute[];
     }
   ): Promise<Workspace> {
@@ -92,7 +95,10 @@ export class WorkspaceRepository {
       .select()
       .from(workspaceProjects)
       .where(eq(workspaceProjects.workspaceId, workspaceId))
-      .orderBy(asc(workspaceProjects.sortOrder), asc(workspaceProjects.repoName));
+      .orderBy(
+        asc(workspaceProjects.sortOrder),
+        asc(workspaceProjects.repoName)
+      );
   }
 
   async getMember(
@@ -157,16 +163,14 @@ export class WorkspaceRepository {
       );
   }
 
-  async updateMember(
-    workspaceId: string,
-    projectId: string,
+  async updateMember(options: {
+    workspaceId: string;
+    projectId: string;
     patch: Partial<
-      Pick<
-        WorkspaceProject,
-        "repoName" | "sortOrder" | "dependsOn" | "env"
-      >
-    >
-  ): Promise<WorkspaceProject | null> {
+      Pick<WorkspaceProject, "repoName" | "sortOrder" | "dependsOn" | "env">
+    >;
+  }): Promise<WorkspaceProject | null> {
+    const { workspaceId, projectId, patch } = options;
     const db = getDb();
     const [updated] = await db
       .update(workspaceProjects)

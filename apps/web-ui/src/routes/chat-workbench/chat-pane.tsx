@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { onPreviewChatMessage } from "./preview-comment-bus.js";
 import { modeSwitchContinueMessage } from "../../lib/mode-switch.js";
-import {
-  askUserFormReply,
-  type AskUserProposal
-} from "../../lib/ask-user.js";
+import { askUserFormReply, type AskUserProposal } from "../../lib/ask-user.js";
 import { applyAskUserFormToWorkspaceParams } from "../../lib/ask-user-apply-params.js";
 import type { AskUserSubmitResult } from "../../components/ask-user-prompt.js";
 import { useChatPaneModel } from "./use-chat-pane-model.js";
@@ -43,30 +40,88 @@ async function submitAskUserAnswer(options: {
     result.values &&
     proposal.fields.length > 0
   ) {
-    const saved = await applyAskUserFormToWorkspaceParams(
+    const saved = await applyAskUserFormToWorkspaceParams({
       workspaceId,
-      proposal.fields,
-      result.values
-    );
-    return askUserFormReply(proposal.fields, result.values, {
+      fields: proposal.fields,
+      values: result.values
+    });
+    return askUserFormReply({
+      fields: proposal.fields,
+      values: result.values,
       savedParamKeys: saved
     });
   }
   return result.text;
 }
 
-export function ChatPane(props: ChatPaneProps) {
+function submitAskUserFromPane(options: {
+  workspaceId?: string;
+  proposal: AskUserProposal;
+  result: AskUserSubmitResult;
+  dismissAskUser: (proposal: AskUserProposal) => void;
+  sendText: (text: string) => void;
+  setAskUserSubmitting: (v: boolean) => void;
+}) {
+  const {
+    workspaceId,
+    proposal,
+    result,
+    dismissAskUser,
+    sendText,
+    setAskUserSubmitting
+  } = options;
+  void (async () => {
+    setAskUserSubmitting(true);
+    try {
+      const text = await submitAskUserAnswer({ workspaceId, proposal, result });
+      dismissAskUser(proposal);
+      void sendText(text);
+    } catch (err) {
+      dismissAskUser(proposal);
+      void sendText(
+        `${result.text}\n\n(Note: failed to save parameters to store: ${
+          err instanceof Error ? err.message : String(err)
+        })`
+      );
+    } finally {
+      setAskUserSubmitting(false);
+    }
+  })();
+}
+
+function useChatPaneSideEffects(options: {
+  session: ReturnType<typeof useChatPaneSession>;
+  askUserPending: boolean;
+  onTurnStatus?: ChatPaneProps["onTurnStatus"];
+}) {
+  const { session, askUserPending, onTurnStatus } = options;
+  const sendTextRef = useRef(session.sendText);
+  useEffect(() => {
+    sendTextRef.current = session.sendText;
+  }, [session.sendText]);
+  useEffect(
+    () => onPreviewChatMessage((text) => void sendTextRef.current(text)),
+    []
+  );
+  useEffect(() => {
+    onTurnStatus?.(
+      deriveTurnStatus({
+        status: session.status,
+        pendingAskUser: askUserPending
+      })
+    );
+  }, [onTurnStatus, session.status, askUserPending]);
+}
+
+function useChatPaneControllers(props: ChatPaneProps) {
   const {
     sessionId,
     projectId,
     chatId,
-    sessionKind,
     workspaceId,
-    branchName,
     skipInitialPromptNavigate,
     sendInitialPromptEvenIfNotEmpty,
     initialPrompt,
-    onOpenFile,
     onTurnStatus
   } = props;
   const model = useChatPaneModel();
@@ -84,15 +139,15 @@ export function ChatPane(props: ChatPaneProps) {
     mode: model.mode,
     onAppliedMode: model.setAgentMode
   });
-  const askUser = usePendingAskUser({
-    sessionId,
-    messages: session.messages,
-    liveToolParts: session.liveToolParts
-  });
   useTrackBackgroundJobs({
     sessionId,
     messages: session.messages,
     historyLoaded: session.historyLoaded,
+    liveToolParts: session.liveToolParts
+  });
+  const askUser = usePendingAskUser({
+    sessionId,
+    messages: session.messages,
     liveToolParts: session.liveToolParts
   });
   const [askUserSubmitting, setAskUserSubmitting] = useState(false);
@@ -110,95 +165,96 @@ export function ChatPane(props: ChatPaneProps) {
     liveToolParts: session.liveToolParts
   });
   const showAskUser = Boolean(askUser.pending);
-  const sendTextRef = useRef(session.sendText);
-  sendTextRef.current = session.sendText;
-  useEffect(() => onPreviewChatMessage((text) => void sendTextRef.current(text)), []);
-  useEffect(() => {
-    onTurnStatus?.(
-      deriveTurnStatus({
-        status: session.status,
-        pendingAskUser: showAskUser
-      })
-    );
-  }, [onTurnStatus, session.status, showAskUser]);
-
+  useChatPaneSideEffects({
+    session,
+    askUserPending: showAskUser,
+    onTurnStatus
+  });
   const handleSubmitAskUser = (result: AskUserSubmitResult) => {
     const proposal = askUser.pending;
     if (!proposal) return;
-    void (async () => {
-      setAskUserSubmitting(true);
-      try {
-        const text = await submitAskUserAnswer({
-          workspaceId,
-          proposal,
-          result
-        });
-        askUser.dismissAskUser(proposal);
-        void session.sendText(text);
-      } catch (err) {
-        askUser.dismissAskUser(proposal);
-        void session.sendText(
-          `${result.text}\n\n(Note: failed to save parameters to store: ${
-            err instanceof Error ? err.message : String(err)
-          })`
-        );
-      } finally {
-        setAskUserSubmitting(false);
-      }
-    })();
+    submitAskUserFromPane({
+      workspaceId,
+      proposal,
+      result,
+      dismissAskUser: askUser.dismissAskUser,
+      sendText: session.sendText,
+      setAskUserSubmitting
+    });
   };
+  return {
+    model,
+    session,
+    askUser,
+    askUserSubmitting,
+    handleSubmitAskUser,
+    showAskUser,
+    modeSwitch,
+    conversationTokens
+  };
+}
 
+function ChatPaneWired(options: {
+  props: ChatPaneProps;
+  c: ReturnType<typeof useChatPaneControllers>;
+}) {
+  const { props, c } = options;
   return (
     <ChatPaneView
-      sessionId={sessionId}
-      projectId={projectId}
-      chatId={chatId}
-      sessionKind={sessionKind}
-      branchName={branchName}
-      scrollerRef={session.scrollerRef}
-      stickToBottomRef={session.stickToBottomRef}
-      messages={session.messages}
-      isStreaming={session.isStreaming}
-      streamingText={session.streamingText}
-      liveToolParts={session.liveToolParts}
-      status={session.status}
-      error={session.error}
-      clearError={session.clearError}
-      input={session.input}
-      setInput={session.setInput}
-      onSend={() => void session.handleSend()}
-      onStop={() => void session.handleStop()}
-      canSend={session.canSend}
-      agentMode={model.agentMode}
-      onAgentModeChange={model.setAgentMode}
-      pendingAskUser={askUser.pending}
-      onSubmitAskUser={handleSubmitAskUser}
-      onDismissAskUser={askUser.onDismissAskUser}
-      askUserSubmitting={askUserSubmitting}
+      sessionId={props.sessionId}
+      projectId={props.projectId}
+      chatId={props.chatId}
+      sessionKind={props.sessionKind}
+      branchName={props.branchName}
+      scrollerRef={c.session.scrollerRef}
+      stickToBottomRef={c.session.stickToBottomRef}
+      messages={c.session.messages}
+      isStreaming={c.session.isStreaming}
+      streamingText={c.session.streamingText}
+      liveToolParts={c.session.liveToolParts}
+      status={c.session.status}
+      error={c.session.error}
+      clearError={c.session.clearError}
+      input={c.session.input}
+      setInput={c.session.setInput}
+      onSend={() => void c.session.handleSend()}
+      onStop={() => void c.session.handleStop()}
+      canSend={c.session.canSend}
+      agentMode={c.model.agentMode}
+      onAgentModeChange={c.model.setAgentMode}
+      pendingAskUser={c.askUser.pending}
+      onSubmitAskUser={c.handleSubmitAskUser}
+      onDismissAskUser={c.askUser.onDismissAskUser}
+      askUserSubmitting={c.askUserSubmitting}
       pendingModeSwitch={
-        showAskUser ? null : (modeSwitch.pending?.target ?? null)
+        c.showAskUser ? null : (c.modeSwitch.pending?.target ?? null)
       }
-      modeSwitchRemainingSeconds={modeSwitch.remainingSeconds}
-      onConfirmModeSwitch={modeSwitch.onConfirmModeSwitch}
-      onDismissModeSwitch={modeSwitch.onDismissModeSwitch}
-      provider={model.provider}
-      model={model.activeModel}
-      autoModel={model.autoModel}
-      onAutoModelChange={model.setAutoModel}
-      modelsByProvider={model.modelsByProvider}
-      modelsLoading={model.modelsLoading}
-      onModelSelect={model.onModelSelect}
-      conversationTokens={conversationTokens}
-      maxContextTokens={model.contextWindow}
-      maxOutputTokens={model.maxOutputTokens}
-      attachments={session.attachments}
+      modeSwitchRemainingSeconds={c.modeSwitch.remainingSeconds}
+      onConfirmModeSwitch={c.modeSwitch.onConfirmModeSwitch}
+      onDismissModeSwitch={c.modeSwitch.onDismissModeSwitch}
+      provider={c.model.provider}
+      model={c.model.activeModel}
+      autoModel={c.model.autoModel}
+      onAutoModelChange={c.model.setAutoModel}
+      modelsByProvider={c.model.modelsByProvider}
+      modelsLoading={c.model.modelsLoading}
+      onModelSelect={c.model.onModelSelect}
+      conversationTokens={c.conversationTokens}
+      maxContextTokens={c.model.contextWindow}
+      maxOutputTokens={c.model.maxOutputTokens}
+      attachments={c.session.attachments}
       onAttachFiles={(files) =>
-        session.setAttachments((prev) => [...prev, ...files])
+        c.session.setAttachments((prev) => [...prev, ...files])
       }
       onRemoveAttachment={(index) =>
-        session.setAttachments((prev) => prev.filter((_, i) => i !== index))
+        c.session.setAttachments((prev) => prev.filter((_, i) => i !== index))
       }
-      onOpenFile={onOpenFile}
+      onOpenFile={props.onOpenFile}
     />
   );
+}
+
+export function ChatPane(props: ChatPaneProps) {
+  const c = useChatPaneControllers(props);
+  return <ChatPaneWired props={props} c={c} />;
 }

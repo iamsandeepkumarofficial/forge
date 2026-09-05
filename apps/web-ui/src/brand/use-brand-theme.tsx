@@ -8,16 +8,13 @@ import {
 } from "react";
 
 export type BrandThemeId =
-  | "molten-steel"
-  | "ember-iron"
-  | "cold-forged"
-  | "molten-glow";
+  "molten-steel" | "ember-iron" | "cold-forged" | "molten-glow";
 
 export type BrandThemeMeta = {
   id: BrandThemeId;
   label: string;
   description: string;
-  /** [from, to] preview swatch — approximate hex of the theme's heat. */
+
   swatch: [string, string];
 };
 
@@ -102,7 +99,9 @@ export function BrandThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <BrandThemeContext.Provider value={{ theme, setTheme, themes: BRAND_THEMES }}>
+    <BrandThemeContext.Provider
+      value={{ theme, setTheme, themes: BRAND_THEMES }}
+    >
       {children}
     </BrandThemeContext.Provider>
   );
@@ -131,11 +130,6 @@ function useStandaloneBrandTheme(active: boolean): BrandThemeContextValue {
   return { theme, setTheme, themes: BRAND_THEMES };
 }
 
-/**
- * Reads the active brand theme. Works inside a {@link BrandThemeProvider} and,
- * as a fallback (e.g. isolated tests), manages its own state so consumers like
- * the theme picker never crash for lack of a provider.
- */
 export function useBrandTheme(): BrandThemeContextValue {
   const ctx = useContext(BrandThemeContext);
   const fallback = useStandaloneBrandTheme(ctx === null);

@@ -1,12 +1,14 @@
+const N_48 = 48;
+
 export type AppDbEngineId = "postgres" | "mongo";
 
 export type AppDbEngine = {
   id: AppDbEngineId;
   label: string;
   image: string;
-  
+
   containerName: string;
-  
+
   networkAlias: string;
   containerPort: number;
   hostPort: number;
@@ -14,7 +16,7 @@ export type AppDbEngine = {
   envKey: "DATABASE_URL" | "MONGODB_URI";
   user: string;
   password: string;
-  
+
   legacyContainerNames: string[];
 };
 
@@ -62,12 +64,12 @@ export function sandboxNetworkName(): string {
 }
 
 export function workspaceDbName(workspaceId: string): string {
-  const cleaned = workspaceId.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 48);
+  const cleaned = workspaceId.replace(/[^a-zA-Z0-9]/g, "_").slice(0, N_48);
   return `forge_ws_${cleaned || "workspace"}`;
 }
 
 export function sessionDbName(sessionId: string): string {
-  const cleaned = sessionId.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 48);
+  const cleaned = sessionId.replace(/[^a-zA-Z0-9]/g, "_").slice(0, N_48);
   return `forge_${cleaned || "session"}`;
 }
 
@@ -81,7 +83,6 @@ export function connectionUrlFor(
   }
   return `mongodb://${user}:${password}@${networkAlias}:${containerPort}/${database}?authSource=admin`;
 }
-
 
 export function detectEnginesFromFacts(facts: {
   envKeysReferenced?: string[];

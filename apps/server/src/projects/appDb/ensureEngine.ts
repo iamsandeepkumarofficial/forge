@@ -1,17 +1,18 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import {
-  type AppDbEngine,
-  sandboxNetworkName
-} from "./engines.js";
+import { type AppDbEngine, sandboxNetworkName } from "./engines.js";
 
 const execFileAsync = promisify(execFile);
+const N_30 = 30;
+const N_32 = 32;
+const N_500 = 500;
+const N_1024 = 1024;
 
 async function docker(
   args: string[]
 ): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync("docker", args, {
-    maxBuffer: 32 * 1024 * 1024,
+    maxBuffer: N_32 * N_1024 * N_1024,
     env: process.env
   });
 }
@@ -107,7 +108,6 @@ export type EnsureEngineResult = {
   pulled: boolean;
 };
 
-
 export async function ensureEngineRunning(
   engine: AppDbEngine
 ): Promise<EnsureEngineResult> {
@@ -167,24 +167,25 @@ export async function resolveEngineContainer(
   return null;
 }
 
-export async function waitForPostgresReady(
-  containerName: string,
-  user: string,
-  attempts = 30
-): Promise<void> {
+export async function waitForPostgresReady(options: {
+  containerName: string;
+  user: string;
+  attempts?: number;
+}): Promise<void> {
+  const attempts = options.attempts ?? N_30;
   for (let i = 0; i < attempts; i++) {
     try {
       await docker([
         "exec",
-        containerName,
+        options.containerName,
         "pg_isready",
         "-U",
-        user
+        options.user
       ]);
       return;
     } catch {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, N_500));
     }
   }
-  throw new Error(`Postgres ${containerName} did not become ready`);
+  throw new Error(`Postgres ${options.containerName} did not become ready`);
 }

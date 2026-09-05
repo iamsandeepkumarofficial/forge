@@ -29,17 +29,17 @@ describe("dockerExecHttp", () => {
 
   it("builds exec resize paths with floored dimensions", () => {
     assert.equal(
-      dockerExecResizePath("abc123", 80.9, 24.2),
+      dockerExecResizePath({ execId: "abc123", cols: 80.9, rows: 24.2 }),
       "/exec/abc123/resize?w=80&h=24"
     );
     assert.equal(
-      dockerExecResizePath("abc123", 0, 0),
+      dockerExecResizePath({ execId: "abc123", cols: 0, rows: 0 }),
       "/exec/abc123/resize?w=1&h=1"
     );
   });
 
   it("decodes chunked docker responses", () => {
-    const payload = "{\"Id\":\"abc123\"}";
+    const payload = '{"Id":"abc123"}';
     const raw = Buffer.from(
       `${payload.length.toString(16)}\r\n${payload}\r\n0\r\n\r\n`,
       "utf8"

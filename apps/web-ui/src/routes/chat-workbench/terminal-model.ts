@@ -65,23 +65,21 @@ export function mergeShellTab(
   return [...tabs, tab];
 }
 
-/** Keep client-pinned job tabs when refreshing strip from the API. */
-export function mergeApiTabsWithPinnedJobs(
-  apiTabs: TerminalTab[],
-  previous: TerminalTab[],
-  jobRunning?: Record<string, boolean>
-): TerminalTab[] {
-  const jobs = previous.filter((tab) => tab.kind === "job");
+export function mergeApiTabsWithPinnedJobs(options: {
+  apiTabs: TerminalTab[];
+  previous: TerminalTab[];
+  jobRunning?: Record<string, boolean>;
+}): TerminalTab[] {
+  const jobs = options.previous.filter((tab) => tab.kind === "job");
   const nextJobs = jobs.map((tab) => {
     const name = jobNameFromTabId(tab.id);
-    const running = jobRunning?.[name];
+    const running = options.jobRunning?.[name];
     if (running === undefined) return tab;
     return { ...tab, running, stoppable: running };
   });
-  return [...apiTabs.filter((tab) => tab.kind !== "job"), ...nextJobs];
+  return [...options.apiTabs.filter((tab) => tab.kind !== "job"), ...nextJobs];
 }
 
-/** Merge tracked app/job running state into local tabs (no HTTP). */
 export function applyTrackedRunningState(
   tabs: TerminalTab[],
   options: { trackedApps: string[]; trackedJobs: string[] }
@@ -125,15 +123,18 @@ export function countRunningTabs(tabs: TerminalTab[]): number {
   ).length;
 }
 
-export function pickActiveTab(
-  tabs: TerminalTab[],
-  preferredId: string | null,
-  hidden: ReadonlySet<string>
-): string | null {
-  const visible = tabs.filter((tab) => !hidden.has(tab.id));
+export function pickActiveTab(options: {
+  tabs: TerminalTab[];
+  preferredId: string | null;
+  hidden: ReadonlySet<string>;
+}): string | null {
+  const visible = options.tabs.filter((tab) => !options.hidden.has(tab.id));
   if (visible.length === 0) return null;
-  if (preferredId && visible.some((tab) => tab.id === preferredId)) {
-    return preferredId;
+  if (
+    options.preferredId &&
+    visible.some((tab) => tab.id === options.preferredId)
+  ) {
+    return options.preferredId;
   }
   const shell = visible.find((tab) => tab.kind === "shell");
   return shell?.id ?? visible[0]!.id;

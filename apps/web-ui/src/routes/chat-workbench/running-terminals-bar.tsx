@@ -32,6 +32,43 @@ function itemsForSession(sessionId: string): RunningTerminalItem[] {
   });
 }
 
+function RunningTerminalRow(options: {
+  item: RunningTerminalItem;
+  stoppingId: string | null;
+  onStop: (item: RunningTerminalItem) => void;
+}) {
+  const { item, stoppingId, onStop } = options;
+  return (
+    <li className="flex items-center gap-1 rounded hover:bg-muted">
+      <button
+        type="button"
+        aria-label={`Open ${item.label} in terminal`}
+        title={`Open ${item.label} in terminal`}
+        onClick={() =>
+          requestOpenTerminalTab({
+            id: item.id,
+            kind: item.kind
+          })
+        }
+        className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left text-[0.7rem] font-medium text-foreground"
+      >
+        <Terminal className="size-3 shrink-0 text-muted-foreground" />
+        <span className="truncate">{item.label}</span>
+      </button>
+      <button
+        type="button"
+        aria-label={`Stop ${item.label}`}
+        title={`Stop ${item.label}`}
+        disabled={stoppingId === item.id}
+        onClick={() => void onStop(item)}
+        className="mr-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded text-red-600 hover:bg-background hover:text-red-700 disabled:opacity-40 dark:text-red-500 dark:hover:text-red-400"
+      >
+        <Square className="size-2.5 fill-current" />
+      </button>
+    </li>
+  );
+}
+
 export function RunningTerminalsBar({ sessionId }: { sessionId: string }) {
   const [items, setItems] = useState<RunningTerminalItem[]>(() =>
     itemsForSession(sessionId)
@@ -40,14 +77,20 @@ export function RunningTerminalsBar({ sessionId }: { sessionId: string }) {
   const [stoppingId, setStoppingId] = useState<string | null>(null);
 
   useEffect(() => {
-    setItems(itemsForSession(sessionId));
+    void Promise.resolve().then(() => {
+      setItems(itemsForSession(sessionId));
+    });
     return subscribeTrackedTerminals(() => {
       setItems(itemsForSession(sessionId));
     });
   }, [sessionId]);
 
   useEffect(() => {
-    if (items.length === 0) setExpanded(false);
+    if (items.length === 0) {
+      void Promise.resolve().then(() => {
+        setExpanded(false);
+      });
+    }
   }, [items.length]);
 
   const onStop = useCallback(
@@ -57,7 +100,10 @@ export function RunningTerminalsBar({ sessionId }: { sessionId: string }) {
         if (item.kind === "app") {
           await stopApp(sessionId, item.id.slice("app:".length));
         } else {
-          await stopTerminalJob(sessionId, item.id.slice("job:".length));
+          await stopTerminalJob({
+            sessionId,
+            name: item.id.slice("job:".length)
+          });
         }
       } finally {
         setStoppingId(null);
@@ -94,36 +140,12 @@ export function RunningTerminalsBar({ sessionId }: { sessionId: string }) {
       {expanded ? (
         <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto">
           {items.map((item) => (
-            <li
+            <RunningTerminalRow
               key={item.id}
-              className="flex items-center gap-1 rounded hover:bg-muted"
-            >
-              <button
-                type="button"
-                aria-label={`Open ${item.label} in terminal`}
-                title={`Open ${item.label} in terminal`}
-                onClick={() =>
-                  requestOpenTerminalTab({
-                    id: item.id,
-                    kind: item.kind
-                  })
-                }
-                className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left text-[0.7rem] font-medium text-foreground"
-              >
-                <Terminal className="size-3 shrink-0 text-muted-foreground" />
-                <span className="truncate">{item.label}</span>
-              </button>
-              <button
-                type="button"
-                aria-label={`Stop ${item.label}`}
-                title={`Stop ${item.label}`}
-                disabled={stoppingId === item.id}
-                onClick={() => void onStop(item)}
-                className="mr-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded text-red-600 hover:bg-background hover:text-red-700 disabled:opacity-40 dark:text-red-500 dark:hover:text-red-400"
-              >
-                <Square className="size-2.5 fill-current" />
-              </button>
-            </li>
+              item={item}
+              stoppingId={stoppingId}
+              onStop={onStop}
+            />
           ))}
         </ul>
       ) : null}

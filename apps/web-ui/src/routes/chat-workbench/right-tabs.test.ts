@@ -21,13 +21,23 @@ describe("right-tabs", () => {
   it("returns to preview after closing the last tab", () => {
     const remaining = closeDocTab([fileA], fileA.id);
     expect(remaining).toEqual([]);
-    expect(nextActiveAfterClose(fileA.id, fileA.id, remaining)).toBe(
-      PREVIEW_TAB_ID
-    );
+    expect(
+      nextActiveAfterClose({
+        activeId: fileA.id,
+        closedId: fileA.id,
+        remaining
+      })
+    ).toBe(PREVIEW_TAB_ID);
   });
 
   it("activates the last remaining tab when closing the current one", () => {
     const remaining = closeDocTab([fileA, fileB], fileB.id);
-    expect(nextActiveAfterClose(fileB.id, fileB.id, remaining)).toBe(fileA.id);
+    expect(
+      nextActiveAfterClose({
+        activeId: fileB.id,
+        closedId: fileB.id,
+        remaining
+      })
+    ).toBe(fileA.id);
   });
 });

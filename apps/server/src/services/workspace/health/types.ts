@@ -4,6 +4,9 @@ import type {
 } from "../../../projects/repoFacts.js";
 import type { AppDbEngineId } from "../../../projects/appDb/engines.js";
 
+const N_8 = 8;
+const N_16 = 16;
+
 export type HealthSeverity = "error" | "warning" | "info";
 
 export type HealthFinding = {
@@ -35,7 +38,7 @@ export type MemberHealth = {
 export type ParamShadowCandidate = {
   key: string;
   secretLikely: boolean;
-  
+
   exampleHint?: string;
   repo?: string;
 };
@@ -51,7 +54,6 @@ export type WorkspacePrepareShadows = {
 };
 
 export type WorkspacePrepareReport = {
-  
   parametersSeeded: string[];
   databases: Record<string, string>;
   installs: Array<{
@@ -71,7 +73,7 @@ export type WorkspaceHealthReport = {
   findings: HealthFinding[];
   dependsOnGraph: Array<{ repo: string; dependsOn: string[] }>;
   prepare?: WorkspacePrepareReport;
-  
+
   shadows?: WorkspacePrepareShadows;
 };
 
@@ -110,7 +112,7 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
   } else {
     if (blockers.length > 0) {
       lines.push("Blockers:");
-      for (const f of blockers.slice(0, 8)) {
+      for (const f of blockers.slice(0, N_8)) {
         lines.push(
           `- [${f.code}]${f.repo ? ` \`${f.repo}\`` : ""}: ${f.message}${f.hint ? ` — ${f.hint}` : ""}`
         );
@@ -118,7 +120,7 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
     }
     if (warnings.length > 0) {
       lines.push("Warnings:");
-      for (const f of warnings.slice(0, 8)) {
+      for (const f of warnings.slice(0, N_8)) {
         lines.push(
           `- [${f.code}]${f.repo ? ` \`${f.repo}\`` : ""}: ${f.message}${f.hint ? ` — ${f.hint}` : ""}`
         );
@@ -127,7 +129,10 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
   }
   const shadows = report.shadows ?? report.prepare?.shadows;
   if (shadows) {
-    lines.push("", "## Setup shadows (evidence only — do not treat as applied)");
+    lines.push(
+      "",
+      "## Setup shadows (evidence only — do not treat as applied)"
+    );
     lines.push(
       `Preferred sandbox image (from evidence): \`${shadows.preferredSandboxImage}\``
     );
@@ -142,9 +147,9 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
     if (shadows.paramCandidates.length > 0) {
       lines.push(
         `- Param candidates (upsert via tool after confirming): ${shadows.paramCandidates
-          .slice(0, 16)
+          .slice(0, N_16)
           .map((p) => `\`${p.key}\`${p.secretLikely ? "*" : ""}`)
-          .join(", ")}${shadows.paramCandidates.length > 16 ? ", …" : ""}`
+          .join(", ")}${shadows.paramCandidates.length > N_16 ? ", …" : ""}`
       );
     }
     if (shadows.infraEvidence.length > 0) {

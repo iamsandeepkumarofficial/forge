@@ -43,10 +43,7 @@ function guessType(deps: Record<string, string>): AppType {
   return "worker";
 }
 
-async function detectPm(
-  containerName: string,
-  dir: string
-): Promise<string> {
+async function detectPm(containerName: string, dir: string): Promise<string> {
   const lock = await dockerExec({
     container: containerName,
     argv: [
@@ -65,11 +62,57 @@ function devCommand(pm: string): string {
   return "npm run dev";
 }
 
+type PkgJson = {
+  name?: string;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
+};
+
+function appFromPackageJson(options: {
+  pkg: PkgJson;
+  dirName?: string;
+  repo?: string;
+  sessionRelativeCwd?: boolean;
+  pm: string;
+  devCmd: string;
+  nextPort: { value: number };
+  requireDevOnly?: boolean;
+}): ForgeApp | null {
+  const { pkg, repo, sessionRelativeCwd, pm, devCmd, nextPort } = options;
+  if (options.requireDevOnly) {
+    if (!pkg.scripts?.dev) return null;
+  } else if (!pkg.scripts?.dev && !pkg.scripts?.start) {
+    return null;
+  }
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  const type = guessType(deps);
+  const fallback = options.dirName || (repo ? repo : "app");
+  const name = (pkg.name || fallback).replace(/^@[^/]+\//, "");
+  const cwd = options.dirName
+    ? sessionRelativeCwd && repo
+      ? `${repo}/apps/${options.dirName}`
+      : `apps/${options.dirName}`
+    : sessionRelativeCwd && repo
+      ? repo
+      : ".";
+  const command = options.dirName
+    ? devCmd
+    : pkg.scripts?.dev
+      ? devCmd
+      : `${pm === "yarn" ? "yarn" : pm === "pnpm" ? "pnpm run" : "npm run"} start`;
+  const app: ForgeApp = { name, cwd, command, type };
+  if (repo) app.repo = repo;
+  if (type !== "worker" && nextPort.value < FIRST_APP_PORT + RESERVED_PORTS) {
+    app.port = nextPort.value++;
+  }
+  return app;
+}
+
 async function detectAppsInDir(options: {
   containerName: string;
   baseDir: string;
   repo?: string;
-  
   sessionRelativeCwd?: boolean;
   pm: string;
   nextPort: { value: number };
@@ -77,43 +120,25 @@ async function detectAppsInDir(options: {
   const { containerName, baseDir, repo, pm, sessionRelativeCwd } = options;
   const devCmd = devCommand(pm);
   const apps: ForgeApp[] = [];
-
   const rootPkg = await readFileFromSandbox(
     containerName,
     `${baseDir}/package.json`
   );
   if (rootPkg) {
     try {
-      const pkg = JSON.parse(rootPkg) as {
-        name?: string;
-        dependencies?: Record<string, string>;
-        devDependencies?: Record<string, string>;
-        scripts?: Record<string, string>;
-      };
-      if (pkg.scripts?.dev || pkg.scripts?.start) {
-        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-        const type = guessType(deps);
-        const name = (pkg.name || (repo ? repo : "app")).replace(
-          /^@[^/]+\//,
-          ""
-        );
-        const app: ForgeApp = {
-          name,
-          cwd: sessionRelativeCwd && repo ? repo : ".",
-          command: pkg.scripts.dev ? devCmd : `${pm === "yarn" ? "yarn" : pm === "pnpm" ? "pnpm run" : "npm run"} start`,
-          type
-        };
-        if (repo) app.repo = repo;
-        if (type !== "worker" && options.nextPort.value < FIRST_APP_PORT + RESERVED_PORTS) {
-          app.port = options.nextPort.value++;
-        }
-        apps.push(app);
-      }
+      const app = appFromPackageJson({
+        pkg: JSON.parse(rootPkg) as PkgJson,
+        repo,
+        sessionRelativeCwd,
+        pm,
+        devCmd,
+        nextPort: options.nextPort
+      });
+      if (app) apps.push(app);
     } catch {
-      
+      void 0;
     }
   }
-
   const lsr = await dockerExec({
     container: containerName,
     argv: ["sh", "-c", `ls -1 "${baseDir}/apps" 2>/dev/null`]
@@ -129,30 +154,17 @@ async function detectAppsInDir(options: {
     );
     if (pkgRaw === null) continue;
     try {
-      const pkg = JSON.parse(pkgRaw) as {
-        name?: string;
-        dependencies?: Record<string, string>;
-        devDependencies?: Record<string, string>;
-        scripts?: Record<string, string>;
-      };
-      if (!pkg.scripts?.dev) continue;
-      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-      const type = guessType(deps);
-      const name = (pkg.name || dir).replace(/^@[^/]+\//, "");
-      const app: ForgeApp = {
-        name,
-        cwd:
-          sessionRelativeCwd && repo
-            ? `${repo}/apps/${dir}`
-            : `apps/${dir}`,
-        command: devCmd,
-        type
-      };
-      if (repo) app.repo = repo;
-      if (type !== "worker" && options.nextPort.value < FIRST_APP_PORT + RESERVED_PORTS) {
-        app.port = options.nextPort.value++;
-      }
-      apps.push(app);
+      const app = appFromPackageJson({
+        pkg: JSON.parse(pkgRaw) as PkgJson,
+        dirName: dir,
+        repo,
+        sessionRelativeCwd,
+        pm,
+        devCmd,
+        nextPort: options.nextPort,
+        requireDevOnly: true
+      });
+      if (app) apps.push(app);
     } catch {
       continue;
     }
@@ -161,7 +173,8 @@ async function detectAppsInDir(options: {
 }
 
 export async function detectApps(sessionId: string): Promise<ForgeConfig> {
-  const { containerName, workingDir, worktrees } = await resolveSandbox(sessionId);
+  const { containerName, workingDir, worktrees } =
+    await resolveSandbox(sessionId);
   const nextPort = { value: FIRST_APP_PORT };
   const apps: ForgeApp[] = [];
 
@@ -206,7 +219,6 @@ async function chatWorkspaceId(sessionId: string): Promise<string | null> {
   return chat?.workspaceId ?? null;
 }
 
-
 export async function ensureLaunchConfig(sessionId: string): Promise<{
   ready: boolean;
   scaffolded: boolean;
@@ -226,7 +238,8 @@ export async function ensureLaunchConfig(sessionId: string): Promise<{
   }
 
   try {
-    const { seedLaunchFromWorkspace } = await import("./workspaceEnvironment.js");
+    const { seedLaunchFromWorkspace } =
+      await import("./workspaceEnvironment.js");
     const seeded = await seedLaunchFromWorkspace(sessionId);
     if (seeded) {
       return {

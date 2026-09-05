@@ -15,6 +15,10 @@ const FORGE_GIT_IDENTITY = {
 } as const;
 
 const DOCKER_NAME_MAX = 48;
+const N_10 = 10;
+const N_25 = 25;
+const N_5000 = 5_000;
+const N_1024 = 1024;
 
 export function sanitizeSessionFsName(sessionId: string): string {
   const cleaned = sessionId
@@ -36,7 +40,7 @@ async function git(
   args: string[]
 ): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync("git", ["-C", cwd, ...args], {
-    maxBuffer: 10 * 1024 * 1024
+    maxBuffer: N_10 * N_1024 * N_1024
   });
 }
 
@@ -70,11 +74,12 @@ async function gitConfigGet(
   }
 }
 
-async function gitConfigSet(
-  repoDir: string,
-  key: string,
-  value: string
-): Promise<void> {
+async function gitConfigSet(options: {
+  repoDir: string;
+  key: string;
+  value: string;
+}): Promise<void> {
+  const { repoDir, key, value } = options;
   const maxAttempts = 5;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -84,7 +89,6 @@ async function gitConfigSet(
       const msg = err instanceof Error ? err.message : String(err);
       const locked = /could not lock config file|\.lock/i.test(msg);
       if (!locked || attempt === maxAttempts - 1) {
-        
         const current = await gitConfigGet(repoDir, key);
         if (current === value) return;
         throw err;
@@ -92,14 +96,14 @@ async function gitConfigSet(
       const lockPath = path.join(repoDir, ".git", "config.lock");
       try {
         const st = await fs.stat(lockPath);
-        
-        if (Date.now() - st.mtimeMs > 5_000) {
+
+        if (Date.now() - st.mtimeMs > N_5000) {
           await fs.rm(lockPath, { force: true });
         }
       } catch {
-        
+        void 0;
       }
-      await new Promise((r) => setTimeout(r, 25 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, N_25 * (attempt + 1)));
     }
   }
 }
@@ -107,18 +111,29 @@ async function gitConfigSet(
 async function configureForgeIdentity(repoDir: string): Promise<void> {
   const email = await gitConfigGet(repoDir, "user.email");
   if (email !== FORGE_GIT_IDENTITY.email) {
-    await gitConfigSet(repoDir, "user.email", FORGE_GIT_IDENTITY.email);
+    await gitConfigSet({
+      repoDir,
+      key: "user.email",
+      value: FORGE_GIT_IDENTITY.email
+    });
   }
   const name = await gitConfigGet(repoDir, "user.name");
   if (name !== FORGE_GIT_IDENTITY.name) {
-    await gitConfigSet(repoDir, "user.name", FORGE_GIT_IDENTITY.name);
+    await gitConfigSet({
+      repoDir,
+      key: "user.name",
+      value: FORGE_GIT_IDENTITY.name
+    });
   }
   const fileMode = await gitConfigGet(repoDir, "core.fileMode");
   if (fileMode !== "false") {
-    await gitConfigSet(repoDir, "core.fileMode", "false").catch(() => {});
+    await gitConfigSet({
+      repoDir,
+      key: "core.fileMode",
+      value: "false"
+    }).catch(() => {});
   }
 }
-
 
 export async function ensureCanonicalGitRepo(
   canonicalKey: string
@@ -137,7 +152,6 @@ export async function ensureCanonicalGitRepo(
   if (status.trim()) {
     await git(canonicalKey, ["commit", "-m", "forge: initial import"]);
   } else {
-    
     await git(canonicalKey, [
       "commit",
       "--allow-empty",
@@ -189,7 +203,6 @@ export type SessionWorktree = {
   projectId: string;
 };
 
-
 export async function ensureSessionWorktree(options: {
   canonicalKey: string;
   projectId: string;
@@ -223,7 +236,6 @@ export async function ensureSessionWorktree(options: {
       await rewriteWorktreeGitdir({ workDir, projectId, adminName });
     }
   } else {
-    
     const pointer = path.join(workDir, ".git");
     try {
       const contents = await fs.readFile(pointer, "utf8");
@@ -237,15 +249,13 @@ export async function ensureSessionWorktree(options: {
           adminName: existing
         });
       }
-      
     } catch {
-      
+      void 0;
     }
   }
 
   return { workDir, gitCanonicalHostPath, projectId };
 }
-
 
 export async function removeSessionWorktree(options: {
   canonicalKey: string;
@@ -258,7 +268,6 @@ export async function removeSessionWorktree(options: {
     await git(options.canonicalKey, ["worktree", "prune"]).catch(() => {});
   }
 }
-
 
 export async function mergeSessionBranchIntoCanonical(options: {
   canonicalKey: string;
@@ -285,7 +294,7 @@ export async function mergeSessionBranchIntoCanonical(options: {
       ]);
       if (stdout.trim()) defaultBranch = stdout.trim();
     } catch {
-      
+      void 0;
     }
   }
 

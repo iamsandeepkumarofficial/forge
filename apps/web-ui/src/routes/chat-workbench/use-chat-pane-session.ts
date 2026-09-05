@@ -11,11 +11,8 @@ type SessionOptions = {
   sessionId: string;
   projectId: string;
   chatId: string;
-  /** When set (workspace chats), used for initial-prompt state clear path. */
   workspaceId?: string;
-  /** Skip location replace (embedded drawer). */
   skipInitialPromptNavigate?: boolean;
-  /** Send CTA prompt even when the chat already has messages. */
   sendInitialPromptEvenIfNotEmpty?: boolean;
   initialPrompt?: string;
   provider: LlmProvider;
@@ -24,6 +21,17 @@ type SessionOptions = {
   mode: ChatMode;
   onAppliedMode?: (mode: ComposerAgentMode) => void;
 };
+
+function clearStatePathFor(options: SessionOptions): string | undefined {
+  if (options.skipInitialPromptNavigate) return undefined;
+  if (options.projectId) {
+    return `/projects/${options.projectId}/chats/${options.chatId}`;
+  }
+  if (options.workspaceId) {
+    return `/workspaces/${options.workspaceId}/chats/${options.chatId}`;
+  }
+  return undefined;
+}
 
 export function useChatPaneSession(options: SessionOptions) {
   const o = options;
@@ -63,13 +71,7 @@ export function useChatPaneSession(options: SessionOptions) {
     status: s.status,
     messageCount: history.messages.length,
     sendEvenIfNotEmpty: o.sendInitialPromptEvenIfNotEmpty,
-    clearStatePath: o.skipInitialPromptNavigate
-      ? undefined
-      : o.projectId
-        ? `/projects/${o.projectId}/chats/${o.chatId}`
-        : o.workspaceId
-          ? `/workspaces/${o.workspaceId}/chats/${o.chatId}`
-          : undefined,
+    clearStatePath: clearStatePathFor(o),
     sendText: (raw) => {
       void sendText(raw);
     }

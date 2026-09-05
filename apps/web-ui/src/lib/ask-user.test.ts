@@ -61,11 +61,11 @@ describe("ask-user", () => {
       'User answer (ask_user): chose "yes" — Yes, provision'
     );
     expect(
-      askUserFormReply(
-        [{ id: "MONGODB_URL", label: "Mongo URL" }],
-        { MONGODB_URL: "mongodb://x" },
-        { savedParamKeys: ["MONGODB_URL"] }
-      )
+      askUserFormReply({
+        fields: [{ id: "MONGODB_URL", label: "Mongo URL" }],
+        values: { MONGODB_URL: "mongodb://x" },
+        savedParamKeys: ["MONGODB_URL"]
+      })
     ).toBe(
       "User answer (ask_user) — saved to parameter store: MONGODB_URL.\nMONGODB_URL: mongodb://x"
     );

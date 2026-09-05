@@ -5,12 +5,13 @@ export const PREVIEW_LEFT_PCT = 32;
 export const SPLIT_MIN = 20;
 export const SPLIT_MAX = 70;
 export const LEFT_MIN_PX = 280;
+const N_PERCENT = 100;
 
 export function leftPaneWidthPx(
   containerWidth: number,
   leftPct: number
 ): number {
-  return (containerWidth * leftPct) / 100;
+  return (containerWidth * leftPct) / N_PERCENT;
 }
 
 export function shouldCollapseLeft(
@@ -22,7 +23,7 @@ export function shouldCollapseLeft(
 
 export function leftPctForMinWidth(containerWidth: number): number {
   if (containerWidth <= 0) return SPLIT_MIN;
-  return clampSplitPct(Math.round((LEFT_MIN_PX / containerWidth) * 100));
+  return clampSplitPct(Math.round((LEFT_MIN_PX / containerWidth) * N_PERCENT));
 }
 const SPLIT_NEAR = 3;
 const LEGACY_DEFAULT = 38;

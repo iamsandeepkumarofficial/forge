@@ -22,11 +22,11 @@ export function closeDocTab(docs: FileTab[], id: string): FileTab[] {
   return docs.filter((d) => d.id !== id);
 }
 
-export function nextActiveAfterClose(
-  activeId: string,
-  closedId: string,
-  remaining: FileTab[]
-): string {
-  if (activeId !== closedId) return activeId;
-  return remaining.at(-1)?.id ?? PREVIEW_TAB_ID;
+export function nextActiveAfterClose(options: {
+  activeId: string;
+  closedId: string;
+  remaining: FileTab[];
+}): string {
+  if (options.activeId !== options.closedId) return options.activeId;
+  return options.remaining.at(-1)?.id ?? PREVIEW_TAB_ID;
 }

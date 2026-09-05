@@ -7,7 +7,6 @@ type Entry = {
 
 const clients = new Map<string, Entry>();
 
-/** Shared session WS client — retain while workbench / job trackers need it. */
 export function retainTerminalSessionClient(
   sessionId: string
 ): TerminalSessionClient {
@@ -39,7 +38,6 @@ export function getTerminalSessionClient(
   return clients.get(sessionId.trim())?.client ?? null;
 }
 
-/** Test helper — drop all clients without waiting for refs. */
 export function resetTerminalSessionRegistryForTests(): void {
   for (const entry of clients.values()) {
     entry.client.disconnect();

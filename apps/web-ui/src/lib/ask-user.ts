@@ -7,7 +7,7 @@ export type AskUserField = {
   label: string;
   secret?: boolean;
   placeholder?: string;
-  /** Agent-provided default shown prefilled in the widget. */
+
   value?: string;
 };
 
@@ -51,7 +51,8 @@ function proposalFromPart(part: ToolPart): AskUserProposal | null {
   if (toolPartName(part) !== "ask_user") return null;
   const meta = part.metadata;
   if (!meta || meta.needsUserInput !== true) return null;
-  const kind = meta.kind === "form" ? "form" : meta.kind === "mcq" ? "mcq" : null;
+  const kind =
+    meta.kind === "form" ? "form" : meta.kind === "mcq" ? "mcq" : null;
   const prompt = typeof meta.prompt === "string" ? meta.prompt.trim() : "";
   if (!kind || !prompt) return null;
   const options = Array.isArray(meta.options)
@@ -60,7 +61,9 @@ function proposalFromPart(part: ToolPart): AskUserProposal | null {
       )
     : [];
   const fields = Array.isArray(meta.fields)
-    ? meta.fields.map(normalizeField).filter((f): f is AskUserField => f != null)
+    ? meta.fields
+        .map(normalizeField)
+        .filter((f): f is AskUserField => f != null)
     : [];
   if (kind === "mcq" && options.length < 2) return null;
   if (kind === "form" && fields.length < 1) return null;
@@ -75,7 +78,7 @@ function proposalFromPart(part: ToolPart): AskUserProposal | null {
 
 type IndexedProposal = {
   proposal: AskUserProposal;
-  /** Message index where the ask_user tool part appeared; live parts use messages.length. */
+
   atIndex: number;
 };
 
@@ -114,10 +117,6 @@ function hasAnswerAfter(
   return false;
 }
 
-/**
- * Latest unanswered ask_user wins.
- * A proposal is answered when a later user message starts with "User answer (ask_user)".
- */
 export function findPendingAskUser(options: {
   messages: UiChatMessage[];
   liveToolParts: ToolPart[];
@@ -145,13 +144,15 @@ export function askUserMcqReply(option: AskUserOption): string {
   return `User answer (ask_user): chose "${option.id}" — ${option.label}`;
 }
 
-export function askUserFormReply(
-  fields: AskUserField[],
-  values: Record<string, string>,
-  options?: { savedParamKeys?: string[] }
-): string {
-  const lines = fields.map((f) => `${f.id}: ${values[f.id] ?? ""}`);
-  const saved = options?.savedParamKeys?.filter(Boolean) ?? [];
+export function askUserFormReply(options: {
+  fields: AskUserField[];
+  values: Record<string, string>;
+  savedParamKeys?: string[];
+}): string {
+  const lines = options.fields.map(
+    (f) => `${f.id}: ${options.values[f.id] ?? ""}`
+  );
+  const saved = options.savedParamKeys?.filter(Boolean) ?? [];
   const header =
     saved.length > 0
       ? `User answer (ask_user) — saved to parameter store: ${saved.join(", ")}.`
@@ -159,7 +160,6 @@ export function askUserFormReply(
   return `${header}\n${lines.join("\n")}`;
 }
 
-/** Initial form values from agent-provided field.value defaults. */
 export function askUserInitialValues(
   fields: AskUserField[]
 ): Record<string, string> {
@@ -170,7 +170,6 @@ export function askUserInitialValues(
   return init;
 }
 
-/** Env-style keys get written to the workspace parameter store on submit. */
 export function isWorkspaceParamFieldId(id: string): boolean {
   return /^[A-Z][A-Z0-9_]*$/.test(id);
 }

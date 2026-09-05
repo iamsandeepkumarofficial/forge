@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 describe("runApp readiness", { concurrency: false }, () => {
   let jobRunning = true;
   let tcpListening = true;
-  let stopped = false;
+  let stopCount = 0;
   let publishedPorts: number[] = [];
   let runApp: typeof import("./appRunner.js").runApp;
 
@@ -36,6 +36,7 @@ describe("runApp readiness", { concurrency: false }, () => {
     mock.module("./launchCwd.js", {
       exports: {
         normalizeLaunchCwd: (opts: { cwd: string }) => opts.cwd,
+        safeRelDir: (cwd: string) => cwd.replace(/^\.\//, "") || ".",
         resolveLaunchAppDir: async () => ({
           appDir: "/workspace",
           relCwd: ".",
@@ -47,14 +48,13 @@ describe("runApp readiness", { concurrency: false }, () => {
       exports: {
         startBackgroundJob: async () => undefined,
         stopBackgroundJob: async () => {
-          stopped = true;
-          jobRunning = false;
+          stopCount += 1;
         },
         freeListeningPort: async () => undefined,
         waitUntilJobRunning: async () => jobRunning,
         waitUntilTcpListening: async () => tcpListening,
-        waitUntilHostTcpListening: async () => true,
-        isBackgroundJobRunning: async () => jobRunning,
+        waitUntilHostTcpListening: async () => tcpListening,
+        isBackgroundJobRunning: async () => jobRunning && tcpListening,
         readBackgroundJobLogs: async () => "boot failed"
       }
     });
@@ -94,24 +94,24 @@ describe("runApp readiness", { concurrency: false }, () => {
   it("publishes preview only after TCP listens", async () => {
     jobRunning = true;
     tcpListening = true;
-    stopped = false;
+    stopCount = 0;
     publishedPorts = [];
     const status = await runApp("s1", "web");
     assert.equal(status.running, true);
     assert.equal(status.startFailure, undefined);
     assert.deepEqual(publishedPorts, [3000]);
-    assert.equal(stopped, false);
+    assert.ok(stopCount >= 1);
   });
 
   it("stops job and skips publish when port never listens", async () => {
     jobRunning = true;
     tcpListening = false;
-    stopped = false;
+    stopCount = 0;
     publishedPorts = [];
     const status = await runApp("s1", "web");
     assert.equal(status.running, false);
     assert.equal(status.startFailure, "port");
     assert.deepEqual(publishedPorts, []);
-    assert.equal(stopped, true);
+    assert.ok(stopCount >= 2);
   });
 });

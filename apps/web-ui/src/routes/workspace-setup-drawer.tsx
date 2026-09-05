@@ -17,11 +17,9 @@ import {
 import { ChatPane } from "./chat-workbench/chat-pane.js";
 
 const SETUP_CHAT_TITLE = "Workspace setup";
+const HEALTH_POLL_ATTEMPTS = 60;
+const HEALTH_POLL_MS = 500;
 
-/**
- * Health may still be computing when this opens — wait for shadows/health,
- * turn findings into a numbered task list, then execute each task (same tools as Fix).
- */
 export const WORKSPACE_SETUP_ANALYZE_PROMPT = [
   "Run a workspace setup turn.",
   "Refresh is collecting evidence/shadows in the background — wait until ## Workspace health",
@@ -34,7 +32,6 @@ export const WORKSPACE_SETUP_ANALYZE_PROMPT = [
   "Do not stop after the task list — start fixing immediately."
 ].join(" ");
 
-/** Same execution path; used when findings already show warnings/errors. */
 export const WORKSPACE_SETUP_FIX_PROMPT = [
   "Analyze this workspace and fix setup blockers.",
   "If health is still computing, wait/re-read until shadows are ready.",
@@ -52,8 +49,6 @@ export function setupCtaModeFromFindings(
   findings: WorkspaceHealthFinding[],
   healthStatus?: string | null
 ): WorkspaceSetupDrawerMode {
-  // While shadows are computing, findings are often empty — still open Fix so the
-  // agent waits on health then executes instead of a review-only Analyze turn.
   if (healthStatus === "computing") return "fix";
   return findings.some(
     (f) => f.severity === "warning" || f.severity === "error"
@@ -85,13 +80,6 @@ function lastUserText(messages: UiChatMessage[]): string | null {
   return null;
 }
 
-/**
- * Seed a setup prompt only when needed:
- * - never while a turn is already running (just open/resume)
- * - empty chat → seed for the CTA mode
- * - Analyze→Fix (or vice versa) when the last user prompt was the other mode
- * - same mode already seeded → open only
- */
 export function shouldSeedSetupPrompt(options: {
   mode: WorkspaceSetupDrawerMode;
   turnRunning: boolean;
@@ -124,12 +112,11 @@ async function ensureSetupChat(workspaceId: string): Promise<{
   try {
     await startSession(detail.sessionId);
   } catch {
-    /* sandbox may still be provisioning */
+    void 0;
   }
   return { chatId: chat.id, sessionId: detail.sessionId };
 }
 
-/** Fire shadows-only analyze and poll until not computing. */
 export async function runShadowAnalyzeWithProgress(options: {
   workspaceId: string;
   onProgress?: (message: string) => void;
@@ -145,8 +132,8 @@ export async function runShadowAnalyzeWithProgress(options: {
     return { status: "computing", findings: [] };
   }
   onProgress?.("Writing health shadows…");
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 500));
+  for (let i = 0; i < HEALTH_POLL_ATTEMPTS; i++) {
+    await new Promise((r) => setTimeout(r, HEALTH_POLL_MS));
     if (signal?.cancelled) {
       return { status: "computing", findings: [] };
     }
@@ -163,98 +150,19 @@ export async function runShadowAnalyzeWithProgress(options: {
   return { status: "computing", findings: [] };
 }
 
-export function WorkspaceSetupDrawer(options: {
-  workspaceId: string;
-  mode: WorkspaceSetupDrawerMode;
-  open: boolean;
+type SetupSession = {
+  chatId: string;
+  sessionId: string;
+  initialPrompt?: string;
+};
+
+function SetupDrawerChrome(options: {
+  title: string;
+  subtitle: string;
   onClose: () => void;
-  onHealthUpdated?: (status: string, findings: WorkspaceHealthFinding[]) => void;
+  children: React.ReactNode;
 }) {
-  const { workspaceId, mode, open, onClose, onHealthUpdated } = options;
-  const [progress, setProgress] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [session, setSession] = useState<{
-    chatId: string;
-    sessionId: string;
-    initialPrompt?: string;
-  } | null>(null);
-  const [chatReady, setChatReady] = useState(false);
-  // Parent often passes an inline callback — keep it out of effect deps or
-  // health updates re-open the drawer loop and spam /internal/session/start.
-  const onHealthUpdatedRef = useRef(onHealthUpdated);
-  onHealthUpdatedRef.current = onHealthUpdated;
-
-  useEffect(() => {
-    if (!open) {
-      setProgress(null);
-      setError(null);
-      setSession(null);
-      setChatReady(false);
-      return;
-    }
-
-    const signal = { cancelled: false };
-    setProgress("Opening Workspace setup…");
-    setChatReady(false);
-    setSession(null);
-    setError(null);
-
-    void (async () => {
-      try {
-        const shadowsPromise = runShadowAnalyzeWithProgress({
-          workspaceId,
-          onProgress: (msg) => {
-            if (!signal.cancelled) setProgress(msg);
-          },
-          signal
-        }).then((result) => {
-          if (signal.cancelled) return;
-          onHealthUpdatedRef.current?.(result.status, result.findings);
-        });
-
-        const setup = await ensureSetupChat(workspaceId);
-        if (signal.cancelled) return;
-
-        const [messages, running] = await Promise.all([
-          fetchSessionMessages(setup.sessionId),
-          fetchRunningTurn(setup.sessionId)
-        ]);
-        if (signal.cancelled) return;
-
-        const seed = shouldSeedSetupPrompt({
-          mode,
-          turnRunning: Boolean(running),
-          lastUserText: lastUserText(messages)
-        });
-
-        setSession({
-          ...setup,
-          initialPrompt: seed ? initialPromptForSetupMode(mode) : undefined
-        });
-        setProgress(null);
-        setChatReady(true);
-        void shadowsPromise;
-      } catch (e) {
-        if (!signal.cancelled) {
-          setError(e instanceof Error ? e.message : String(e));
-          setProgress(null);
-        }
-      }
-    })();
-
-    return () => {
-      signal.cancelled = true;
-    };
-  }, [open, mode, workspaceId]);
-
-  if (!open) return null;
-
-  const title = mode === "analyze" ? "Analyze workspace" : "Fix workspace";
-  const subtitle =
-    mode === "analyze"
-      ? "Setup chat — list blockers as tasks, then fix them one by one."
-      : "Setup chat — invoke skills, install, and provision only after you approve.";
-
+  const { title, subtitle, onClose, children } = options;
   return (
     <div
       className="fixed inset-0 z-50 flex justify-end"
@@ -285,31 +193,138 @@ export function WorkspaceSetupDrawer(options: {
             <X className="size-4" />
           </button>
         </header>
-
-        <div className="min-h-0 flex-1">
-          {error && <p className="m-4 text-sm text-destructive">{error}</p>}
-          {!chatReady && progress && (
-            <p className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              {progress}
-            </p>
-          )}
-          {chatReady && session && (
-            <div className="h-full min-h-0">
-              <ChatPane
-                key={`${session.chatId}-${mode}-${session.initialPrompt ? "seed" : "resume"}`}
-                sessionId={session.sessionId}
-                projectId=""
-                chatId={session.chatId}
-                workspaceId={workspaceId}
-                sessionKind="workbench"
-                skipInitialPromptNavigate
-                initialPrompt={session.initialPrompt}
-              />
-            </div>
-          )}
-        </div>
+        <div className="min-h-0 flex-1">{children}</div>
       </aside>
     </div>
+  );
+}
+
+function useSetupDrawerSession(options: {
+  workspaceId: string;
+  mode: WorkspaceSetupDrawerMode;
+  open: boolean;
+  onHealthUpdated?: (
+    status: string,
+    findings: WorkspaceHealthFinding[]
+  ) => void;
+}) {
+  const { workspaceId, mode, open, onHealthUpdated } = options;
+  const [progress, setProgress] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [session, setSession] = useState<SetupSession | null>(null);
+  const [chatReady, setChatReady] = useState(false);
+  const onHealthUpdatedRef = useRef(onHealthUpdated);
+  useEffect(() => {
+    onHealthUpdatedRef.current = onHealthUpdated;
+  }, [onHealthUpdated]);
+
+  useEffect(() => {
+    if (!open) {
+      void Promise.resolve().then(() => {
+        setProgress(null);
+        setError(null);
+        setSession(null);
+        setChatReady(false);
+      });
+      return;
+    }
+    const signal = { cancelled: false };
+    void (async () => {
+      setProgress("Opening Workspace setup…");
+      setChatReady(false);
+      setSession(null);
+      setError(null);
+      try {
+        const shadowsPromise = runShadowAnalyzeWithProgress({
+          workspaceId,
+          onProgress: (msg) => {
+            if (!signal.cancelled) setProgress(msg);
+          },
+          signal
+        }).then((result) => {
+          if (signal.cancelled) return;
+          onHealthUpdatedRef.current?.(result.status, result.findings);
+        });
+        const setup = await ensureSetupChat(workspaceId);
+        if (signal.cancelled) return;
+        const [messages, running] = await Promise.all([
+          fetchSessionMessages(setup.sessionId),
+          fetchRunningTurn(setup.sessionId)
+        ]);
+        if (signal.cancelled) return;
+        const seed = shouldSeedSetupPrompt({
+          mode,
+          turnRunning: Boolean(running),
+          lastUserText: lastUserText(messages)
+        });
+        setSession({
+          ...setup,
+          initialPrompt: seed ? initialPromptForSetupMode(mode) : undefined
+        });
+        setProgress(null);
+        setChatReady(true);
+        void shadowsPromise;
+      } catch (e) {
+        if (!signal.cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+          setProgress(null);
+        }
+      }
+    })();
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [open, mode, workspaceId]);
+
+  return { progress, error, session, chatReady };
+}
+
+export function WorkspaceSetupDrawer(options: {
+  workspaceId: string;
+  mode: WorkspaceSetupDrawerMode;
+  open: boolean;
+  onClose: () => void;
+  onHealthUpdated?: (
+    status: string,
+    findings: WorkspaceHealthFinding[]
+  ) => void;
+}) {
+  const { workspaceId, mode, open, onClose, onHealthUpdated } = options;
+  const { progress, error, session, chatReady } = useSetupDrawerSession({
+    workspaceId,
+    mode,
+    open,
+    onHealthUpdated
+  });
+  if (!open) return null;
+  const title = mode === "analyze" ? "Analyze workspace" : "Fix workspace";
+  const subtitle =
+    mode === "analyze"
+      ? "Setup chat — list blockers as tasks, then fix them one by one."
+      : "Setup chat — invoke skills, install, and provision only after you approve.";
+  return (
+    <SetupDrawerChrome title={title} subtitle={subtitle} onClose={onClose}>
+      {error && <p className="m-4 text-sm text-destructive">{error}</p>}
+      {!chatReady && progress && (
+        <p className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          {progress}
+        </p>
+      )}
+      {chatReady && session && (
+        <div className="h-full min-h-0">
+          <ChatPane
+            key={`${session.chatId}-${mode}-${session.initialPrompt ? "seed" : "resume"}`}
+            sessionId={session.sessionId}
+            projectId=""
+            chatId={session.chatId}
+            workspaceId={workspaceId}
+            sessionKind="workbench"
+            skipInitialPromptNavigate
+            initialPrompt={session.initialPrompt}
+          />
+        </div>
+      )}
+    </SetupDrawerChrome>
   );
 }

@@ -1,6 +1,8 @@
 export const FRAME_DATA = 0x01;
 export const FRAME_STDIN = 0x02;
 
+const N_MAX_STREAM_ID_LEN = 255;
+
 export type ServerControlMessage =
   | { type: "ready"; stream: string }
   | { type: "exited"; stream: string }
@@ -10,9 +12,12 @@ export function shellStreamId(windowName: string): string {
   return `shell:${windowName}`;
 }
 
-export function encodeStdinFrame(stream: string, payload: Uint8Array): Uint8Array {
+export function encodeStdinFrame(
+  stream: string,
+  payload: Uint8Array
+): Uint8Array {
   const streamBytes = new TextEncoder().encode(stream);
-  if (streamBytes.length === 0 || streamBytes.length > 255) {
+  if (streamBytes.length === 0 || streamBytes.length > N_MAX_STREAM_ID_LEN) {
     throw new Error("invalid stream id length");
   }
   const out = new Uint8Array(2 + streamBytes.length + payload.length);

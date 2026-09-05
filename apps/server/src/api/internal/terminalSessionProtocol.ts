@@ -4,6 +4,7 @@ export const SESSION_WS_PATH = "/internal/terminal/session";
 
 export const FRAME_DATA = 0x01;
 export const FRAME_STDIN = 0x02;
+const N_255 = 255;
 
 export type StreamKind = "shell" | "app" | "job";
 
@@ -23,7 +24,9 @@ export type ServerControlMessage =
   | { type: "exited"; stream: string }
   | { type: "error"; stream: string; message: string };
 
-export function parseSessionUrl(url: string | undefined): { sessionId: string } | null {
+export function parseSessionUrl(
+  url: string | undefined
+): { sessionId: string } | null {
   if (!url) return null;
   const parsed = new URL(url, "http://localhost");
   if (parsed.pathname !== SESSION_WS_PATH) return null;
@@ -43,8 +46,6 @@ export function parseStreamId(stream: string): ParsedStream | null {
   }
   if (kind === "shell" && name.includes(":")) return null;
   if (kind === "app" || kind === "job") {
-    
-    
     const sanitized = sanitizeJobName(name);
     if (!sanitized || sanitized !== name.replace(/\//g, "_")) {
       return null;
@@ -57,20 +58,29 @@ export function shellStreamId(windowName: string): string {
   return `shell:${windowName}`;
 }
 
-export function parseClientControlMessage(raw: string): ClientControlMessage | null {
+export function parseClientControlMessage(
+  raw: string
+): ClientControlMessage | null {
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const type = parsed.type;
     if (type === "subscribe" || type === "unsubscribe") {
-      const stream = typeof parsed.stream === "string" ? parsed.stream.trim() : "";
+      const stream =
+        typeof parsed.stream === "string" ? parsed.stream.trim() : "";
       if (!stream || !parseStreamId(stream)) return null;
       return { type, stream };
     }
     if (type === "resize") {
-      const stream = typeof parsed.stream === "string" ? parsed.stream.trim() : "";
+      const stream =
+        typeof parsed.stream === "string" ? parsed.stream.trim() : "";
       const cols = Number(parsed.cols);
       const rows = Number(parsed.rows);
-      if (!stream || !parseStreamId(stream) || !Number.isFinite(cols) || !Number.isFinite(rows)) {
+      if (
+        !stream ||
+        !parseStreamId(stream) ||
+        !Number.isFinite(cols) ||
+        !Number.isFinite(rows)
+      ) {
         return null;
       }
       return { type: "resize", stream, cols, rows };
@@ -83,7 +93,7 @@ export function parseClientControlMessage(raw: string): ClientControlMessage | n
 
 export function encodeDataFrame(stream: string, payload: Buffer): Buffer {
   const streamBytes = Buffer.from(stream, "utf8");
-  if (streamBytes.length === 0 || streamBytes.length > 255) {
+  if (streamBytes.length === 0 || streamBytes.length > N_255) {
     throw new Error("invalid stream id length");
   }
   const header = Buffer.alloc(2 + streamBytes.length);
@@ -93,7 +103,9 @@ export function encodeDataFrame(stream: string, payload: Buffer): Buffer {
   return Buffer.concat([header, payload]);
 }
 
-export function parseDataFrame(buf: Buffer): { stream: string; payload: Buffer } | null {
+export function parseDataFrame(
+  buf: Buffer
+): { stream: string; payload: Buffer } | null {
   if (buf.length < 2 || buf[0] !== FRAME_DATA) return null;
   const len = buf[1]!;
   if (buf.length < 2 + len) return null;
@@ -103,7 +115,7 @@ export function parseDataFrame(buf: Buffer): { stream: string; payload: Buffer }
 
 export function encodeStdinFrame(stream: string, payload: Buffer): Buffer {
   const streamBytes = Buffer.from(stream, "utf8");
-  if (streamBytes.length === 0 || streamBytes.length > 255) {
+  if (streamBytes.length === 0 || streamBytes.length > N_255) {
     throw new Error("invalid stream id length");
   }
   const header = Buffer.alloc(2 + streamBytes.length);
@@ -113,7 +125,9 @@ export function encodeStdinFrame(stream: string, payload: Buffer): Buffer {
   return Buffer.concat([header, payload]);
 }
 
-export function parseStdinFrame(buf: Buffer): { stream: string; payload: Buffer } | null {
+export function parseStdinFrame(
+  buf: Buffer
+): { stream: string; payload: Buffer } | null {
   if (buf.length < 2 || buf[0] !== FRAME_STDIN) return null;
   const len = buf[1]!;
   if (buf.length < 2 + len) return null;

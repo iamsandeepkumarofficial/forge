@@ -73,6 +73,106 @@ function toolFilePath(part: ToolPart): string | null {
   return null;
 }
 
+function ToolCallSummary(options: {
+  name: string;
+  path: string | null;
+  pending: boolean;
+  errorText?: string;
+  hasDiff: boolean;
+  outputUndefined: boolean;
+  onOpenPath?: (path: string) => void;
+}) {
+  const {
+    name,
+    path,
+    pending,
+    errorText,
+    hasDiff,
+    outputUndefined,
+    onOpenPath
+  } = options;
+  return (
+    <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 font-mono">
+      <span className="font-semibold">{name}</span>
+      {path ? (
+        onOpenPath ? (
+          <button
+            type="button"
+            className="truncate text-muted-foreground underline-offset-2 hover:underline"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenPath(path);
+            }}
+          >
+            {path}
+          </button>
+        ) : (
+          <span className="truncate text-muted-foreground">{path}</span>
+        )
+      ) : null}
+      {pending && <span className="text-muted-foreground italic">running</span>}
+      {errorText ? (
+        <span className="text-destructive italic">error</span>
+      ) : null}
+      {!pending && outputUndefined && !errorText && !hasDiff && (
+        <span className="text-muted-foreground italic">no result</span>
+      )}
+    </summary>
+  );
+}
+
+function ToolCallBody(options: {
+  diff: ReturnType<typeof synthesizeToolDiff>;
+  inputText: string;
+  outputText: string;
+  errorText?: string;
+}) {
+  const { diff, inputText, outputText, errorText } = options;
+  return (
+    <div className="space-y-1 border-t border-border px-2 py-1.5">
+      {diff ? (
+        <FileDiffPreview
+          path={diff.path}
+          kind={diff.kind}
+          diffText={diff.diffText}
+          totalLines={diff.totalLines}
+        />
+      ) : inputText ? (
+        <div>
+          <div className="mb-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
+            Input
+          </div>
+          <pre className="max-h-52 overflow-auto rounded bg-background/60 p-1.5 font-mono whitespace-pre-wrap">
+            {inputText}
+          </pre>
+        </div>
+      ) : null}
+      {errorText ? (
+        <div>
+          <div className="mb-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-destructive">
+            Error
+          </div>
+          <pre className="max-h-52 overflow-auto rounded bg-destructive/10 p-1.5 font-mono whitespace-pre-wrap text-destructive">
+            {errorText}
+          </pre>
+        </div>
+      ) : outputText && !diff ? (
+        <div>
+          <div className="mb-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
+            Output
+          </div>
+          <pre className="max-h-72 overflow-auto rounded bg-background/60 p-1.5 font-mono whitespace-pre-wrap">
+            {outputText}
+          </pre>
+        </div>
+      ) : outputText && diff ? (
+        <p className="text-[0.65rem] text-muted-foreground">{outputText}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function ToolCallItem(options: {
   part: ToolPart;
   index: number;
@@ -94,75 +194,21 @@ function ToolCallItem(options: {
       className="border-l-2 border-border bg-muted/30 text-xs"
       open={Boolean(diff)}
     >
-      <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 font-mono">
-        <span className="font-semibold">{name}</span>
-        {path ? (
-          onOpenPath ? (
-            <button
-              type="button"
-              className="truncate text-muted-foreground underline-offset-2 hover:underline"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onOpenPath(path);
-              }}
-            >
-              {path}
-            </button>
-          ) : (
-            <span className="truncate text-muted-foreground">{path}</span>
-          )
-        ) : null}
-        {pending && (
-          <span className="text-muted-foreground italic">running</span>
-        )}
-        {p.errorText ? (
-          <span className="text-destructive italic">error</span>
-        ) : null}
-        {!pending && output === undefined && !p.errorText && !diff && (
-          <span className="text-muted-foreground italic">no result</span>
-        )}
-      </summary>
-      <div className="space-y-1 border-t border-border px-2 py-1.5">
-        {diff ? (
-          <FileDiffPreview
-            path={diff.path}
-            kind={diff.kind}
-            diffText={diff.diffText}
-            totalLines={diff.totalLines}
-          />
-        ) : inputText ? (
-          <div>
-            <div className="mb-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
-              Input
-            </div>
-            <pre className="max-h-52 overflow-auto rounded bg-background/60 p-1.5 font-mono whitespace-pre-wrap">
-              {inputText}
-            </pre>
-          </div>
-        ) : null}
-        {p.errorText ? (
-          <div>
-            <div className="mb-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-destructive">
-              Error
-            </div>
-            <pre className="max-h-52 overflow-auto rounded bg-destructive/10 p-1.5 font-mono whitespace-pre-wrap text-destructive">
-              {p.errorText}
-            </pre>
-          </div>
-        ) : outputText && !diff ? (
-          <div>
-            <div className="mb-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
-              Output
-            </div>
-            <pre className="max-h-72 overflow-auto rounded bg-background/60 p-1.5 font-mono whitespace-pre-wrap">
-              {outputText}
-            </pre>
-          </div>
-        ) : outputText && diff ? (
-          <p className="text-[0.65rem] text-muted-foreground">{outputText}</p>
-        ) : null}
-      </div>
+      <ToolCallSummary
+        name={name}
+        path={path}
+        pending={pending}
+        errorText={p.errorText}
+        hasDiff={Boolean(diff)}
+        outputUndefined={output === undefined}
+        onOpenPath={onOpenPath}
+      />
+      <ToolCallBody
+        diff={diff}
+        inputText={inputText}
+        outputText={outputText}
+        errorText={p.errorText}
+      />
     </details>
   );
 }

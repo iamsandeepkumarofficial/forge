@@ -1,7 +1,6 @@
 import { assertSafeRepoDirectoryName } from "@forge/core";
 import type { WorkspaceRoute } from "@forge/db";
 
-
 export function findDependsOnCycle(
   members: Array<{ repoName: string; dependsOn: string[] }>
 ): string[] | null {
@@ -38,7 +37,6 @@ export function findDependsOnCycle(
   }
   return null;
 }
-
 
 export function topoSortRepoNames(
   members: Array<{ repoName: string; dependsOn: string[] }>
@@ -82,7 +80,6 @@ export function normalizeRepoName(raw: string): string {
   }
   return name;
 }
-
 
 export function validateWorkspaceRoutes(
   routes: WorkspaceRoute[],
@@ -130,7 +127,6 @@ export function validateWorkspaceRoutes(
   return normalized;
 }
 
-
 export function resolveEnvTemplates(
   templates: Record<string, string>,
   services: Record<string, { internalUrl: string; publicUrl: string }>
@@ -139,7 +135,13 @@ export function resolveEnvTemplates(
   for (const [key, raw] of Object.entries(templates ?? {})) {
     out[key] = String(raw).replace(
       /\{\{\s*([a-zA-Z0-9._-]+)\.(internalUrl|publicUrl)\s*\}\}/g,
-      (_m, svc: string, field: "internalUrl" | "publicUrl") => {
+      (full) => {
+        const matched = full.match(
+          /\{\{\s*([a-zA-Z0-9._-]+)\.(internalUrl|publicUrl)\s*\}\}/
+        );
+        const svc = matched?.[1] ?? "";
+        const field = (matched?.[2] ?? "internalUrl") as
+          "internalUrl" | "publicUrl";
         const entry = services[svc];
         if (!entry) {
           throw new Error(

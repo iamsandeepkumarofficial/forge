@@ -7,6 +7,8 @@ import {
 } from "./repoFacts.js";
 import { readFileFromSandbox } from "./sandboxExec.js";
 
+const N_12 = 12;
+
 export type RepoInventoryMember = {
   repo: string;
   mountPath: string;
@@ -99,7 +101,7 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
     }
     if (facts.envKeysReferenced.length > 0) {
       lines.push(
-        `  - env keys referenced: ${facts.envKeysReferenced.slice(0, 12).join(", ")}${facts.envKeysReferenced.length > 12 ? ", …" : ""}`
+        `  - env keys referenced: ${facts.envKeysReferenced.slice(0, N_12).join(", ")}${facts.envKeysReferenced.length > N_12 ? ", …" : ""}`
       );
     }
   }
@@ -129,13 +131,13 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
   return lines.join("\n");
 }
 
-
 export function loadRepoInventoryFromHost(options: {
   members: Array<{ repo: string; hostPath: string; analyzable?: boolean }>;
   dependsOnGraph?: Array<{ repo: string; dependsOn: string[] }>;
 }): RepoInventory {
   const members = options.members.map(({ repo, hostPath, analyzable }) => {
-    const mountPath = options.members.length > 1 ? `/workspace/${repo}` : "/workspace";
+    const mountPath =
+      options.members.length > 1 ? `/workspace/${repo}` : "/workspace";
     return {
       repo,
       mountPath,
@@ -146,7 +148,10 @@ export function loadRepoInventoryFromHost(options: {
       })
     };
   });
-  return buildRepoInventoryFromFacts({ members, dependsOnGraph: options.dependsOnGraph });
+  return buildRepoInventoryFromFacts({
+    members,
+    dependsOnGraph: options.dependsOnGraph
+  });
 }
 
 async function readSandboxFile(
@@ -155,7 +160,6 @@ async function readSandboxFile(
 ): Promise<string | null> {
   return readFileFromSandbox(containerName, absPath);
 }
-
 
 export async function loadRepoInventoryFromSandbox(options: {
   containerName: string;
@@ -174,7 +178,10 @@ export async function loadRepoInventoryFromSandbox(options: {
     );
     try {
       fs.mkdirSync(tmpDir, { recursive: true });
-      const pkgRaw = await readSandboxFile(containerName, `${mount}/package.json`);
+      const pkgRaw = await readSandboxFile(
+        containerName,
+        `${mount}/package.json`
+      );
       if (pkgRaw) {
         fs.writeFileSync(path.join(tmpDir, "package.json"), pkgRaw);
       }

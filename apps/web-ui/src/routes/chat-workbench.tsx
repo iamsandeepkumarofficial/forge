@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Download, UploadCloud } from "lucide-react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { fetchChat, startSession } from "../lib/projects-api.js";
@@ -25,13 +25,11 @@ function readInitialPrompt(state: unknown): string | undefined {
   return undefined;
 }
 
-export function ChatWorkbench() {
-  const params = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const projectId = params.projectId ?? "";
-  const chatId = params.chatId ?? "";
-  const initialPrompt = readInitialPrompt(location.state);
+function useChatWorkbenchSession(options: {
+  projectId: string;
+  chatId: string;
+}) {
+  const { projectId, chatId } = options;
   const [chat, setChat] = useState<{
     sessionId?: string;
     title?: string;
@@ -73,7 +71,7 @@ export function ChatWorkbench() {
     };
   }, [projectId, chatId]);
   const sessionId: string | undefined = chat?.sessionId;
-  const startSandbox = () => {
+  const startSandbox = useCallback(() => {
     if (!sessionId) return;
     setSandboxStatus("starting");
     void startSession(sessionId)
@@ -82,43 +80,65 @@ export function ChatWorkbench() {
         console.error("Failed to start session sandbox:", err);
         setSandboxStatus("error");
       });
-  };
+  }, [sessionId]);
   useEffect(() => {
     if (!sessionId) return;
-    startSandbox();
-  }, [sessionId]);
-  const booting =
-    loadingChat || Boolean(sessionId && sandboxStatus === "starting");
+    void Promise.resolve().then(() => {
+      startSandbox();
+    });
+  }, [sessionId, startSandbox]);
+  return {
+    chat,
+    loadingChat,
+    sandboxStatus,
+    chrome,
+    setChrome,
+    leftMode,
+    setLeftMode,
+    sessionId,
+    startSandbox,
+    booting: loadingChat || Boolean(sessionId && sandboxStatus === "starting")
+  };
+}
+
+export function ChatWorkbench() {
+  const params = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const projectId = params.projectId ?? "";
+  const chatId = params.chatId ?? "";
+  const initialPrompt = readInitialPrompt(location.state);
+  const wb = useChatWorkbenchSession({ projectId, chatId });
   return (
     <div className="flex h-screen flex-col">
       <SessionHeader
         onBack={() => navigate(`/projects/${projectId}/chats`)}
-        title={loadingChat ? "Loading…" : (chat?.title ?? "Chat")}
-        turnStatus={chrome.turnStatus}
-        sandboxStatus={sessionId ? sandboxStatus : "starting"}
-        leftMode={leftMode}
-        onLeftMode={setLeftMode}
+        title={wb.loadingChat ? "Loading…" : (wb.chat?.title ?? "Chat")}
+        turnStatus={wb.chrome.turnStatus}
+        sandboxStatus={wb.sessionId ? wb.sandboxStatus : "starting"}
+        leftMode={wb.leftMode}
+        onLeftMode={wb.setLeftMode}
         actions={
-          sessionId ? <SessionActions sessionId={sessionId} /> : undefined
+          wb.sessionId ? <SessionActions sessionId={wb.sessionId} /> : undefined
         }
       />
       <div className="min-h-0 flex-1">
-        {booting || sandboxStatus === "error" ? (
+        {wb.booting || wb.sandboxStatus === "error" ? (
           <SessionBootScreen
-            sandboxStatus={sandboxStatus === "error" ? "error" : "starting"}
-            onRetry={sandboxStatus === "error" ? startSandbox : undefined}
+            sandboxStatus={wb.sandboxStatus === "error" ? "error" : "starting"}
+            onRetry={wb.sandboxStatus === "error" ? wb.startSandbox : undefined}
           />
-        ) : sessionId ? (
+        ) : wb.sessionId ? (
           <Workbench
-            sessionId={sessionId}
+            sessionId={wb.sessionId}
             projectId={projectId}
             chatId={chatId}
-            sessionKind={chat?.kind ?? "workbench"}
-            branchName={chat?.branchName}
+            sessionKind={wb.chat?.kind ?? "workbench"}
+            branchName={wb.chat?.branchName}
             initialPrompt={initialPrompt}
-            leftMode={leftMode}
-            onLeftModeChange={setLeftMode}
-            onChromeChange={setChrome}
+            leftMode={wb.leftMode}
+            onLeftModeChange={wb.setLeftMode}
+            onChromeChange={wb.setChrome}
           />
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
@@ -173,10 +193,7 @@ function SessionActions({ sessionId }: { sessionId: string }) {
         <Download className="size-4" />
         {busy === "download" ? "Downloading…" : "Download"}
       </DropdownMenuItem>
-      <DropdownMenuItem
-        disabled={busy !== null}
-        onClick={() => void promote()}
-      >
+      <DropdownMenuItem disabled={busy !== null} onClick={() => void promote()}>
         <UploadCloud className="size-4" />
         {busy === "promote" ? "Promoting…" : "Promote"}
       </DropdownMenuItem>

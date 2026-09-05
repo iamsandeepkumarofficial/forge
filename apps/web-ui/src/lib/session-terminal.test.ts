@@ -48,7 +48,7 @@ describe("session-terminal", () => {
       ok: true,
       json: async () => ({ ok: true })
     } as Response);
-    await closeShellTab("s1", "sh-new");
+    await closeShellTab({ sessionId: "s1", tabId: "sh-new" });
     expect(fetch).toHaveBeenCalledWith(
       "http://127.0.0.1:4000/internal/terminal/tabs/sh-new?sessionId=s1",
       expect.objectContaining({ method: "DELETE" })
@@ -60,7 +60,7 @@ describe("session-terminal", () => {
       ok: true,
       json: async () => ({ ok: true })
     } as Response);
-    await stopTerminalJob("s1", "install");
+    await stopTerminalJob({ sessionId: "s1", name: "install" });
     expect(fetch).toHaveBeenCalledWith(
       "http://127.0.0.1:4000/internal/terminal/stop",
       expect.objectContaining({ method: "POST" })

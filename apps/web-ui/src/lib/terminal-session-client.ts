@@ -6,6 +6,8 @@ import {
   type ServerControlMessage
 } from "./terminal-session-protocol.js";
 
+const N_RECONNECT_MS = 1500;
+
 export type StreamHandlers = {
   onReady?: () => void;
   onData?: (chunk: Uint8Array) => void;
@@ -25,7 +27,6 @@ export function streamIdForShellTab(tabId: string): string {
   return shellStreamId(tabId);
 }
 
-/** App tab ids are already `app:{name}`. */
 export function streamIdForAppTab(tabId: string): string {
   return tabId;
 }
@@ -86,7 +87,10 @@ export class TerminalSessionClient {
       for (const state of this.streams.values()) {
         state.subscribed = false;
       }
-      this.reconnectTimer = window.setTimeout(() => this.connect(), 1500);
+      this.reconnectTimer = window.setTimeout(
+        () => this.connect(),
+        N_RECONNECT_MS
+      );
     };
     ws.onerror = () => {
       ws.close();
@@ -125,20 +129,18 @@ export class TerminalSessionClient {
   sendStdin(stream: string, data: string | Uint8Array): void {
     if (this.ws?.readyState !== WebSocket.OPEN) return;
     const payload =
-      typeof data === "string"
-        ? new TextEncoder().encode(data)
-        : data;
+      typeof data === "string" ? new TextEncoder().encode(data) : data;
     this.ws.send(encodeStdinFrame(stream, payload));
   }
 
-  resize(stream: string, cols: number, rows: number): void {
+  resize(options: { stream: string; cols: number; rows: number }): void {
     if (this.ws?.readyState !== WebSocket.OPEN) return;
     this.ws.send(
       JSON.stringify({
         type: "resize",
-        stream,
-        cols,
-        rows
+        stream: options.stream,
+        cols: options.cols,
+        rows: options.rows
       })
     );
   }

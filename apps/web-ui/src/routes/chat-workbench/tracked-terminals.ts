@@ -19,12 +19,16 @@ type TrackedEntry = {
 };
 
 const tracked = new Map<string, TrackedEntry>();
-/** Jobs/apps that emitted WS exited — do not re-track from stale chat metadata. */
+
 const exitedKeys = new Set<string>();
 const listeners = new Set<() => void>();
 
-function entryKey(sessionId: string, kind: TrackedKind, name: string): string {
-  return `${sessionId}\0${kind}\0${name}`;
+function entryKey(options: {
+  sessionId: string;
+  kind: TrackedKind;
+  name: string;
+}): string {
+  return `${options.sessionId}\0${options.kind}\0${options.name}`;
 }
 
 function emit(): void {
@@ -50,12 +54,18 @@ export function listTrackedNames(
   return names.sort((a, b) => a.localeCompare(b));
 }
 
-export function isTracked(
-  sessionId: string,
-  kind: TrackedKind,
-  name: string
-): boolean {
-  return tracked.has(entryKey(sessionId.trim(), kind, name.trim()));
+export function isTracked(options: {
+  sessionId: string;
+  kind: TrackedKind;
+  name: string;
+}): boolean {
+  return tracked.has(
+    entryKey({
+      sessionId: options.sessionId.trim(),
+      kind: options.kind,
+      name: options.name.trim()
+    })
+  );
 }
 
 function untrack(key: string): void {
@@ -72,51 +82,74 @@ function markExited(key: string): void {
   untrack(key);
 }
 
-function track(
-  sessionId: string,
-  kind: TrackedKind,
-  rawName: string,
-  streamId: string,
-  options?: { restart?: boolean }
-): void {
-  const id = sessionId.trim();
-  const name = rawName.trim();
+function track(options: {
+  sessionId: string;
+  kind: TrackedKind;
+  rawName: string;
+  streamId: string;
+  restart?: boolean;
+}): void {
+  const id = options.sessionId.trim();
+  const name = options.rawName.trim();
   if (!id || !name) return;
-  const key = entryKey(id, kind, name);
-  if (options?.restart) {
+  const key = entryKey({ sessionId: id, kind: options.kind, name });
+  if (options.restart) {
     exitedKeys.delete(key);
   }
   if (exitedKeys.has(key) || tracked.has(key)) return;
 
   const client = retainTerminalSessionClient(id);
-  const unsubscribe = client.subscribe(streamId, {
+  const unsubscribe = client.subscribe(options.streamId, {
     onExited: () => markExited(key),
     onError: () => untrack(key)
   });
-  tracked.set(key, { sessionId: id, kind, name, unsubscribe });
+  tracked.set(key, {
+    sessionId: id,
+    kind: options.kind,
+    name,
+    unsubscribe
+  });
   emit();
 }
 
 export function trackApp(sessionId: string, appName: string): void {
   const name = appName.trim();
-  track(sessionId, "app", name, streamIdForAppTab(`app:${name}`), {
+  track({
+    sessionId,
+    kind: "app",
+    rawName: name,
+    streamId: streamIdForAppTab(`app:${name}`),
     restart: true
   });
 }
 
 export function trackBackgroundJob(sessionId: string, jobName: string): void {
   const name = jobName.trim();
-  track(sessionId, "job", name, streamIdForJobTab(name), { restart: true });
+  track({
+    sessionId,
+    kind: "job",
+    rawName: name,
+    streamId: streamIdForJobTab(name),
+    restart: true
+  });
 }
 
 export function untrackApp(sessionId: string, appName: string): void {
-  const key = entryKey(sessionId.trim(), "app", appName.trim());
+  const key = entryKey({
+    sessionId: sessionId.trim(),
+    kind: "app",
+    name: appName.trim()
+  });
   exitedKeys.add(key);
   untrack(key);
 }
 
 export function untrackBackgroundJob(sessionId: string, jobName: string): void {
-  const key = entryKey(sessionId.trim(), "job", jobName.trim());
+  const key = entryKey({
+    sessionId: sessionId.trim(),
+    kind: "job",
+    name: jobName.trim()
+  });
   exitedKeys.add(key);
   untrack(key);
 }
@@ -130,20 +163,18 @@ export function listTrackedBackgroundJobs(sessionId: string): string[] {
 }
 
 export function isAppTracked(sessionId: string, appName: string): boolean {
-  return isTracked(sessionId, "app", appName);
+  return isTracked({ sessionId, kind: "app", name: appName });
 }
 
 export function isBackgroundJobTracked(
   sessionId: string,
   jobName: string
 ): boolean {
-  return isTracked(sessionId, "job", jobName);
+  return isTracked({ sessionId, kind: "job", name: jobName });
 }
 
-/** @deprecated use subscribeTrackedTerminals */
 export const subscribeBackgroundJobs = subscribeTrackedTerminals;
 
-/** Test helper. */
 export function resetTrackedTerminalsForTests(): void {
   listeners.clear();
   exitedKeys.clear();
@@ -152,7 +183,6 @@ export function resetTrackedTerminalsForTests(): void {
   }
 }
 
-/** @deprecated use resetTrackedTerminalsForTests */
 export const resetBackgroundJobsForTests = resetTrackedTerminalsForTests;
 
 function toolInput(part: ToolPart): Record<string, unknown> | null {
@@ -226,7 +256,8 @@ export function shouldUntrackBackgroundToolPart(part: ToolPart): boolean {
   const name = terminalJobNameFromToolPart(part);
   if (!name) return false;
   const action = terminalActionFromToolPart(part);
-  if (action === "stop") return part.output !== undefined || part.result !== undefined;
+  if (action === "stop")
+    return part.output !== undefined || part.result !== undefined;
   if (action !== "run") return false;
   const meta = part.metadata;
   return meta?.running === false;
@@ -269,18 +300,26 @@ export function trackTerminalsFromToolParts(
       const name = terminalJobNameFromToolPart(part);
       if (!name) continue;
       const input = toolInput(part);
-      track(sessionId, "job", name, streamIdForJobTab(name), {
+      track({
+        sessionId,
+        kind: "job",
+        rawName: name,
+        streamId: streamIdForJobTab(name),
         restart: input?.background === true
       });
     }
     if (shouldTrackPreviewStartToolPart(part)) {
       const name = terminalAppNameFromToolPart(part);
       if (name) {
-        track(sessionId, "app", name, streamIdForAppTab(`app:${name}`));
+        track({
+          sessionId,
+          kind: "app",
+          rawName: name,
+          streamId: streamIdForAppTab(`app:${name}`)
+        });
       }
     }
   }
 }
 
-/** @deprecated use trackTerminalsFromToolParts */
 export const trackBackgroundJobsFromToolParts = trackTerminalsFromToolParts;

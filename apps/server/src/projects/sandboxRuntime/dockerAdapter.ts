@@ -93,7 +93,9 @@ export function createDockerSandboxRuntime(): SandboxRuntime {
     ): Promise<WorkspaceHandle> {
       try {
         const volumeName = await ensureVolume(sessionId);
-        await ensureContainer(sessionId, volumeName, {
+        await ensureContainer({
+          sessionId,
+          volumeName,
           bindMounts: opts?.bindMounts,
           namedVolumes: opts?.namedVolumes,
           containerEnv: opts?.containerEnv,

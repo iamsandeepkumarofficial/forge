@@ -100,7 +100,7 @@ export function BottomTerminal({ sessionId }: { sessionId: string }) {
     };
   }, [requestMode, selectMode]);
   useEffect(() => {
-    const client = retainTerminalSessionClient(sessionId);
+    retainTerminalSessionClient(sessionId);
     return () => {
       releaseTerminalSessionClient(sessionId);
     };
@@ -127,22 +127,16 @@ function DockShell(options: {
   onSelect: (mode: PreviewDockMode) => void;
   onToggle: () => void;
 }) {
-  const {
-    sessionId,
-    open,
-    mode,
-    containerRef,
-    resize,
-    onSelect,
-    onToggle
-  } = options;
+  const { sessionId, open, mode, containerRef, resize, onSelect, onToggle } =
+    options;
   const showTerminal = open && mode === "terminal";
   const showDevtools = open && mode === "devtools";
   const [fitSignal, setFitSignal] = useState(0);
   useEffect(() => {
-    if (showTerminal) {
+    if (!showTerminal) return;
+    void Promise.resolve().then(() => {
       setFitSignal((n) => n + 1);
-    }
+    });
   }, [showTerminal, resize.height, resize.dragging]);
   return (
     <div
@@ -159,7 +153,12 @@ function DockShell(options: {
           title="Drag to resize"
         />
       ) : null}
-      <DockBar open={open} mode={mode} onSelect={onSelect} onToggle={onToggle} />
+      <DockBar
+        open={open}
+        mode={mode}
+        onSelect={onSelect}
+        onToggle={onToggle}
+      />
       <div
         data-testid="terminal-body"
         hidden={!showTerminal}

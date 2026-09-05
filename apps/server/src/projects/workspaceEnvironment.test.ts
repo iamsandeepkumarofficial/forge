@@ -45,12 +45,12 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
               updatedAt: new Date("2024-01-01T00:00:00.000Z")
             };
           }
-          async upsertLaunch(
-            workspaceId: string,
-            launch: unknown,
-            sourceSessionId: string | null
-          ) {
-            upserted = { workspaceId, launch, sourceSessionId };
+          async upsertLaunch(options: {
+            workspaceId: string;
+            launch: unknown;
+            sourceSessionId: string | null;
+          }) {
+            upserted = options;
           }
           async clearLaunch() {}
         }
@@ -89,7 +89,8 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
           return true;
         },
         clearWorkspaceDepsCache: async () => undefined,
-        workspaceDepsVolumeName: (id: string) => `forge-ws-deps-${id.slice(0, 8)}`
+        workspaceDepsVolumeName: (id: string) =>
+          `forge-ws-deps-${id.slice(0, 8)}`
       }
     });
 
@@ -135,7 +136,9 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
 
   it("does not seed without workspace", async () => {
     chatWorkspaceId = null;
-    savedLaunch = { apps: [{ name: "x", cwd: ".", command: "npm run dev", type: "web" }] };
+    savedLaunch = {
+      apps: [{ name: "x", cwd: ".", command: "npm run dev", type: "web" }]
+    };
     written = null;
     assert.equal(await seedLaunchFromWorkspace("sess-1"), false);
     assert.equal(written, null);

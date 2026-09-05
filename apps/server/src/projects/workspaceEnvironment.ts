@@ -55,7 +55,6 @@ function asForgeConfig(launch: { apps: unknown[] }): ForgeConfig {
   return { apps };
 }
 
-
 export async function seedLaunchFromWorkspace(
   sessionId: string
 ): Promise<boolean> {
@@ -110,7 +109,6 @@ export async function seedLaunchFromWorkspace(
   return true;
 }
 
-
 export async function promoteLaunchToWorkspace(
   sessionId: string
 ): Promise<void> {
@@ -122,7 +120,11 @@ export async function promoteLaunchToWorkspace(
   if (!exists || config.apps.length === 0) return;
 
   const envRepo = new WorkspaceEnvironmentRepository();
-  await envRepo.upsertLaunch(chat.workspaceId, config, sessionId);
+  await envRepo.upsertLaunch({
+    workspaceId: chat.workspaceId,
+    launch: config,
+    sourceSessionId: sessionId
+  });
   logLaunchConfigPromoted({
     sessionId,
     workspaceId: chat.workspaceId,
@@ -141,7 +143,6 @@ async function memberRepoNames(sessionId: string): Promise<string[]> {
   return members.map((m) => m.repoName);
 }
 
-
 export async function restoreWorkspaceDepsForSession(
   sessionId: string
 ): Promise<void> {
@@ -156,7 +157,6 @@ export async function restoreWorkspaceDepsForSession(
     );
   }
 }
-
 
 export async function captureWorkspaceDepsForSession(
   sessionId: string
@@ -184,9 +184,7 @@ export async function getWorkspaceEnvironmentStatus(workspaceId: string) {
   };
 }
 
-export async function clearWorkspaceLaunch(
-  workspaceId: string
-): Promise<void> {
+export async function clearWorkspaceLaunch(workspaceId: string): Promise<void> {
   const envRepo = new WorkspaceEnvironmentRepository();
   await envRepo.clearLaunch(workspaceId);
 }

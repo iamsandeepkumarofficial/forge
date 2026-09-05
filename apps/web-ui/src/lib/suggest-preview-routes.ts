@@ -1,7 +1,6 @@
 import type { WorkspaceMember, WorkspaceRoute } from "./workspaces-api.js";
 
-const API_RE =
-  /(^|[-_/])(api|backend|server|svc|service|bff)([-_/]|$)/i;
+const API_RE = /(^|[-_/])(api|backend|server|svc|service|bff)([-_/]|$)/i;
 const FRONTEND_RE =
   /(^|[-_/])(frontend|front-end|web|ui|app|client|www)([-_/]|$)/i;
 
@@ -17,7 +16,6 @@ function isFrontendLike(m: WorkspaceMember): boolean {
   return FRONTEND_RE.test(haystack(m));
 }
 
-/** Move catch-all `/` to the end so specific prefixes are not shadowed. */
 export function normalizeCatchAllLast(
   routes: WorkspaceRoute[]
 ): WorkspaceRoute[] {
@@ -27,10 +25,6 @@ export function normalizeCatchAllLast(
   return [...rest, catchAlls[catchAlls.length - 1]!];
 }
 
-/**
- * Suggest preview routes from member names (e.g. bp-backend → /api,
- * bp-frontend → /). Catch-all `/` is always last.
- */
 export function suggestPreviewRoutes(
   members: WorkspaceMember[]
 ): WorkspaceRoute[] {
@@ -52,7 +46,7 @@ export function suggestPreviewRoutes(
   const catchAll =
     frontend && !used.has(frontend.repoName)
       ? frontend
-      : members.find((m) => !used.has(m.repoName)) ?? members[0]!;
+      : (members.find((m) => !used.has(m.repoName)) ?? members[0]!);
 
   routes.push({ pathPrefix: "/", target: catchAll.repoName });
   return normalizeCatchAllLast(routes);

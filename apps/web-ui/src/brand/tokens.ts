@@ -1,8 +1,3 @@
-/**
- * Forge brand — one story ("heat shapes metal"), switchable heat.
- * Base neutrals stay cooled-iron graphite; each theme swaps the accent + logo
- * glow. CSS values live in src/index.css, keyed by data-forge-theme.
- */
 export const FORGE_BRAND = {
   name: "Forge",
   tagline: "Heat shapes raw code into refined tools.",

@@ -46,6 +46,11 @@ function routeHandlers(router, method, routePath) {
 describe("mountSessionRoutes", () => {
   let mountSessionRoutes;
   before(async () => {
+    mock.module("../../projects/sessionProvision.js", {
+      exports: {
+        finalizeSessionProvision: async () => undefined
+      }
+    });
     mock.module("../../projects/sessionSandbox.js", {
       exports: {
         provisionSessionSandbox: async () => ({
@@ -72,6 +77,11 @@ describe("mountSessionRoutes", () => {
       exports: {
         listAppStatuses: async () => ({ exists: false, apps: [] }),
         writeForgeConfig: async () => undefined,
+        readForgeConfig: async () => ({
+          exists: false,
+          source: "none",
+          config: { apps: [] }
+        }),
         runApp: async () => ({ name: "web", running: true }),
         stopApp: async () => undefined,
         appLogs: async () => "log",
@@ -81,7 +91,13 @@ describe("mountSessionRoutes", () => {
     });
     mock.module("../../projects/launchScaffold.js", {
       exports: {
-        scaffoldForgeConfig: async () => ({ apps: [] })
+        scaffoldForgeConfig: async () => ({ apps: [] }),
+        ensureLaunchConfig: async () => ({
+          ready: true,
+          scaffolded: false,
+          source: "launch",
+          config: { apps: [] }
+        })
       }
     });
     mock.module("./appRoutes.handlers.js", {
@@ -101,6 +117,38 @@ describe("mountSessionRoutes", () => {
           res: { json: (body: unknown) => void }
         ) => {
           res.json({ status: 200 });
+        }
+      }
+    });
+    mock.module("../../projects/sandboxExec.js", {
+      exports: {
+        resolveSandbox: async () => ({
+          containerName: "c",
+          workingDir: "/workspace",
+          repoDir: "repo"
+        }),
+        dockerExec: async () => ({ code: 0, stdout: "", stderr: "" })
+      }
+    });
+    mock.module("./terminalTabs.handlers.js", {
+      exports: {
+        handleTerminalTabs: async (
+          _req: unknown,
+          res: { json: (body: unknown) => void }
+        ) => {
+          res.json({ tabs: [] });
+        },
+        handleTerminalTabCreate: async (
+          _req: unknown,
+          res: { json: (body: unknown) => void }
+        ) => {
+          res.json({ id: "t1" });
+        },
+        handleTerminalTabDelete: async (
+          _req: unknown,
+          res: { json: (body: unknown) => void }
+        ) => {
+          res.json({ ok: true });
         }
       }
     });

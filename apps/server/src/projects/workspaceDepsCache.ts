@@ -7,8 +7,12 @@ const execFileAsync = promisify(execFile);
 
 export const DEPS_CACHE_MOUNT = "/forge-ws-cache";
 
+const N_2 = 2;
+const N_32 = 32;
+const N_1024 = 1024;
+
 export function workspaceDepsVolumeName(workspaceId: string): string {
-  const cleaned = workspaceId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 32);
+  const cleaned = workspaceId.replace(/[^a-zA-Z0-9]/g, "").slice(0, N_32);
   return `forge-ws-deps-${cleaned || "ws"}`;
 }
 
@@ -32,7 +36,6 @@ function repoAbs(repoName: string): string {
   return repoName ? `${WORKSPACE_MOUNT}/${repoName}` : WORKSPACE_MOUNT;
 }
 
-
 const LOCKHASH_SCRIPT = `
 primary_lock() {
   d="$1"
@@ -48,7 +51,6 @@ lockhash() {
   cat "$d/package.json" $L 2>/dev/null | sha256sum | awk '{print $1}'
 }
 `;
-
 
 export async function restoreCachedDeps(options: {
   containerName: string;
@@ -101,7 +103,7 @@ cp -a "${cache}/node_modules" "${abs}/node_modules" && echo restored-copy
     const { stdout, stderr } = await execFileAsync(
       "docker",
       ["exec", options.containerName, "sh", "-c", script],
-      { maxBuffer: 2 * 1024 * 1024 }
+      { maxBuffer: N_2 * N_1024 * N_1024 }
     );
     if (stderr?.includes("hash-mismatch")) {
       console.warn(
@@ -118,7 +120,6 @@ cp -a "${cache}/node_modules" "${abs}/node_modules" && echo restored-copy
     return false;
   }
 }
-
 
 export async function captureCachedDeps(options: {
   containerName: string;
@@ -164,7 +165,7 @@ echo captured
     const { stdout } = await execFileAsync(
       "docker",
       ["exec", options.containerName, "sh", "-c", script],
-      { maxBuffer: 2 * 1024 * 1024 }
+      { maxBuffer: N_2 * N_1024 * N_1024 }
     );
     return /captured/.test(stdout);
   } catch (err) {
@@ -176,7 +177,6 @@ echo captured
     return false;
   }
 }
-
 
 export async function clearWorkspaceDepsCache(
   workspaceId: string

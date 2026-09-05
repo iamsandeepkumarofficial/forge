@@ -11,10 +11,6 @@ function historyToolParts(messages: UiChatMessage[]): ToolPart[] {
   return parts;
 }
 
-/**
- * Auto-subscribe background jobs + preview_start apps from chat tool parts.
- * History is scanned once after fetch completes; live parts update on each change.
- */
 export function useTrackBackgroundJobs(options: {
   sessionId: string;
   messages: UiChatMessage[];

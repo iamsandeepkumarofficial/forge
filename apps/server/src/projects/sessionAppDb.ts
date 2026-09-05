@@ -35,7 +35,6 @@ export type SessionAppDbEnv = {
   MONGODB_URI?: string;
 };
 
-
 export async function workspaceAppDbEnv(
   workspaceId: string
 ): Promise<SessionAppDbEnv> {
@@ -52,11 +51,9 @@ export async function workspaceAppDbEnv(
   return env;
 }
 
-
 export function sessionAppDbEnvFor(sessionId: string): SessionAppDbEnv {
   if (!appDbEnabled()) return {};
-  
-  
+
   const engine = getAppDbEngine("postgres");
   if (!engine) return {};
   return {
@@ -84,20 +81,19 @@ export async function loadWorkspaceAppDbStatus(workspaceId: string): Promise<{
   };
 }
 
-async function injectParam(
-  workspaceId: string,
-  key: string,
-  value: string
-): Promise<void> {
+async function injectParam(options: {
+  workspaceId: string;
+  key: string;
+  value: string;
+}): Promise<void> {
   const paramRepo = new ParameterRepository();
   await paramRepo.upsertWorkspaceParameter({
-    workspaceId,
-    key,
-    value,
-    secret: isLikelySecretKey(key)
+    workspaceId: options.workspaceId,
+    key: options.key,
+    value: options.value,
+    secret: isLikelySecretKey(options.key)
   });
 }
-
 
 export async function attachWorkspaceDatabase(
   workspaceId: string,
@@ -110,7 +106,11 @@ export async function attachWorkspaceDatabase(
     engineId: provisioned.engineId,
     databaseName: provisioned.database
   });
-  await injectParam(workspaceId, provisioned.envKey, provisioned.connectionUrl);
+  await injectParam({
+    workspaceId,
+    key: provisioned.envKey,
+    value: provisioned.connectionUrl
+  });
   return provisioned;
 }
 
@@ -128,7 +128,6 @@ export async function detachWorkspaceDatabase(
   }
 }
 
-
 export async function provisionWorkspaceAppDatabases(
   workspaceId: string
 ): Promise<SessionAppDbEnv> {
@@ -140,11 +139,10 @@ export async function provisionWorkspaceAppDatabases(
     .filter((id): id is AppDbEngineId => Boolean(getAppDbEngine(id)));
   const env = await ensureAttachedWorkspaceEngines(workspaceId, ids);
   for (const [key, value] of Object.entries(env)) {
-    await injectParam(workspaceId, key, value);
+    await injectParam({ workspaceId, key, value });
   }
   return env;
 }
-
 
 export async function provisionDetectedWorkspaceDatabases(
   workspaceId: string,
@@ -159,7 +157,6 @@ export async function provisionDetectedWorkspaceDatabases(
   return env;
 }
 
-
 export async function provisionSessionAppDatabases(
   sessionId: string
 ): Promise<SessionAppDbEnv> {
@@ -172,7 +169,10 @@ export async function provisionSessionAppDatabases(
   const { promisify } = await import("node:util");
   const execFileAsync = promisify(execFile);
   const { waitForPostgresReady } = await import("./appDb/ensureEngine.js");
-  await waitForPostgresReady(ensured.containerName, engine.user);
+  await waitForPostgresReady({
+    containerName: ensured.containerName,
+    user: engine.user
+  });
   try {
     await execFileAsync(
       "docker",
@@ -194,7 +194,9 @@ export async function provisionSessionAppDatabases(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (!/already exists/i.test(msg)) {
-      console.warn(`[sessionAppDb] create session postgres db ${database}: ${msg}`);
+      console.warn(
+        `[sessionAppDb] create session postgres db ${database}: ${msg}`
+      );
     }
   }
   return {
@@ -239,7 +241,6 @@ export async function destroySessionAppDatabases(
     );
   }
 }
-
 
 export function describeWorkspaceAppDatabases(
   workspaceId: string,

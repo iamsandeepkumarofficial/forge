@@ -17,20 +17,27 @@ import {
 } from "./ensureEngine.js";
 
 const execFileAsync = promisify(execFile);
+const N_16 = 16;
+const N_30 = 30;
+const N_500 = 500;
+const N_1024 = 1024;
 
-async function docker(args: string[]): Promise<{ stdout: string; stderr: string }> {
+async function docker(
+  args: string[]
+): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync("docker", args, {
-    maxBuffer: 16 * 1024 * 1024,
+    maxBuffer: N_16 * N_1024 * N_1024,
     env: process.env
   });
 }
 
-async function createPostgresDatabase(
-  engine: AppDbEngine,
-  containerName: string,
-  database: string
-): Promise<void> {
-  await waitForPostgresReady(containerName, engine.user);
+async function createPostgresDatabase(options: {
+  engine: AppDbEngine;
+  containerName: string;
+  database: string;
+}): Promise<void> {
+  const { engine, containerName, database } = options;
+  await waitForPostgresReady({ containerName, user: engine.user });
   try {
     await docker([
       "exec",
@@ -51,11 +58,12 @@ async function createPostgresDatabase(
   }
 }
 
-async function postgresDatabaseExists(
-  engine: AppDbEngine,
-  containerName: string,
-  database: string
-): Promise<boolean> {
+async function postgresDatabaseExists(options: {
+  engine: AppDbEngine;
+  containerName: string;
+  database: string;
+}): Promise<boolean> {
+  const { engine, containerName, database } = options;
   try {
     const { stdout } = await docker([
       "exec",
@@ -74,11 +82,12 @@ async function postgresDatabaseExists(
   }
 }
 
-async function dropPostgresDatabase(
-  engine: AppDbEngine,
-  containerName: string,
-  database: string
-): Promise<void> {
+async function dropPostgresDatabase(options: {
+  engine: AppDbEngine;
+  containerName: string;
+  database: string;
+}): Promise<void> {
+  const { engine, containerName, database } = options;
   await docker([
     "exec",
     containerName,
@@ -94,12 +103,11 @@ async function dropPostgresDatabase(
   ]).catch(() => undefined);
 }
 
-
 async function ensureMongoReady(
   engine: AppDbEngine,
   containerName: string
 ): Promise<void> {
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < N_30; i++) {
     try {
       await docker([
         "exec",
@@ -116,7 +124,7 @@ async function ensureMongoReady(
       ]);
       return;
     } catch {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, N_500));
     }
   }
   throw new Error(`Mongo ${containerName} did not become ready`);
@@ -149,7 +157,11 @@ export async function provisionWorkspaceEngine(
   const ensured = await ensureEngineRunning(engine);
   const database = workspaceDbName(workspaceId);
   if (engine.id === "postgres") {
-    await createPostgresDatabase(engine, ensured.containerName, database);
+    await createPostgresDatabase({
+      engine,
+      containerName: ensured.containerName,
+      database
+    });
   } else {
     await ensureMongoReady(engine, ensured.containerName);
   }
@@ -168,7 +180,6 @@ export async function provisionWorkspaceEngine(
     pulled: ensured.pulled
   };
 }
-
 
 export async function ensureAttachedWorkspaceEngines(
   workspaceId: string,
@@ -208,7 +219,11 @@ export async function listEngineStatuses(options: {
     if (running && attached.has(engine.id) && engine.id === "postgres") {
       const container = await resolveEngineContainer(engine);
       if (container) {
-        dbExists = await postgresDatabaseExists(engine, container, database);
+        dbExists = await postgresDatabaseExists({
+          engine,
+          containerName: container,
+          database
+        });
       }
     } else if (attached.has(engine.id) && engine.id === "mongo") {
       dbExists = running;
@@ -239,6 +254,10 @@ export async function detachWorkspaceEngine(
   if (!container) return;
   const database = workspaceDbName(workspaceId);
   if (engine.id === "postgres") {
-    await dropPostgresDatabase(engine, container, database);
+    await dropPostgresDatabase({
+      engine,
+      containerName: container,
+      database
+    });
   }
 }

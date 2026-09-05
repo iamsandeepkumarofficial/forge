@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, GitBranch, Loader2, Paperclip, Square, X } from "lucide-react";
+import {
+  ArrowUp,
+  GitBranch,
+  Loader2,
+  Paperclip,
+  Square,
+  X
+} from "lucide-react";
 import type { LlmProvider } from "../lib/chat-agent.js";
 import type {
   ComposerAgentMode,
@@ -52,7 +59,7 @@ export type ChatComposerProps = {
   modeSwitchRemainingSeconds?: number;
   onConfirmModeSwitch?: () => void;
   onDismissModeSwitch?: () => void;
-  /** Content that sits on the composer top border (e.g. running terminals). */
+
   leading?: ReactNode;
 };
 

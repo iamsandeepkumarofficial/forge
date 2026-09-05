@@ -1,9 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@forge/db";
-import {
-  workspaceHealth,
-  type WorkspaceHealthStatus
-} from "@forge/db";
+import { workspaceHealth, type WorkspaceHealthStatus } from "@forge/db";
 import type { WorkspaceHealthReport } from "../services/workspace/health/types.js";
 
 export class WorkspaceHealthRepository {
@@ -34,11 +31,12 @@ export class WorkspaceHealthRepository {
       });
   }
 
-  async saveReport(
-    workspaceId: string,
-    status: WorkspaceHealthStatus,
-    report: WorkspaceHealthReport
-  ): Promise<void> {
+  async saveReport(options: {
+    workspaceId: string;
+    status: WorkspaceHealthStatus;
+    report: WorkspaceHealthReport;
+  }): Promise<void> {
+    const { workspaceId, status, report } = options;
     const db = getDb();
     const now = new Date();
     await db

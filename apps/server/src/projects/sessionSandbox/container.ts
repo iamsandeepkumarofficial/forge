@@ -18,6 +18,8 @@ import {
 import type { BindMount, NamedVolumeMount } from "../sandboxRuntime/types.js";
 
 const execFileAsync = promisify(execFile);
+const N_20 = 20;
+const N_250 = 250;
 
 function sandboxDockerfilePath(image: string): string {
   const here = fileURLToPath(import.meta.url);
@@ -42,9 +44,7 @@ async function imageExists(image: string): Promise<boolean> {
   }
 }
 
-export async function resolveSandboxImage(
-  preferred?: string
-): Promise<string> {
+export async function resolveSandboxImage(preferred?: string): Promise<string> {
   const configured = process.env.FORGE_SANDBOX_IMAGE?.trim();
   if (configured) {
     return configured;
@@ -100,7 +100,9 @@ export async function ensureVolume(sessionId: string): Promise<string> {
   return name;
 }
 
-async function bootstrapSandboxToolsRequired(containerName: string): Promise<void> {
+async function bootstrapSandboxToolsRequired(
+  containerName: string
+): Promise<void> {
   await docker([
     "exec",
     containerName,
@@ -112,7 +114,6 @@ async function bootstrapSandboxToolsRequired(containerName: string): Promise<voi
       "git config --global --replace-all safe.directory '*' >/dev/null 2>&1 || true"
   ]);
 }
-
 
 function bootstrapSandboxToolsOptional(containerName: string): void {
   void docker([
@@ -194,7 +195,12 @@ function namedVolumeArgs(vols: NamedVolumeMount[] | undefined): string[] {
 }
 
 function depsVolLabelValue(vols: NamedVolumeMount[] | undefined): string {
-  return vols?.map((v) => v.volumeName).sort().join(",") ?? "";
+  return (
+    vols
+      ?.map((v) => v.volumeName)
+      .sort()
+      .join(",") ?? ""
+  );
 }
 
 async function createSandboxContainer(options: {
@@ -274,16 +280,18 @@ export type EnsureContainerOpts = {
 };
 
 export async function ensureContainer(
-  sessionId: string,
-  volumeName: string,
-  opts?: EnsureContainerOpts
+  options: {
+    sessionId: string;
+    volumeName: string;
+  } & EnsureContainerOpts
 ): Promise<string> {
+  const { sessionId, volumeName } = options;
+  const opts = options;
   const name = sandboxContainerName(sessionId);
   const portBase = sessionHostPortBase(sessionId);
-  const preferredImage =
-    opts?.image?.trim() || preferredSandboxImageName();
-  const desiredBind = workspaceBindHost(opts?.bindMounts) ?? "";
-  const desiredDeps = depsVolLabelValue(opts?.namedVolumes);
+  const preferredImage = opts.image?.trim() || preferredSandboxImageName();
+  const desiredBind = workspaceBindHost(opts.bindMounts) ?? "";
+  const desiredDeps = depsVolLabelValue(opts.namedVolumes);
   let state = await inspectContainer(name);
   const wrongPorts = state.exists && state.portBaseLabel !== String(portBase);
   const wrongImage =
@@ -292,8 +300,7 @@ export async function ensureContainer(
     state.imageName !== preferredImage;
   const wrongBind =
     state.exists && (state.bindWorkspaceLabel || "") !== desiredBind;
-  const wrongDeps =
-    state.exists && (state.depsVolLabel || "") !== desiredDeps;
+  const wrongDeps = state.exists && (state.depsVolLabel || "") !== desiredDeps;
   if (wrongPorts || wrongImage || wrongBind || wrongDeps) {
     await execFileAsync("docker", ["rm", "-f", name]).catch(() => {});
     state = {
@@ -336,14 +343,12 @@ export async function ensureContainer(
   return stdout.trim();
 }
 
-
 export async function repairHostPortBindings(options: {
   containerName: string;
   portBase: number;
 }): Promise<boolean> {
-  const { isHostTcpListening, isTcpListening } = await import(
-    "../backgroundJob.js"
-  );
+  const { isHostTcpListening, isTcpListening } =
+    await import("../backgroundJob.js");
   const missing = await publishedHostPortsNeedingRepair({
     containerName: options.containerName,
     portBase: options.portBase,
@@ -356,8 +361,8 @@ export async function repairHostPortBindings(options: {
     `[sandbox] host ports missing for ${options.containerName}: ${missing.join(", ")}; restarting container to rebind`
   );
   await docker(["restart", options.containerName]);
-  
-  for (let i = 0; i < 20; i += 1) {
+
+  for (let i = 0; i < N_20; i += 1) {
     const stillMissing = await publishedHostPortsNeedingRepair({
       containerName: options.containerName,
       portBase: options.portBase,
@@ -366,7 +371,7 @@ export async function repairHostPortBindings(options: {
         isTcpListening({ containerName: options.containerName, port })
     });
     if (stillMissing.length === 0) return true;
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, N_250));
   }
   return true;
 }

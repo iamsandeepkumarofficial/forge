@@ -121,7 +121,16 @@ function CloneTemplateSection() {
 export function EmptyStateImportPanels(options: ImportPanelOptions) {
   return (
     <div className="flex flex-col gap-6">
-      <LocalFolderSection {...options} />
+      <LocalFolderSection
+        busy={options.busy}
+        loading={options.loading}
+        desktop={options.desktop}
+        showPathInput={options.showPathInput}
+        localPath={options.localPath}
+        onLocalPathChange={options.onLocalPathChange}
+        onSelectFolder={options.onSelectFolder}
+        onConnectPath={options.onConnectPath}
+      />
       <CloneTemplateSection />
     </div>
   );

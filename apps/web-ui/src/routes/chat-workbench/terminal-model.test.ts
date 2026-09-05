@@ -32,13 +32,17 @@ describe("terminal-model", () => {
         closable: true
       }
     ];
-    expect(pickActiveTab(tabs, "app:web", new Set())).toBe("app:web");
-    expect(pickActiveTab(tabs, "missing", new Set())).toBe("main");
+    expect(
+      pickActiveTab({ tabs, preferredId: "app:web", hidden: new Set() })
+    ).toBe("app:web");
+    expect(
+      pickActiveTab({ tabs, preferredId: "missing", hidden: new Set() })
+    ).toBe("main");
     const hidden = new Set(["app:web"]);
     expect(visibleTabs(tabs, hidden).map((tab) => tab.id)).toEqual(["main"]);
-    expect(
-      pruneHiddenTabs(hidden, [{ ...tabs[0]! }]).has("app:web")
-    ).toBe(false);
+    expect(pruneHiddenTabs(hidden, [{ ...tabs[0]! }]).has("app:web")).toBe(
+      false
+    );
   });
 
   it("counts running app and job tabs", () => {
@@ -64,8 +68,8 @@ describe("terminal-model", () => {
   });
 
   it("keeps pinned jobs when merging API tabs", () => {
-    const merged = mergeApiTabsWithPinnedJobs(
-      [
+    const merged = mergeApiTabsWithPinnedJobs({
+      apiTabs: [
         {
           id: "main",
           kind: "shell",
@@ -74,9 +78,9 @@ describe("terminal-model", () => {
           closable: false
         }
       ],
-      [pinnedJobTab("install", true)],
-      { install: false }
-    );
+      previous: [pinnedJobTab("install", true)],
+      jobRunning: { install: false }
+    });
     expect(merged.map((tab) => tab.id)).toEqual(["main", "job:install"]);
     expect(merged[1]?.running).toBe(false);
   });

@@ -22,7 +22,16 @@ describe("codeArchive", () => {
     });
     mock.module("node:child_process", {
       exports: {
-        spawn: () => ({ pid: 1 })
+        spawn: () => ({ pid: 1 }),
+        execFile: (
+          _file: string,
+          _args: string[],
+          _opts: unknown,
+          cb?: (err: Error | null, stdout: string, stderr: string) => void
+        ) => {
+          if (typeof cb === "function") cb(null, "", "");
+          return undefined;
+        }
       }
     });
     mock.module("../catalog/chatFeatureRepository.js", {

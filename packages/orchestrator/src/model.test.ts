@@ -1,6 +1,60 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { resolveModel, resolveModelConfig } from "./model.js";
+
+async function withClearedCompatibleBaseUrl<T>(
+  run: () => Promise<T>
+): Promise<T> {
+  const keys = [
+    "OPENAI_COMPATIBLE_BASE_URL",
+    "CUSTOM_BASE_URL",
+    "SDLC_LLM_BASE_URL",
+    "OLLAMA_BASE_URL"
+  ] as const;
+  const prevEnv = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  for (const k of keys) delete process.env[k];
+  const cfgPath = path.join(os.homedir(), ".forge", "config.json");
+  let prevFile: string | null = null;
+  try {
+    prevFile = await fs.readFile(cfgPath, "utf8");
+  } catch {
+    void 0;
+  }
+  try {
+    if (prevFile != null) {
+      const parsed = JSON.parse(prevFile) as {
+        llm?: Record<string, unknown>;
+        [key: string]: unknown;
+      };
+      const llm = { ...(parsed.llm ?? {}) };
+      delete llm.baseUrl;
+      await fs.mkdir(path.dirname(cfgPath), { recursive: true });
+      await fs.writeFile(
+        cfgPath,
+        JSON.stringify({ ...parsed, llm }, null, 2),
+        "utf8"
+      );
+    }
+    return await run();
+  } finally {
+    for (const k of keys) {
+      if (prevEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = prevEnv[k];
+    }
+    if (prevFile == null) {
+      try {
+        await fs.unlink(cfgPath);
+      } catch {
+        void 0;
+      }
+    } else {
+      await fs.writeFile(cfgPath, prevFile, "utf8");
+    }
+  }
+}
 
 describe("model", () => {
   it("resolveModelConfig uses agent override and source agent", () => {
@@ -71,15 +125,7 @@ describe("model", () => {
   });
 
   it("resolveModel throws without baseUrl for openai-compatible", async () => {
-    const keys = [
-      "OPENAI_COMPATIBLE_BASE_URL",
-      "CUSTOM_BASE_URL",
-      "SDLC_LLM_BASE_URL",
-      "OLLAMA_BASE_URL"
-    ] as const;
-    const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-    for (const k of keys) delete process.env[k];
-    try {
+    await withClearedCompatibleBaseUrl(async () => {
       await assert.rejects(
         () =>
           resolveModel({
@@ -89,12 +135,7 @@ describe("model", () => {
           }),
         /OpenAI-compatible base URL|OPENAI_COMPATIBLE_BASE_URL/
       );
-    } finally {
-      for (const k of keys) {
-        if (prev[k] === undefined) delete process.env[k];
-        else process.env[k] = prev[k];
-      }
-    }
+    });
   });
 
   it("resolveModel builds openai-compatible client with baseUrl", async () => {

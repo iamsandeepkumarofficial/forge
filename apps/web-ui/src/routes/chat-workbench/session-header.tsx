@@ -37,6 +37,77 @@ const MODES: {
   { key: "run", label: "Run", icon: Play }
 ];
 
+function ModeTabs(options: {
+  leftMode: LeftPaneMode;
+  onLeftMode: (mode: LeftPaneMode) => void;
+}) {
+  const { leftMode, onLeftMode } = options;
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg bg-muted/70 p-0.5">
+      {MODES.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          aria-label={label}
+          aria-pressed={leftMode === key}
+          onClick={() => onLeftMode(key)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs",
+            leftMode === key
+              ? "bg-background font-medium text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Icon className="size-3.5" />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SessionHeaderActions(options: {
+  turnStatus: WorkbenchTurnStatus;
+  sandboxStatus: SandboxStatus;
+  actions?: ReactNode;
+  onExit: () => void;
+}) {
+  const { turnStatus, sandboxStatus, actions, onExit } = options;
+  return (
+    <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+      <TurnStatus status={turnStatus} />
+      {sandboxStatus === "starting" ? (
+        <StatusChip label="Starting sandbox" tone="warn" />
+      ) : null}
+      {sandboxStatus === "error" ? (
+        <StatusChip label="Sandbox error" tone="danger" />
+      ) : null}
+      <button
+        type="button"
+        aria-label="Leave session"
+        title="Leave session"
+        onClick={onExit}
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-700"
+      >
+        <LogOut className="size-4" />
+      </button>
+      {actions ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Session actions"
+            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground"
+          >
+            <MoreVertical className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {actions}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  );
+}
+
 export function SessionHeader(options: {
   onBack: () => void;
   title: string;
@@ -61,57 +132,13 @@ export function SessionHeader(options: {
       <h1 className="min-w-0 max-w-[12rem] shrink-0 truncate text-sm font-semibold">
         {title}
       </h1>
-      <div className="flex items-center gap-0.5 rounded-lg bg-muted/70 p-0.5">
-        {MODES.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            aria-label={label}
-            aria-pressed={leftMode === key}
-            onClick={() => onLeftMode(key)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs",
-              leftMode === key
-                ? "bg-background font-medium text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Icon className="size-3.5" />
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-        <TurnStatus status={turnStatus} />
-        {sandboxStatus === "starting" ? (
-          <StatusChip label="Starting sandbox" tone="warn" />
-        ) : null}
-        {sandboxStatus === "error" ? (
-          <StatusChip label="Sandbox error" tone="danger" />
-        ) : null}
-        <button
-          type="button"
-          aria-label="Leave session"
-          title="Leave session"
-          onClick={() => setConfirmExit(true)}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-700"
-        >
-          <LogOut className="size-4" />
-        </button>
-        {actions ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Session actions"
-              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground"
-            >
-              <MoreVertical className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              {actions}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-      </div>
+      <ModeTabs leftMode={leftMode} onLeftMode={onLeftMode} />
+      <SessionHeaderActions
+        turnStatus={turnStatus}
+        sandboxStatus={sandboxStatus}
+        actions={actions}
+        onExit={() => setConfirmExit(true)}
+      />
       {confirmExit ? (
         <ExitSessionDialog
           onStay={() => setConfirmExit(false)}
