@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { executeDockerImageLookup } from "./dockerImageLookup.tool.js";
 import {
@@ -7,7 +7,25 @@ import {
 } from "../projects/sessionSandbox/constants.js";
 
 describe("executeDockerImageLookup", () => {
+  const prevRuntime = process.env.SANDBOX_RUNTIME;
+  const prevDesktop = process.env.FORGE_DESKTOP;
+
+  afterEach(() => {
+    if (prevRuntime === undefined) delete process.env.SANDBOX_RUNTIME;
+    else process.env.SANDBOX_RUNTIME = prevRuntime;
+    if (prevDesktop === undefined) delete process.env.FORGE_DESKTOP;
+    else process.env.FORGE_DESKTOP = prevDesktop;
+  });
+
+  it("returns unavailable in host mode", async () => {
+    process.env.SANDBOX_RUNTIME = "host";
+    const r = await executeDockerImageLookup({ args: {} });
+    assert.equal(r.success, false);
+    assert.match(r.output, /unavailable in host mode/);
+  });
+
   it("returns known engine details by engineId", async () => {
+    process.env.SANDBOX_RUNTIME = "docker";
     const r = await executeDockerImageLookup({
       args: { engineId: "postgres" }
     });
@@ -18,6 +36,7 @@ describe("executeDockerImageLookup", () => {
   });
 
   it("rejects unknown engineId", async () => {
+    process.env.SANDBOX_RUNTIME = "docker";
     const r = await executeDockerImageLookup({
       args: { engineId: "redis" }
     });
@@ -26,6 +45,7 @@ describe("executeDockerImageLookup", () => {
   });
 
   it("lists sandbox and app-db images without a query", async () => {
+    process.env.SANDBOX_RUNTIME = "docker";
     const r = await executeDockerImageLookup({ args: {} });
     assert.equal(r.success, true);
     assert.match(r.output, new RegExp(DEFAULT_SANDBOX_IMAGE));
@@ -36,6 +56,7 @@ describe("executeDockerImageLookup", () => {
   });
 
   it("filters by query and fails when nothing matches", async () => {
+    process.env.SANDBOX_RUNTIME = "docker";
     const hit = await executeDockerImageLookup({
       args: { query: "mongo" }
     });

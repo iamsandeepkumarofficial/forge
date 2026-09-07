@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { resolveSandboxRuntimeKind } from "../../../projects/sandboxRuntime/resolve.js";
 
 const N_12000 = 12000;
 
 const N_1024 = 1024;
 const N_8 = 8;
+const N_1500000 = 1500000;
 
 const execFileAsync = promisify(execFile);
 const IMAGE = process.env.WEB_SEARCH_WORKER_IMAGE?.trim() || "node:20-alpine";
@@ -52,10 +54,23 @@ async function containerRunning(name: string): Promise<boolean> {
 export function workerContainerName(index: number): string {
   return `forge-websearch-${index}`;
 }
+
+function hostWorkerName(index: number): string {
+  return `host-websearch-${index}`;
+}
+
 export async function ensureWorker(index: number): Promise<WebSearchWorker> {
   const id = `websearch-${index}`;
-  const containerName = workerContainerName(index);
   const startedAt = Date.now();
+  if (resolveSandboxRuntimeKind() === "host") {
+    return {
+      id,
+      containerName: hostWorkerName(index),
+      state: "ready",
+      startedAt
+    };
+  }
+  const containerName = workerContainerName(index);
   if (await containerRunning(containerName)) {
     return { id, containerName, state: "ready", startedAt };
   }
@@ -80,6 +95,9 @@ export async function ensureWorker(index: number): Promise<WebSearchWorker> {
   return { id, containerName, state: "ready", startedAt };
 }
 export async function stopWorker(index: number): Promise<void> {
+  if (resolveSandboxRuntimeKind() === "host") {
+    return;
+  }
   const name = workerContainerName(index);
   try {
     await execFileAsync("docker", ["rm", "-f", name], { env: process.env });
@@ -87,12 +105,44 @@ export async function stopWorker(index: number): Promise<void> {
     void 0;
   }
 }
+
+async function fetchHtmlOnHost(options: {
+  url: string;
+  timeoutMs: number;
+}): Promise<string> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), options.timeoutMs);
+  try {
+    const r = await fetch(options.url, {
+      signal: ac.signal,
+      headers: {
+        "User-Agent": "ForgeAgentWebSearch/1.0",
+        Accept: "text/html"
+      },
+      redirect: "follow"
+    });
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status}`);
+    }
+    const text = await r.text();
+    return text.slice(0, N_1500000);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export async function fetchHtmlInWorker(options: {
   containerName: string;
   url: string;
   timeoutMs?: number;
 }): Promise<string> {
   const timeoutMs = options.timeoutMs ?? N_12000;
+  if (
+    resolveSandboxRuntimeKind() === "host" ||
+    options.containerName.startsWith("host-websearch-")
+  ) {
+    return fetchHtmlOnHost({ url: options.url, timeoutMs });
+  }
   const script = `
 const u = process.argv[1];
 const ac = new AbortController();

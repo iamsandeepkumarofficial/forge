@@ -13,11 +13,17 @@ import {
 
 const originalFetch = globalThis.fetch;
 const originalWeb = process.env.WEB_TOOLS_ENABLED;
+const originalRuntime = process.env.SANDBOX_RUNTIME;
+const originalDesktop = process.env.FORGE_DESKTOP;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
   if (originalWeb === undefined) delete process.env.WEB_TOOLS_ENABLED;
   else process.env.WEB_TOOLS_ENABLED = originalWeb;
+  if (originalRuntime === undefined) delete process.env.SANDBOX_RUNTIME;
+  else process.env.SANDBOX_RUNTIME = originalRuntime;
+  if (originalDesktop === undefined) delete process.env.FORGE_DESKTOP;
+  else process.env.FORGE_DESKTOP = originalDesktop;
 });
 
 describe("tools", () => {
@@ -50,6 +56,7 @@ describe("tools", () => {
 
   it("availableToolNames has chat tools and omits ghost tools", () => {
     process.env.WEB_TOOLS_ENABLED = "false";
+    process.env.SANDBOX_RUNTIME = "docker";
     const names = availableToolNames();
     assert.ok(names.includes("read_file"));
     assert.ok(names.includes("write_file"));
@@ -58,6 +65,7 @@ describe("tools", () => {
     assert.ok(names.includes("list_skills"));
     assert.ok(names.includes("switch_mode"));
     assert.ok(names.includes("ask_user"));
+    assert.ok(names.includes("docker_image_lookup"));
     assert.equal(names.includes("web_search"), false);
     assert.equal(names.includes("git_clone"), false);
     assert.equal(names.includes("jira_get_ticket"), false);
@@ -66,6 +74,15 @@ describe("tools", () => {
     const withWeb = availableToolNames();
     assert.ok(withWeb.includes("web_search"));
     assert.ok(withWeb.includes("web_fetch"));
+  });
+
+  it("hides docker_image_lookup in host mode", () => {
+    process.env.WEB_TOOLS_ENABLED = "false";
+    process.env.SANDBOX_RUNTIME = "host";
+    const names = availableToolNames();
+    assert.equal(names.includes("docker_image_lookup"), false);
+    const agent = buildChatTools({ sessionId: "s1", mode: "agent" });
+    assert.equal("docker_image_lookup" in agent, false);
   });
 
   it("buildTools filters to allowed names and skips unknown", () => {

@@ -90,6 +90,7 @@ async function handleTerminalRun(options: {
   if (options.background) {
     return startBackgroundTerminal({
       containerName: sandbox.containerName,
+      sessionId: options.sessionId,
       cwd: cwd.cwd,
       command: commandTrimmed,
       jobName: options.jobName
@@ -98,6 +99,7 @@ async function handleTerminalRun(options: {
   const maxOut = options.maxOutputChars ?? MAX_OUTPUT_CHARS;
   const r = await dockerExec({
     container: sandbox.containerName,
+    sessionId: options.sessionId,
     argv: ["sh", "-lc", commandTrimmed],
     cwd: cwd.cwd
   });
@@ -137,7 +139,6 @@ export async function resolveTerminalCwd(options: {
   } else if (worktrees?.[wd]) {
     cwd = worktrees[wd];
   } else if (!worktrees && wd === options.repoDir) {
-    
     cwd = options.workingDir;
   } else {
     cwd = resolveWorkspacePath(wd, { knownRepos });
@@ -159,6 +160,7 @@ export async function resolveTerminalCwd(options: {
 
 async function startBackgroundTerminal(options: {
   containerName: string;
+  sessionId: string;
   cwd: string;
   command: string;
   jobName?: string;
@@ -167,6 +169,7 @@ async function startBackgroundTerminal(options: {
   await writeTerminalJobMeta({
     containerName: options.containerName,
     name: jobName,
+    sessionId: options.sessionId,
     meta: {
       command: options.command,
       cwd: options.cwd,
@@ -178,7 +181,8 @@ async function startBackgroundTerminal(options: {
     kind: "term",
     name: jobName,
     cwd: options.cwd,
-    command: options.command
+    command: options.command,
+    sessionId: options.sessionId
   });
   const running = await waitUntilJobRunning({
     containerName: options.containerName,

@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   isBackgroundJobRunning,
   readBackgroundJobLogs,
@@ -9,6 +11,7 @@ import {
   readFileFromSandbox,
   writeFileToSandbox
 } from "./sandboxExec.js";
+import { resolveSandboxRuntimeKind } from "./sandboxRuntime/resolve.js";
 
 export type TerminalJobMeta = {
   command: string;
@@ -24,19 +27,41 @@ export type TerminalJobStatus = {
   startedAt?: string;
 };
 
-function metaPath(name: string): string {
-  return `/tmp/forge-term-${sanitizeJobName(name)}.meta`;
+function isHostRuntime(): boolean {
+  return resolveSandboxRuntimeKind() === "host";
+}
+
+function metaPath(options: { name: string; workspaceRoot?: string }): string {
+  const base = `forge-term-${sanitizeJobName(options.name)}.meta`;
+  if (options.workspaceRoot && isHostRuntime()) {
+    return path.join(options.workspaceRoot, ".forge-runtime", base);
+  }
+  return `/tmp/${base}`;
+}
+
+function hostWorkspaceRoot(containerName: string): string | undefined {
+  return isHostRuntime() ? containerName : undefined;
 }
 
 export async function writeTerminalJobMeta(options: {
   containerName: string;
   name: string;
   meta: TerminalJobMeta;
+  sessionId?: string;
 }): Promise<void> {
+  const workspaceRoot = hostWorkspaceRoot(options.containerName);
+  const absPath = metaPath({ name: options.name, workspaceRoot });
+  const content = `${JSON.stringify(options.meta)}\n`;
+  if (workspaceRoot) {
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(absPath, content, "utf8");
+    return;
+  }
   await writeFileToSandbox({
     container: options.containerName,
-    absPath: metaPath(options.name),
-    content: `${JSON.stringify(options.meta)}\n`
+    sessionId: options.sessionId,
+    absPath,
+    content
   });
 }
 
@@ -44,10 +69,18 @@ export async function readTerminalJobMeta(options: {
   containerName: string;
   name: string;
 }): Promise<TerminalJobMeta | null> {
-  const raw = await readFileFromSandbox(
-    options.containerName,
-    metaPath(options.name)
-  );
+  const workspaceRoot = hostWorkspaceRoot(options.containerName);
+  const absPath = metaPath({ name: options.name, workspaceRoot });
+  let raw: string | null;
+  if (workspaceRoot) {
+    try {
+      raw = await fs.readFile(absPath, "utf8");
+    } catch {
+      raw = null;
+    }
+  } else {
+    raw = await readFileFromSandbox(options.containerName, absPath);
+  }
   if (!raw) {
     return null;
   }
@@ -65,6 +98,22 @@ export async function readTerminalJobMeta(options: {
 export async function listTerminalJobNames(
   containerName: string
 ): Promise<string[]> {
+  const workspaceRoot = hostWorkspaceRoot(containerName);
+  const names = new Set<string>();
+  if (workspaceRoot) {
+    const dir = path.join(workspaceRoot, ".forge-runtime");
+    let entries: string[];
+    try {
+      entries = await fs.readdir(dir);
+    } catch {
+      return [];
+    }
+    for (const name of entries) {
+      const m = name.match(/^forge-term-(.+)\.(?:pid|log|meta)$/);
+      if (m?.[1]) names.add(m[1]);
+    }
+    return [...names].sort();
+  }
   const r = await dockerExec({
     container: containerName,
     argv: [
@@ -73,7 +122,6 @@ export async function listTerminalJobNames(
       "ls -1 /tmp/forge-term-*.pid /tmp/forge-term-*.log /tmp/forge-term-*.meta 2>/dev/null"
     ]
   });
-  const names = new Set<string>();
   for (const line of r.stdout.split("\n")) {
     const m = line.trim().match(/forge-term-(.+)\.(?:pid|log|meta)$/);
     if (m?.[1]) {

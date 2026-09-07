@@ -277,8 +277,16 @@ export async function executeSandboxTool(options: {
   args: Record<string, unknown>;
 }): Promise<ToolResult> {
   const { sessionId, toolName, args } = options;
-  const { containerName, sessionRoot, worktrees } =
-    await resolveSandbox(sessionId);
+  const info = await resolveSandbox(sessionId);
+  const { containerName, sessionRoot, worktrees } = info;
+  const { resolveSandboxRuntimeKind } =
+    await import("../projects/sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { executeHostSandboxFsTool } =
+      await import("./sandboxHostFs.tool.js");
+    const hostFs = await executeHostSandboxFsTool({ info, toolName, args });
+    if (hostFs) return hostFs;
+  }
   const known = pathOpts(worktrees);
   switch (toolName) {
     case "read_file":

@@ -16,6 +16,7 @@ import {
   switchModeTool,
   type AskUserInput
 } from "./toolsHitl.js";
+import { setupTools } from "./toolsSetup.js";
 
 export type { AskUserInput } from "./toolsHitl.js";
 export { executeAskUser, executeSwitchMode } from "./toolsHitl.js";
@@ -202,9 +203,11 @@ function previewTools(run: ToolRun): Record<string, Tool> {
       description: formatToolDescription("upsert_launch_app"),
       inputSchema: z.object({
         name: z.string(),
-        cwd: z.string().describe(
-          "App working directory. In workspaces, start with the member repo (e.g. bp-frontend or bp-frontend/apps/web)."
-        ),
+        cwd: z
+          .string()
+          .describe(
+            "App working directory. In workspaces, start with the member repo (e.g. bp-frontend or bp-frontend/apps/web)."
+          ),
         command: z.string(),
         type: z.enum(["web", "api", "worker"]),
         repo: z
@@ -238,41 +241,6 @@ function skillTools(run: ToolRun): Record<string, Tool> {
       inputSchema: z.object({ skillId: z.string() }),
       execute: async (input) =>
         run("invoke_skill", input as Record<string, unknown>)
-    })
-  };
-}
-
-function setupTools(run: ToolRun): Record<string, Tool> {
-  return {
-    upsert_workspace_parameter: tool({
-      description: formatToolDescription("upsert_workspace_parameter"),
-      inputSchema: z.object({
-        key: z.string(),
-        value: z.string(),
-        secret: z.boolean().optional()
-      }),
-      execute: async (input) =>
-        run("upsert_workspace_parameter", input as Record<string, unknown>)
-    }),
-    docker_image_lookup: tool({
-      description: formatToolDescription("docker_image_lookup"),
-      inputSchema: z.object({
-        query: z.string().optional(),
-        engineId: z.enum(["postgres", "mongo"]).optional()
-      }),
-      execute: async (input) =>
-        run("docker_image_lookup", input as Record<string, unknown>)
-    }),
-    provision_app_engine: tool({
-      description: formatToolDescription("provision_app_engine"),
-      inputSchema: z.object({
-        engineId: z.enum(["postgres", "mongo"]),
-        userApproved: z
-          .boolean()
-          .describe("Must be true only after the user explicitly approved.")
-      }),
-      execute: async (input) =>
-        run("provision_app_engine", input as Record<string, unknown>)
     })
   };
 }

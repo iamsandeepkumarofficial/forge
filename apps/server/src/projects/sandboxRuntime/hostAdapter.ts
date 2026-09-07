@@ -192,6 +192,13 @@ async function hostCreateSession(
   opts?: CreateOpts
 ): Promise<WorkspaceHandle> {
   try {
+    const { checkHostToolchain } = await import("../hostToolchain.js");
+    const toolchain = await checkHostToolchain();
+    if (!toolchain.ok) {
+      console.warn(
+        `[host-runtime] missing toolchain: ${toolchain.missing.join(", ")}. ${toolchain.guidance.join(" ")}`
+      );
+    }
     await ensureSessionsRoot();
     const ws = workspaceHostPath(opts);
     const root =
