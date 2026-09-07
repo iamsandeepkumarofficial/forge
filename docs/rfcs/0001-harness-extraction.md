@@ -3,10 +3,13 @@
 - **Status:** Accepted
 - **Date:** 2026-08-25
 - **Authors:** Forge contributors
+- **Amended by:** [RFC 0006](./0006-local-host-runtime-zero-docker.md) (host mode + zero-Docker desktop; Docker/K8s remain cloud mode)
 
 ## Summary
 
 Extract a **chat-only, locally runnable coding-agent harness** named **Forge** into a new Apache-2.0 open-source repository. Forge packages the chat UI, tool-plane server, Temporal orchestrator, Docker sandbox runtime, and local preview proxy into a product that developers can run on their own machines—optionally wrapped in an Electron desktop app that supervises docker-compose and Node processes.
+
+> **Amendment (RFC 0006):** Desktop **host mode** may run without Docker (host-process sandbox + native Postgres/Temporal). Docker remains the cloud/container path described in this RFC.
 
 This RFC records the extraction decisions, keep/drop boundaries, target architecture, and the major rework items required to turn the Forge Agent monorepo slice into a clean public project.
 
@@ -72,14 +75,14 @@ flowchart TB
 
 ### Planes and roles
 
-| Component | Role |
-| --------- | ---- |
-| **tool-plane (`apps/server`)** | HTTP API for chats, models, session/sandbox lifecycle, and tool execution. Owns Docker sandbox adapters and preview route registration. |
-| **orchestrator (`packages/orchestrator`)** | Temporal worker that drives the interactive chat turn: LLM calls, tool planning, and tool-plane invocations. Talks to tool-plane only—never to preview-plane for tool exec. |
-| **preview-plane (`apps/preview-plane`)** | Local reverse proxy for session preview hosts (`*.preview.localhost`). |
-| **Docker sandbox** | Isolated per-session workspace where the agent runs shell/file tools and (optionally) a dev server. |
-| **web-ui (`apps/web-ui`)** | Chat workbench: composer, tool call display, model/mode pickers, Settings, Connect repo. |
-| **Electron desktop (`apps/electron`)** | Supervisor: Docker detection, compose up/down, sandbox image build, spawn Node processes, inject loopback auth token, open Chromium. See [RFC 0002](./0002-local-desktop-runtime.md). |
+| Component                                  | Role                                                                                                                                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **tool-plane (`apps/server`)**             | HTTP API for chats, models, session/sandbox lifecycle, and tool execution. Owns Docker sandbox adapters and preview route registration.                                               |
+| **orchestrator (`packages/orchestrator`)** | Temporal worker that drives the interactive chat turn: LLM calls, tool planning, and tool-plane invocations. Talks to tool-plane only—never to preview-plane for tool exec.           |
+| **preview-plane (`apps/preview-plane`)**   | Local reverse proxy for session preview hosts (`*.preview.localhost`).                                                                                                                |
+| **Docker sandbox**                         | Isolated per-session workspace where the agent runs shell/file tools and (optionally) a dev server.                                                                                   |
+| **web-ui (`apps/web-ui`)**                 | Chat workbench: composer, tool call display, model/mode pickers, Settings, Connect repo.                                                                                              |
+| **Electron desktop (`apps/electron`)**     | Supervisor: Docker detection, compose up/down, sandbox image build, spawn Node processes, inject loopback auth token, open Chromium. See [RFC 0002](./0002-local-desktop-runtime.md). |
 
 ### Deployable mental model
 
@@ -89,15 +92,15 @@ flowchart TB
 
 ## Decisions
 
-| Decision | Choice | Rationale |
-| -------- | ------ | --------- |
-| Repository | New clean public repo (no git history from upstream) | Clear license boundary; no accidental proprietary history or secrets. |
-| Desktop | Electron + docker-compose supervisor | Native folder pickers, process supervision, and official Chromium DevTools for preview; compose already defines local infra. |
-| Product scope | Chat-only | Smallest useful coding-agent loop; defer board/pipeline to other products. |
-| LLM credentials | Settings UI → `~/.forge/config.json` (and optional OS secure store) | End users should not edit `.env`; contributors still can for headless/dev. |
-| Repo connection | Local folder bind-mount **or** git clone (URL + optional token) | Covers the two common workflows without OAuth in v1. |
-| Preview | Keep preview-plane on `*.preview.localhost` | Proven local preview path; no cloud DNS required. |
-| License / name | Apache-2.0 / **Forge** | Permissive OSS; distinct product identity. |
+| Decision        | Choice                                                              | Rationale                                                                                                                    |
+| --------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Repository      | New clean public repo (no git history from upstream)                | Clear license boundary; no accidental proprietary history or secrets.                                                        |
+| Desktop         | Electron + docker-compose supervisor                                | Native folder pickers, process supervision, and official Chromium DevTools for preview; compose already defines local infra. |
+| Product scope   | Chat-only                                                           | Smallest useful coding-agent loop; defer board/pipeline to other products.                                                   |
+| LLM credentials | Settings UI → `~/.forge/config.json` (and optional OS secure store) | End users should not edit `.env`; contributors still can for headless/dev.                                                   |
+| Repo connection | Local folder bind-mount **or** git clone (URL + optional token)     | Covers the two common workflows without OAuth in v1.                                                                         |
+| Preview         | Keep preview-plane on `*.preview.localhost`                         | Proven local preview path; no cloud DNS required.                                                                            |
+| License / name  | Apache-2.0 / **Forge**                                              | Permissive OSS; distinct product identity.                                                                                   |
 
 ## Keep vs drop
 
@@ -180,12 +183,12 @@ Rename scopes and artifacts for the public project:
 
 ## Alternatives considered
 
-| Alternative | Why not |
-| ----------- | ------- |
-| Open-source the full upstream monorepo | Too much product and cloud surface; poor onboarding. |
-| Tauri instead of Electron | Initially preferred for a thin webview; Electron was chosen so preview can be real Chromium plus official DevTools. |
-| CLI-only (no desktop) | Valid for contributors; desktop remains the primary end-user path. Headless `pnpm` + compose stays supported. |
-| GitHub OAuth in v1 | Delays launch; local folder + clone covers core needs. |
+| Alternative                            | Why not                                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Open-source the full upstream monorepo | Too much product and cloud surface; poor onboarding.                                                                |
+| Tauri instead of Electron              | Initially preferred for a thin webview; Electron was chosen so preview can be real Chromium plus official DevTools. |
+| CLI-only (no desktop)                  | Valid for contributors; desktop remains the primary end-user path. Headless `pnpm` + compose stays supported.       |
+| GitHub OAuth in v1                     | Delays launch; local folder + clone covers core needs.                                                              |
 
 ## References
 

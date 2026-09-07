@@ -4,12 +4,15 @@
 - **Date:** 2026-08-25
 - **Authors:** Forge contributors
 - **Depends on:** [RFC 0001](./0001-harness-extraction.md)
+- **Amended by:** [RFC 0006](./0006-local-host-runtime-zero-docker.md) (zero-Docker host-mode boot)
 
 Implementation lives in **Electron** (`apps/electron`, `pnpm desktop`). The original write-up named Tauri; the supervisor contract is unchanged.
 
 ## Summary
 
 Forge ships an **Electron desktop app** whose supervisor owns local infrastructure lifecycle: detect Docker, bring up docker-compose services, ensure the sandbox image exists, spawn the Node harness processes, inject a loopback auth token, and open the chat UI in Chromium. LLM credentials and preferences live in `~/.forge/config.json`. Previews use the local preview-plane at `*.preview.localhost`.
+
+> **Amendment (RFC 0006):** Default **host mode** boot uses managed Postgres + Temporal CLI under `~/.forge/` instead of compose/sandbox image. Docker compose remains an optional contributor/cloud path (`SANDBOX_RUNTIME=docker`).
 
 ## Motivation
 
@@ -70,7 +73,7 @@ On launch, the supervisor performs these steps in order:
    Run `docker compose up -d` for local infra:
    - **Postgres** (pgvector) — chat and workspace persistence
    - **Temporal** (dev server) — chat turn workflows
-   - **MinIO** — object store for uploads when enabled  
+   - **MinIO** — object store for uploads when enabled
 
    Wait for health checks (especially Postgres) before continuing.
 
@@ -81,14 +84,14 @@ On launch, the supervisor performs these steps in order:
    Start:
    - tool-plane server (`apps/server`)
    - Temporal orchestrator worker
-   - preview-plane  
+   - preview-plane
 
    Use bundled Node or the developer toolchain (`tsx` / `pnpm`) depending on packaging mode.
 
 5. **Inject loopback token**  
    Generate a random bearer token for this session. Bind the server to `127.0.0.1`. Pass the token to:
    - server / orchestrator env (e.g. `FORGE_POC_TOKEN` / compatibility aliases)
-   - webview bootstrap (equivalent of `VITE_*` token injection)  
+   - webview bootstrap (equivalent of `VITE_*` token injection)
 
    Use a single implicit local user—no email header UX.
 
@@ -128,10 +131,10 @@ Example shape:
 
 ### File location
 
-| Path | Purpose |
-| ---- | ------- |
-| `~/.forge/config.json` | Primary settings document |
-| `~/.forge/` | Future: logs, cached metadata (optional) |
+| Path                   | Purpose                                  |
+| ---------------------- | ---------------------------------------- |
+| `~/.forge/config.json` | Primary settings document                |
+| `~/.forge/`            | Future: logs, cached metadata (optional) |
 
 ## Shutdown behavior
 
@@ -168,11 +171,11 @@ Forge keeps the preview-plane for local app previews:
 
 ## Alternatives considered
 
-| Alternative | Why not |
-| ----------- | ------- |
-| Always leave compose running | Simpler, but surprises users with background containers; make stop-on-quit the default with an opt-out. |
-| Embed Postgres/Temporal without Docker | Large maintenance burden; Docker is already a sandbox prerequisite. |
-| Store LLM keys only in process env | Lost on restart; Settings would feel broken. |
+| Alternative                            | Why not                                                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Always leave compose running           | Simpler, but surprises users with background containers; make stop-on-quit the default with an opt-out. |
+| Embed Postgres/Temporal without Docker | Deferred in v1 when Docker was already required; **revisited in RFC 0006** for host-mode desktop.       |
+| Store LLM keys only in process env     | Lost on restart; Settings would feel broken.                                                            |
 
 ## References
 

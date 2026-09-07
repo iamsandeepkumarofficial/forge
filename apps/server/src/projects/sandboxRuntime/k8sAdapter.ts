@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { FIRST_APP_PORT } from "../sessionSandbox/constants.js";
+import {
+  FIRST_APP_PORT,
+  WORKSPACE_MOUNT
+} from "../sessionSandbox/constants.js";
 import {
   previewUrlForHostname,
   sanitizeSessionIdForHostname,
@@ -18,6 +21,7 @@ import type {
   PreviewBinding,
   RuntimeExecInput,
   SandboxRuntime,
+  SessionRuntimeStatus,
   WorkspaceHandle
 } from "./types.js";
 import { SandboxRuntimeError } from "./types.js";
@@ -212,6 +216,59 @@ export function createKubectlSandboxClient(
   };
 }
 
+async function k8sGetStatus(
+  client: K8sWorkspaceClient,
+  sessionId: string
+): Promise<SessionRuntimeStatus> {
+  const name = sandboxResourceName(sessionId);
+  try {
+    const { stdout } = await execFileAsync("kubectl", [
+      "-n",
+      client.namespace,
+      "get",
+      "pod",
+      name,
+      "-o",
+      "jsonpath={.status.phase}"
+    ]);
+    const phase = stdout.trim();
+    const running = phase === "Running";
+    return {
+      status: running ? "ready" : phase ? "empty" : "absent",
+      running,
+      workingDir: WORKSPACE_MOUNT,
+      ref: name
+    };
+  } catch {
+    return { status: "absent", running: false, workingDir: WORKSPACE_MOUNT };
+  }
+}
+
+async function k8sPublishPreviewPort(options: {
+  client: K8sWorkspaceClient;
+  handle: WorkspaceHandle;
+  port: number;
+}): Promise<PreviewBinding> {
+  const { client, handle, port } = options;
+  const hostname =
+    port === FIRST_APP_PORT
+      ? sessionPreviewHostname(handle.sessionId)
+      : sessionPreviewHostnameForPort(handle.sessionId, port);
+  const backendService = `${sandboxResourceName(handle.sessionId)}.${client.namespace}.svc.cluster.local:${port}`;
+  const registered = await registerPreviewRoute({
+    sessionId: handle.sessionId,
+    port,
+    backendService,
+    hostname
+  });
+  const scheme = process.env.PREVIEW_URL_SCHEME?.trim() || "https";
+  return {
+    hostname: registered?.hostname ?? hostname,
+    targetPort: port,
+    url: registered?.url ?? previewUrlForHostname(hostname, scheme)
+  };
+}
+
 export function createK8sSandboxRuntime(
   client?: K8sWorkspaceClient
 ): SandboxRuntime {
@@ -253,28 +310,9 @@ export function createK8sSandboxRuntime(
         stdin: input.input
       });
     },
-    async publishPreviewPort(
-      handle: WorkspaceHandle,
-      port: number
-    ): Promise<PreviewBinding> {
-      const hostname =
-        port === FIRST_APP_PORT
-          ? sessionPreviewHostname(handle.sessionId)
-          : sessionPreviewHostnameForPort(handle.sessionId, port);
-      const backendService = `${sandboxResourceName(handle.sessionId)}.${c.namespace}.svc.cluster.local:${port}`;
-      const registered = await registerPreviewRoute({
-        sessionId: handle.sessionId,
-        port,
-        backendService,
-        hostname
-      });
-      const scheme = process.env.PREVIEW_URL_SCHEME?.trim() || "https";
-      return {
-        hostname: registered?.hostname ?? hostname,
-        targetPort: port,
-        url: registered?.url ?? previewUrlForHostname(hostname, scheme)
-      };
-    },
+    getStatus: (sessionId) => k8sGetStatus(c, sessionId),
+    publishPreviewPort: (handle, port) =>
+      k8sPublishPreviewPort({ client: c, handle, port }),
     async destroySession(sessionId: string): Promise<void> {
       await revokePreviewSession(sessionId);
       await c.destroyWorkspace(sessionId);

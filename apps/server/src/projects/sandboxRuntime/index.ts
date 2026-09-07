@@ -8,6 +8,8 @@ export type {
   SandboxRuntime,
   SandboxRuntimeErrorCode,
   SandboxRuntimeKind,
+  SessionRuntimeStatus,
+  SessionRuntimeStatusKind,
   WorkspaceHandle
 } from "./types.js";
 export { SandboxRuntimeError } from "./types.js";
@@ -19,7 +21,17 @@ export {
   sessionPreviewHostnameForPort
 } from "./hostnames.js";
 export { createDockerSandboxRuntime } from "./dockerAdapter.js";
+export { createHostSandboxRuntime } from "./hostAdapter.js";
 export { createK8sSandboxRuntime, sandboxResourceName } from "./k8sAdapter.js";
+export {
+  allocateSessionPort,
+  listSessionPortAllocations,
+  loadSessionPortRegistry,
+  portsForSession,
+  releaseSessionPort,
+  releaseSessionPorts,
+  resetSessionPortRegistryForTests
+} from "./sessionPortRegistry.js";
 export {
   getSandboxRuntime,
   resetSandboxRuntimeCache,

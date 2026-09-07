@@ -133,14 +133,15 @@ export async function runtimeExec(
   } & ExecOptions
 ): Promise<ExecResult> {
   const { sessionId, argv, ...opts } = input;
-  const { getSandboxRuntime } = await import("./sandboxRuntime/resolve.js");
+  const { getSandboxRuntime, resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
   const runtime = getSandboxRuntime();
   const info = await resolveSandbox(sessionId);
   return runtime.exec({
     handle: {
       sessionId,
-      runtime: "docker",
-      ref: info.containerName
+      runtime: resolveSandboxRuntimeKind(),
+      ref: info.hostWorkingDir ?? info.containerName
     },
     cmd: argv,
     ...opts

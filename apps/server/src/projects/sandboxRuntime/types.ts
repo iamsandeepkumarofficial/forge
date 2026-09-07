@@ -1,4 +1,4 @@
-export type SandboxRuntimeKind = "docker" | "kubernetes";
+export type SandboxRuntimeKind = "docker" | "kubernetes" | "host";
 
 export type SandboxRuntimeErrorCode =
   | "workspace_unavailable"
@@ -67,6 +67,15 @@ export interface WorkspaceHandle {
   ref: string;
 }
 
+export type SessionRuntimeStatusKind = "absent" | "empty" | "ready";
+
+export interface SessionRuntimeStatus {
+  status: SessionRuntimeStatusKind;
+  running: boolean;
+  workingDir?: string;
+  ref?: string;
+}
+
 export type RuntimeExecInput = {
   handle: WorkspaceHandle;
   cmd: string[];
@@ -75,6 +84,7 @@ export type RuntimeExecInput = {
 export interface SandboxRuntime {
   createSession(sessionId: string, opts?: CreateOpts): Promise<WorkspaceHandle>;
   exec(input: RuntimeExecInput): Promise<ExecResult>;
+  getStatus(sessionId: string): Promise<SessionRuntimeStatus>;
   publishPreviewPort(
     handle: WorkspaceHandle,
     port: number

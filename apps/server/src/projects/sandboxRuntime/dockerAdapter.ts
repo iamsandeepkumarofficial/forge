@@ -6,7 +6,8 @@ import {
   FIRST_APP_PORT,
   hostPortForContainerPort,
   sandboxContainerName,
-  sessionVolumeName
+  sessionVolumeName,
+  WORKSPACE_MOUNT
 } from "../sessionSandbox/constants.js";
 import {
   previewUrlForHostname,
@@ -24,6 +25,7 @@ import type {
   PreviewBinding,
   RuntimeExecInput,
   SandboxRuntime,
+  SessionRuntimeStatus,
   WorkspaceHandle
 } from "./types.js";
 import { SandboxRuntimeError } from "./types.js";
@@ -85,6 +87,69 @@ function dockerExecRaw(input: DockerExecRawInput): Promise<ExecResult> {
   });
 }
 
+async function dockerGetStatus(
+  sessionId: string
+): Promise<SessionRuntimeStatus> {
+  const name = sandboxContainerName(sessionId);
+  try {
+    const { stdout } = await execFileAsync("docker", [
+      "inspect",
+      "-f",
+      "{{.State.Running}}",
+      name
+    ]);
+    const running = stdout.trim() === "true";
+    return {
+      status: running ? "ready" : "empty",
+      running,
+      workingDir: WORKSPACE_MOUNT,
+      ref: name
+    };
+  } catch {
+    return { status: "absent", running: false, workingDir: WORKSPACE_MOUNT };
+  }
+}
+
+async function dockerPublishPreviewPort(
+  handle: WorkspaceHandle,
+  port: number
+): Promise<PreviewBinding> {
+  const hostPort = hostPortForContainerPort(handle.sessionId, port);
+  const hostname =
+    hostPort === null || port === FIRST_APP_PORT
+      ? sessionPreviewHostname(handle.sessionId)
+      : sessionPreviewHostnameForPort(handle.sessionId, port);
+  const localUrl =
+    hostPort !== null
+      ? `http://127.0.0.1:${hostPort}`
+      : previewUrlForHostname(hostname, "http");
+  const backendService =
+    hostPort !== null ? `127.0.0.1:${hostPort}` : `127.0.0.1:${port}`;
+  const registered = await registerPreviewRoute({
+    sessionId: handle.sessionId,
+    port,
+    backendService,
+    hostname
+  });
+  return {
+    hostname: registered?.hostname ?? hostname,
+    targetPort: port,
+    url: registered?.url ?? localUrl
+  };
+}
+
+async function dockerDestroySession(sessionId: string): Promise<void> {
+  await revokePreviewSession(sessionId);
+  const containerName = sandboxContainerName(sessionId);
+  const volumeName = sessionVolumeName(sessionId);
+  await execFileAsync("docker", ["rm", "-f", containerName]).catch(
+    () => undefined
+  );
+  await execFileAsync("docker", ["volume", "rm", volumeName]).catch(
+    () => undefined
+  );
+}
+
 export function createDockerSandboxRuntime(): SandboxRuntime {
   return {
     async createSession(
@@ -125,44 +190,8 @@ export function createDockerSandboxRuntime(): SandboxRuntime {
       });
     },
 
-    async publishPreviewPort(
-      handle: WorkspaceHandle,
-      port: number
-    ): Promise<PreviewBinding> {
-      const hostPort = hostPortForContainerPort(handle.sessionId, port);
-      const hostname =
-        hostPort === null || port === FIRST_APP_PORT
-          ? sessionPreviewHostname(handle.sessionId)
-          : sessionPreviewHostnameForPort(handle.sessionId, port);
-      const localUrl =
-        hostPort !== null
-          ? `http://127.0.0.1:${hostPort}`
-          : previewUrlForHostname(hostname, "http");
-      const backendService =
-        hostPort !== null ? `127.0.0.1:${hostPort}` : `127.0.0.1:${port}`;
-      const registered = await registerPreviewRoute({
-        sessionId: handle.sessionId,
-        port,
-        backendService,
-        hostname
-      });
-      return {
-        hostname: registered?.hostname ?? hostname,
-        targetPort: port,
-        url: registered?.url ?? localUrl
-      };
-    },
-
-    async destroySession(sessionId: string): Promise<void> {
-      await revokePreviewSession(sessionId);
-      const containerName = sandboxContainerName(sessionId);
-      const volumeName = sessionVolumeName(sessionId);
-      await execFileAsync("docker", ["rm", "-f", containerName]).catch(
-        () => undefined
-      );
-      await execFileAsync("docker", ["volume", "rm", volumeName]).catch(
-        () => undefined
-      );
-    }
+    getStatus: dockerGetStatus,
+    publishPreviewPort: dockerPublishPreviewPort,
+    destroySession: dockerDestroySession
   };
 }

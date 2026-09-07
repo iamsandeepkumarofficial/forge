@@ -155,9 +155,16 @@ export async function provisionProjectScopedAfterLookup(options: {
 }
 
 async function disableGitFileMode(options: {
-  containerName: string;
+  containerName?: string;
+  hostPath?: string;
   workingDir: string;
 }): Promise<void> {
+  if (options.hostPath) {
+    const { disableGitFileModeOnHost } = await import("./provisionHost.js");
+    await disableGitFileModeOnHost(options.hostPath);
+    return;
+  }
+  if (!options.containerName) return;
   await execFileAsync("docker", [
     "exec",
     options.containerName,
@@ -168,44 +175,6 @@ async function disableGitFileMode(options: {
     "core.fileMode",
     "false"
   ]).catch(() => {});
-}
-
-async function provisionLocalProjectSandbox(options: {
-  sessionId: string;
-  chat: ChatFeature;
-  project: Project;
-  localPath: string;
-}): Promise<{ status: "ready"; workingDir: string; containerId: string }> {
-  const { sessionId, chat, project, localPath } = options;
-  const workingDir = WORKSPACE_MOUNT;
-  const hostPath = await assertLocalFolderPath(localPath);
-  const wt = await ensureSessionWorktree({
-    canonicalKey: hostPath,
-    projectId: project.id,
-    sessionId,
-    branchName: chat.branchName
-  });
-  const { getSandboxRuntime } = await import("../sandboxRuntime/resolve.js");
-  const handle = await getSandboxRuntime().createSession(
-    sessionId,
-    await sandboxSessionCreateOpts({
-      sessionId,
-      bindMounts: [
-        { hostPath: wt.workDir, containerPath: WORKSPACE_MOUNT },
-        {
-          hostPath: wt.gitCanonicalHostPath,
-          containerPath: canonicalGitContainerPath(project.id)
-        }
-      ]
-    })
-  );
-  if (handle.runtime !== "docker") {
-    throw new Error(
-      "Local folder workspaces require the Docker sandbox runtime"
-    );
-  }
-  await disableGitFileMode({ containerName: handle.ref, workingDir });
-  return { status: "ready", workingDir, containerId: handle.ref };
 }
 
 export async function provisionProjectScopedSandbox(options: {
@@ -219,6 +188,8 @@ export async function provisionProjectScopedSandbox(options: {
   const workingDir = WORKSPACE_MOUNT;
   const localPath = resolveLocalFolderPath(project, source);
   if (localPath) {
+    const { provisionLocalProjectSandbox } =
+      await import("./provisionLocal.js");
     return provisionLocalProjectSandbox({
       sessionId,
       chat,
@@ -390,8 +361,18 @@ export async function provisionWorkspaceScopedSandbox(options: {
       workspaceId
     })
   );
+  if (handle.runtime === "host") {
+    const { finalizeHostWorkspace } = await import("./provisionHost.js");
+    const hostReady = await finalizeHostWorkspace({
+      bindMounts,
+      githubMemberCount: githubMembers.length
+    });
+    return { ...hostReady, containerId: handle.ref };
+  }
   if (handle.runtime !== "docker") {
-    throw new Error("Workspace sessions require the Docker sandbox runtime");
+    throw new Error(
+      "Workspace sessions require the Docker or host sandbox runtime"
+    );
   }
   await finalizeWorkspaceContainer({
     containerName: handle.ref,
