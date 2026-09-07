@@ -18,6 +18,7 @@ import {
   resolveSessionsRoot
 } from "../../services/project/projectsRoot.js";
 import { releaseSessionPorts } from "./sessionPortRegistry.js";
+import { resolveWrappedArgv } from "./osSandbox.js";
 import type {
   CreateOpts,
   ExecOpts,
@@ -127,7 +128,7 @@ function mapWorkspacePath(cwd: string | undefined, root: string): string {
   return cwd;
 }
 
-function hostExec(input: {
+async function hostExec(input: {
   root: string;
   argv: string[];
   opts: ExecOpts;
@@ -137,8 +138,13 @@ function hostExec(input: {
   const cwd = mapWorkspacePath(opts.cwd, root);
   const maxBuffer = opts.maxBuffer ?? DEFAULT_MAX_BUFFER;
   const env = mapEnvPaths(scrubEnv(opts.env), root);
+  const wrappedArgv = await resolveWrappedArgv({
+    argv,
+    sessionRoot: root,
+    cwd
+  });
   return new Promise<ExecResult>((resolve, reject) => {
-    const child = spawn(argv[0]!, argv.slice(1), {
+    const child = spawn(wrappedArgv[0]!, wrappedArgv.slice(1), {
       cwd,
       env,
       detached: Boolean(opts.detach),

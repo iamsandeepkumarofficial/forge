@@ -7,17 +7,21 @@ import { createHostSandboxRuntime } from "./hostAdapter.js";
 
 describe("hostAdapter", () => {
   const prevSessions = process.env.FORGE_SESSIONS_ROOT;
+  const prevSandbox = process.env.FORGE_HOST_SANDBOX;
   let tmpRoot = "";
 
   afterEach(async () => {
     if (prevSessions === undefined) delete process.env.FORGE_SESSIONS_ROOT;
     else process.env.FORGE_SESSIONS_ROOT = prevSessions;
+    if (prevSandbox === undefined) delete process.env.FORGE_HOST_SANDBOX;
+    else process.env.FORGE_HOST_SANDBOX = prevSandbox;
     if (tmpRoot) {
       await fs.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
     }
   });
 
   it("createSession uses bind mount workspace and execs with scrubbed env", async () => {
+    process.env.FORGE_HOST_SANDBOX = "0";
     tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-host-"));
     process.env.FORGE_SESSIONS_ROOT = path.join(tmpRoot, "sessions");
     const ws = path.join(tmpRoot, "workspace");

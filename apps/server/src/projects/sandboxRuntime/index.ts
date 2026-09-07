@@ -24,6 +24,12 @@ export { createDockerSandboxRuntime } from "./dockerAdapter.js";
 export { createHostSandboxRuntime } from "./hostAdapter.js";
 export { createK8sSandboxRuntime, sandboxResourceName } from "./k8sAdapter.js";
 export {
+  hostSandboxEnabled,
+  wrapHostCommand,
+  defaultWritableRoots,
+  resolveWrappedArgv
+} from "./osSandbox.js";
+export {
   allocateSessionPort,
   listSessionPortAllocations,
   loadSessionPortRegistry,
