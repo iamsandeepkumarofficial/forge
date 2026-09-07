@@ -266,6 +266,10 @@ async function killHostRuntimePids(root: string): Promise<void> {
   }
 }
 
+export function listHostActiveSessionIds(): string[] {
+  return [...sessionRoots.keys()];
+}
+
 export function createHostSandboxRuntime(): SandboxRuntime {
   return {
     createSession: hostCreateSession,

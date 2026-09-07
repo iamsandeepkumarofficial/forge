@@ -119,7 +119,15 @@ Escape hatch: `FORGE_HOST_SANDBOX=0` (debug only).
 
 ### Activity monitor
 
-Lightweight dialog: active sessions, preview apps, port registry rows; stop session / stop app. No CPU graphs or system-wide process browser in Phase 1.
+Lightweight dialog (home header / project & workspace sidebars): active sessions, preview apps, port registry rows; stop session / stop app. No CPU graphs or system-wide process browser in Phase 1.
+
+API:
+
+- `GET /api/runtime/activity` — aggregate sessions, apps, ports, `runtimeKind`
+- `POST /api/runtime/activity/sessions/:sessionId/stop` — destroy session sandbox
+- `POST /api/runtime/activity/apps/stop` — body `{ sessionId, name }`
+
+Smoke (host mode, no Docker daemon): desktop boot → connect folder → chat turn → Activity lists session/ports → Stop session clears row.
 
 ## Security considerations
 

@@ -1,5 +1,7 @@
 import { NavLink, Outlet, Link, useParams } from "react-router-dom";
+import { useState } from "react";
 import {
+  Activity,
   ArrowLeft,
   MessageSquare,
   PanelLeftClose,
@@ -7,6 +9,7 @@ import {
   Settings
 } from "lucide-react";
 import { useCollapsibleSidebar } from "../hooks/use-collapsible-sidebar.js";
+import { ActivityDialog } from "./activity-dialog.js";
 import { ForgeMarkLink } from "./forge-mark.js";
 import { cn } from "@/lib/utils";
 
@@ -66,8 +69,9 @@ function WorkspaceSidebarNav(options: {
 function WorkspaceSidebarFooter(options: {
   collapsed: boolean;
   onToggle: () => void;
+  onShowActivity: () => void;
 }) {
-  const { collapsed, onToggle } = options;
+  const { collapsed, onToggle, onShowActivity } = options;
   return (
     <div
       className={cn(
@@ -75,6 +79,19 @@ function WorkspaceSidebarFooter(options: {
         collapsed ? "flex flex-col items-center px-1.5 pb-2" : "px-3 pb-3"
       )}
     >
+      <button
+        type="button"
+        aria-label="Activity"
+        title={collapsed ? "Activity" : undefined}
+        onClick={onShowActivity}
+        className={cn(
+          "inline-flex items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground",
+          collapsed ? "size-9 justify-center" : "w-full gap-2 px-3 py-2 text-sm"
+        )}
+      >
+        <Activity className="size-4 shrink-0" />
+        {!collapsed && <span>Activity</span>}
+      </button>
       <button
         type="button"
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -101,6 +118,7 @@ function WorkspaceSidebarFooter(options: {
 export function WorkspaceShell() {
   const { workspaceId } = useParams();
   const { collapsed, toggle } = useCollapsibleSidebar(SIDEBAR_KEY);
+  const [showActivity, setShowActivity] = useState(false);
   if (!workspaceId) {
     return <div className="p-8 text-muted-foreground">Missing workspace</div>;
   }
@@ -125,7 +143,11 @@ export function WorkspaceShell() {
           />
         </div>
         <WorkspaceSidebarNav workspaceId={workspaceId} collapsed={collapsed} />
-        <WorkspaceSidebarFooter collapsed={collapsed} onToggle={toggle} />
+        <WorkspaceSidebarFooter
+          collapsed={collapsed}
+          onToggle={toggle}
+          onShowActivity={() => setShowActivity(true)}
+        />
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center px-6 py-3">
@@ -142,6 +164,9 @@ export function WorkspaceShell() {
           <Outlet />
         </div>
       </main>
+      {showActivity && (
+        <ActivityDialog onClose={() => setShowActivity(false)} />
+      )}
     </div>
   );
 }

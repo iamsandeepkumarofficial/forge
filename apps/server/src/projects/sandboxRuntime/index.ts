@@ -21,7 +21,10 @@ export {
   sessionPreviewHostnameForPort
 } from "./hostnames.js";
 export { createDockerSandboxRuntime } from "./dockerAdapter.js";
-export { createHostSandboxRuntime } from "./hostAdapter.js";
+export {
+  createHostSandboxRuntime,
+  listHostActiveSessionIds
+} from "./hostAdapter.js";
 export { createK8sSandboxRuntime, sandboxResourceName } from "./k8sAdapter.js";
 export {
   hostSandboxEnabled,

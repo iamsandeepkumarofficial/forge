@@ -1,4 +1,12 @@
-import { Calculator, Gamepad2, ImageIcon, Mail, RefreshCw, Settings } from "lucide-react";
+import {
+  Activity,
+  Calculator,
+  Gamepad2,
+  ImageIcon,
+  Mail,
+  RefreshCw,
+  Settings
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { EmptyStateImportPanels } from "./empty-state-import-panels.js";
 import { ForgeMarkLink } from "./forge-mark.js";
@@ -12,8 +20,9 @@ type ViewState = Omit<FullState, "importSectionRef">;
 export function DashboardEmptyStateView(options: {
   state: ViewState;
   onImportSectionRef: (el: HTMLDivElement | null) => void;
+  onShowActivity?: () => void;
 }) {
-  const { state: s, onImportSectionRef } = options;
+  const { state: s, onImportSectionRef, onShowActivity } = options;
   return (
     <div className="min-h-screen px-6 py-10">
       <div className="mx-auto max-w-3xl space-y-8">
@@ -24,13 +33,25 @@ export function DashboardEmptyStateView(options: {
               Let&apos;s build something new
             </h1>
           </div>
-          <Link
-            to="/settings"
-            aria-label="Settings"
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Settings className="size-5" />
-          </Link>
+          <div className="flex items-center gap-1">
+            {onShowActivity && (
+              <button
+                type="button"
+                aria-label="Activity"
+                onClick={onShowActivity}
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Activity className="size-5" />
+              </button>
+            )}
+            <Link
+              to="/settings"
+              aria-label="Settings"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Settings className="size-5" />
+            </Link>
+          </div>
         </div>
         <DashboardBuildPrompt state={s} />
         {s.error && (

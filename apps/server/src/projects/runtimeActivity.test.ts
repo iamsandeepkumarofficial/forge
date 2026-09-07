@@ -1,0 +1,81 @@
+import assert from "node:assert/strict";
+import { afterEach, before, describe, it, mock } from "node:test";
+import {
+  allocateSessionPort,
+  resetSessionPortRegistryForTests
+} from "./sandboxRuntime/sessionPortRegistry.js";
+import { resetSandboxRuntimeCache } from "./sandboxRuntime/resolve.js";
+
+describe("runtimeActivity", () => {
+  const prevRuntime = process.env.SANDBOX_RUNTIME;
+  let collectRuntimeActivity: typeof import("./runtimeActivity.js").collectRuntimeActivity;
+
+  before(async () => {
+    mock.module("../catalog/chatFeatureRepository.js", {
+      exports: {
+        ChatFeatureRepository: class {
+          async getBySessionId() {
+            return {
+              id: "chat-1",
+              sessionId: "sess-a",
+              projectId: "proj-1",
+              workspaceId: null,
+              title: "Demo"
+            };
+          }
+        }
+      }
+    });
+    mock.module("./sessionSandbox.js", {
+      exports: {
+        getSessionSandboxStatus: async () => ({
+          status: "ready",
+          running: true,
+          workingDir: "/workspace"
+        }),
+        destroySessionSandbox: async () => undefined
+      }
+    });
+    mock.module("./appRunner.js", {
+      exports: {
+        listAppStatuses: async () => ({
+          exists: true,
+          source: "launch",
+          apps: [
+            {
+              name: "web",
+              running: true,
+              url: "http://sess.preview.localhost:8081",
+              hostPort: 40001
+            }
+          ]
+        }),
+        stopApp: async () => undefined
+      }
+    });
+    mock.module("./sandboxIdle.js", {
+      exports: {
+        listRunningSandboxSessionIds: async () => []
+      }
+    });
+    ({ collectRuntimeActivity } = await import("./runtimeActivity.js"));
+  });
+
+  afterEach(() => {
+    if (prevRuntime === undefined) delete process.env.SANDBOX_RUNTIME;
+    else process.env.SANDBOX_RUNTIME = prevRuntime;
+    resetSandboxRuntimeCache();
+    resetSessionPortRegistryForTests();
+  });
+
+  it("collectRuntimeActivity includes port registry rows", async () => {
+    process.env.SANDBOX_RUNTIME = "host";
+    resetSandboxRuntimeCache();
+    await allocateSessionPort("sess-a", 40001);
+    const activity = await collectRuntimeActivity();
+    assert.equal(activity.runtimeKind, "host");
+    assert.ok(activity.ports.some((p) => p.sessionId === "sess-a"));
+    assert.ok(activity.sessions.some((s) => s.sessionId === "sess-a"));
+    assert.ok(activity.apps.some((a) => a.name === "web" && a.running));
+  });
+});

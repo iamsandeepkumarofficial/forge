@@ -16,6 +16,7 @@ describe("ProjectShell", () => {
     );
     expect(screen.getByRole("link", { name: "Chats" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Activity" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to projects" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Board" })).toBeNull();
     expect(screen.getByText("Chats body")).toBeTruthy();

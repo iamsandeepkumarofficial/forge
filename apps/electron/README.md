@@ -20,8 +20,11 @@ The preview pane is a `WebContentsView` (real Chromium document, not an iframe).
 
 ## Browser fallback
 
+Host-mode browser contrib without Electron still needs a running Postgres + Temporal pointing at `DATABASE_URL` / Temporal env (native under `~/.forge/` or compose). For classic Docker sandboxes:
+
 ```bash
 docker compose up -d
+# SANDBOX_RUNTIME=docker
 pnpm dev
 ```
 

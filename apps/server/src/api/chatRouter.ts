@@ -12,6 +12,11 @@ import {
   handlePutLlmSettings
 } from "./settingsHandlers.js";
 import {
+  handleGetRuntimeActivity,
+  handleStopRuntimeApp,
+  handleStopRuntimeSession
+} from "./runtimeActivityHandlers.js";
+import {
   handleListChatMessages,
   handleGetRunningTurn,
   handleStartChat,
@@ -31,6 +36,19 @@ export function createChatRouter(): Router {
   });
   router.put("/settings/llm", pocAuth, (req, res) => {
     return handlePutLlmSettings(req, res);
+  });
+  router.get("/runtime/activity", pocAuth, (req, res) => {
+    return handleGetRuntimeActivity(req, res);
+  });
+  router.post(
+    "/runtime/activity/sessions/:sessionId/stop",
+    pocAuth,
+    (req, res) => {
+      return handleStopRuntimeSession(req, res);
+    }
+  );
+  router.post("/runtime/activity/apps/stop", pocAuth, (req, res) => {
+    return handleStopRuntimeApp(req, res);
   });
   router.get("/models", pocAuth, (req, res) => {
     return handleModelsList(req, res);

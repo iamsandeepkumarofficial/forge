@@ -1,5 +1,7 @@
 import { NavLink, Outlet, Link, useParams } from "react-router-dom";
+import { useState } from "react";
 import {
+  Activity,
   ArrowLeft,
   MessageSquare,
   PanelLeftClose,
@@ -7,6 +9,7 @@ import {
   Settings
 } from "lucide-react";
 import { useCollapsibleSidebar } from "../hooks/use-collapsible-sidebar.js";
+import { ActivityDialog } from "./activity-dialog.js";
 import { ForgeMarkLink } from "./forge-mark.js";
 import { cn } from "@/lib/utils";
 
@@ -99,8 +102,9 @@ function ProjectSidebarNav(options: { projectId: string; collapsed: boolean }) {
 function ProjectSidebarFooter(options: {
   collapsed: boolean;
   onToggle: () => void;
+  onShowActivity: () => void;
 }) {
-  const { collapsed, onToggle } = options;
+  const { collapsed, onToggle, onShowActivity } = options;
   return (
     <div
       className={cn(
@@ -108,6 +112,13 @@ function ProjectSidebarFooter(options: {
         collapsed ? "flex flex-col items-center px-1.5 pb-2" : "px-3 pb-3"
       )}
     >
+      <SidebarIconButton
+        label="Activity"
+        collapsed={collapsed}
+        onClick={onShowActivity}
+      >
+        <Activity className="size-4 shrink-0" />
+      </SidebarIconButton>
       <SidebarIconButton
         label="Settings"
         collapsed={collapsed}
@@ -141,6 +152,7 @@ function ProjectSidebarFooter(options: {
 export function ProjectShell() {
   const { projectId } = useParams();
   const { collapsed, toggle } = useCollapsibleSidebar(SIDEBAR_KEY);
+  const [showActivity, setShowActivity] = useState(false);
   if (!projectId) {
     return <div className="p-8 text-muted-foreground">Missing workspace</div>;
   }
@@ -165,7 +177,11 @@ export function ProjectShell() {
           />
         </div>
         <ProjectSidebarNav projectId={projectId} collapsed={collapsed} />
-        <ProjectSidebarFooter collapsed={collapsed} onToggle={toggle} />
+        <ProjectSidebarFooter
+          collapsed={collapsed}
+          onToggle={toggle}
+          onShowActivity={() => setShowActivity(true)}
+        />
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center px-6 py-3">
@@ -182,6 +198,9 @@ export function ProjectShell() {
           <Outlet />
         </div>
       </main>
+      {showActivity && (
+        <ActivityDialog onClose={() => setShowActivity(false)} />
+      )}
     </div>
   );
 }
