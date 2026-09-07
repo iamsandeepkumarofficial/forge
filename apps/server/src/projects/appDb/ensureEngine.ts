@@ -111,6 +111,12 @@ export type EnsureEngineResult = {
 export async function ensureEngineRunning(
   engine: AppDbEngine
 ): Promise<EnsureEngineResult> {
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { ensureHostEngineRunning } = await import("./hostAppDb.js");
+    return ensureHostEngineRunning(engine);
+  }
   const network = sandboxNetworkName();
   await ensureNetwork(network);
 
@@ -151,6 +157,12 @@ export async function ensureEngineRunning(
 }
 
 export async function isEngineRunning(engine: AppDbEngine): Promise<boolean> {
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { isHostEngineRunning } = await import("./hostAppDb.js");
+    return isHostEngineRunning(engine);
+  }
   for (const name of [engine.containerName, ...engine.legacyContainerNames]) {
     if ((await containerState(name)) === "running") return true;
   }
@@ -160,6 +172,12 @@ export async function isEngineRunning(engine: AppDbEngine): Promise<boolean> {
 export async function resolveEngineContainer(
   engine: AppDbEngine
 ): Promise<string | null> {
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { isHostEngineRunning } = await import("./hostAppDb.js");
+    return (await isHostEngineRunning(engine)) ? `host:${engine.id}` : null;
+  }
   for (const name of [engine.containerName, ...engine.legacyContainerNames]) {
     const state = await containerState(name);
     if (state === "running" || state === "stopped") return name;
@@ -171,7 +189,15 @@ export async function waitForPostgresReady(options: {
   containerName: string;
   user: string;
   attempts?: number;
+  engine?: AppDbEngine;
 }): Promise<void> {
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host" && options.engine) {
+    const { waitForHostPostgresReady } = await import("./hostAppDb.js");
+    await waitForHostPostgresReady(options.engine, options.attempts);
+    return;
+  }
   const attempts = options.attempts ?? N_30;
   for (let i = 0; i < attempts; i++) {
     try {

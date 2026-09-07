@@ -1,3 +1,5 @@
+import { resolveSandboxRuntimeKind } from "../sandboxRuntime/resolve.js";
+
 const N_48 = 48;
 
 export type AppDbEngineId = "postgres" | "mongo";
@@ -77,11 +79,25 @@ export function connectionUrlFor(
   engine: AppDbEngine,
   database: string
 ): string {
-  const { user, password, networkAlias, containerPort, envKey } = engine;
+  const { user, password, networkAlias, containerPort, hostPort, envKey } =
+    engine;
+  const hostMode = resolveSandboxRuntimeKind() === "host";
+  const host = hostMode ? "127.0.0.1" : networkAlias;
+  const port = hostMode ? hostPort : containerPort;
   if (envKey === "DATABASE_URL") {
-    return `postgresql://${user}:${password}@${networkAlias}:${containerPort}/${database}`;
+    return `postgresql://${user}:${password}@${host}:${port}/${database}`;
   }
-  return `mongodb://${user}:${password}@${networkAlias}:${containerPort}/${database}?authSource=admin`;
+  if (hostMode) {
+    return `mongodb://${host}:${port}/${database}`;
+  }
+  return `mongodb://${user}:${password}@${host}:${port}/${database}?authSource=admin`;
+}
+
+export function appDbInjectionHint(): string {
+  if (resolveSandboxRuntimeKind() === "host") {
+    return "Forge injects `DATABASE_URL` / `MONGODB_URI` pointing at localhost app engines (`127.0.0.1:5434` / `127.0.0.1:27017`). Do not install database servers via the agent.";
+  }
+  return "Forge reuses one shared container per image on docker network `forge` (`postgres-apps` / `mongo-apps`) and injects `DATABASE_URL` / `MONGODB_URI`. Do not install database servers.";
 }
 
 export function detectEnginesFromFacts(facts: {

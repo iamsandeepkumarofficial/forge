@@ -10,6 +10,7 @@ import {
   workspaceDbName
 } from "./appDb/engines.js";
 import { ensureEngineRunning } from "./appDb/ensureEngine.js";
+import { resolveSandboxRuntimeKind } from "./sandboxRuntime/resolve.js";
 import {
   detachWorkspaceEngine,
   ensureAttachedWorkspaceEngines,
@@ -270,14 +271,15 @@ export function describeWorkspaceAppDatabases(
   const db = workspaceDbName(workspaceId);
   const pg = getAppDbEngine("postgres")!;
   const mongo = getAppDbEngine("mongo")!;
+  const hostMode = resolveSandboxRuntimeKind() === "host";
   return {
     enabled: appDbEnabled(),
-    network: "forge",
+    network: hostMode ? "localhost" : "forge",
     postgres: {
       provisioned: provisioned.postgres,
       database: db,
-      sandboxHost: pg.networkAlias,
-      sandboxPort: pg.containerPort,
+      sandboxHost: hostMode ? "127.0.0.1" : pg.networkAlias,
+      sandboxPort: hostMode ? pg.hostPort : pg.containerPort,
       hostAddress: "127.0.0.1",
       hostPort: pg.hostPort,
       injectedAs: "DATABASE_URL"
@@ -285,8 +287,8 @@ export function describeWorkspaceAppDatabases(
     mongo: {
       provisioned: provisioned.mongo,
       database: db,
-      sandboxHost: mongo.networkAlias,
-      sandboxPort: mongo.containerPort,
+      sandboxHost: hostMode ? "127.0.0.1" : mongo.networkAlias,
+      sandboxPort: hostMode ? mongo.hostPort : mongo.containerPort,
       hostAddress: "127.0.0.1",
       hostPort: mongo.hostPort,
       injectedAs: "MONGODB_URI"

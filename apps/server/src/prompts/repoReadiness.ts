@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { appDbInjectionHint } from "../projects/appDb/engines.js";
 
 export type LaunchAppPeek = {
   name: string;
@@ -14,7 +15,7 @@ export type LaunchReadiness = {
   ready: boolean;
   source: "launch" | "legacy" | "none";
   apps: LaunchAppPeek[];
-  
+
   members?: Array<{
     repo: string;
     ready: boolean;
@@ -89,7 +90,6 @@ export function loadLaunchReadiness(workingDir: string): LaunchReadiness {
   };
 }
 
-
 export function loadWorkspaceLaunchReadiness(options: {
   sessionRoot: string;
   memberRepos: string[];
@@ -102,7 +102,6 @@ export function loadWorkspaceLaunchReadiness(options: {
     memberRepos
   });
 }
-
 
 export function readinessFromForgeApps(options: {
   apps: Array<{
@@ -179,7 +178,7 @@ function formatAppList(apps: LaunchAppPeek[]): string {
 
 export function formatRepoSetupBlock(options: {
   readiness: LaunchReadiness;
-  
+
   memberRepos?: string[];
 }): string {
   const { readiness, memberRepos } = options;
@@ -197,7 +196,7 @@ export function formatRepoSetupBlock(options: {
     "## Starting apps (mandatory)",
     "- Identify each member's stack from inventory / shadows, then `invoke_skill` (`nodejs-app`, `python-app`, …). Skills own install and launch mapping — use `run_terminal` for installs/toolchains as the skill directs (`ask_user` before installing a missing toolchain).",
     "- Confirm dependencies are installed before preview (e.g. `node_modules` for Node, venv/site-packages for Python). Dev servers stay forbidden on `run_terminal`.",
-    "- Fill empty env via `ask_user` (form/mcq widget) then `upsert_workspace_parameter`. For Postgres/Mongo call `ask_user` to confirm, then `provision_app_engine` with `userApproved: true`. Do not ask only in prose. Forge reuses one shared container per image on docker network `forge` and injects `DATABASE_URL` / `MONGODB_URI`. Run migrations via `run_terminal` **before** starting the API. Do **not** install database servers.",
+    `- Fill empty env via \`ask_user\` (form/mcq widget) then \`upsert_workspace_parameter\`. For Postgres/Mongo call \`ask_user\` to confirm, then \`provision_app_engine\` with \`userApproved: true\`. Do not ask only in prose. ${appDbInjectionHint()} Run migrations via \`run_terminal\` **before** starting the API.`,
     "- To run a web/api app: `upsert_launch_app` (if missing) then `preview_start` (network plane, ports 3000–3009). Do **not** use `run_terminal` for `npm`/`yarn`/`pnpm` `dev`/`start` or long-running Python servers — it times out.",
     "- Start **api/backends before web/frontends** when `dependsOn` or health says so.",
     "- For Node, prefer the lockfile package manager (`yarn` if `yarn.lock`, `pnpm` if `pnpm-lock.yaml`, else `npm`). For other stacks follow the invoked skill.",

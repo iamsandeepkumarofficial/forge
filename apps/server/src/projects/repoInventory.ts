@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { appDbInjectionHint } from "./appDb/engines.js";
 import {
   readRepoFactsFromHost,
   type PackageManager,
@@ -125,9 +126,7 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
       `- Suggested skills: ${inventory.suggestedSkills.map((s) => `\`${s}\``).join(", ")} (invoke_skill to load)`
     );
   }
-  lines.push(
-    "- Forge injects `DATABASE_URL` and `MONGODB_URI` (network plane: `postgres-apps` / `mongo-apps` on docker network `forge`). Do not install database servers."
-  );
+  lines.push(`- ${appDbInjectionHint()}`);
   return lines.join("\n");
 }
 

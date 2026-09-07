@@ -37,7 +37,18 @@ async function createPostgresDatabase(options: {
   database: string;
 }): Promise<void> {
   const { engine, containerName, database } = options;
-  await waitForPostgresReady({ containerName, user: engine.user });
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { createHostPostgresDatabase } = await import("./hostAppDb.js");
+    await createHostPostgresDatabase({ engine, database });
+    return;
+  }
+  await waitForPostgresReady({
+    containerName,
+    user: engine.user,
+    engine
+  });
   try {
     await docker([
       "exec",
@@ -64,6 +75,12 @@ async function postgresDatabaseExists(options: {
   database: string;
 }): Promise<boolean> {
   const { engine, containerName, database } = options;
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { hostPostgresDatabaseExists } = await import("./hostAppDb.js");
+    return hostPostgresDatabaseExists({ engine, database });
+  }
   try {
     const { stdout } = await docker([
       "exec",
@@ -88,6 +105,13 @@ async function dropPostgresDatabase(options: {
   database: string;
 }): Promise<void> {
   const { engine, containerName, database } = options;
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { dropHostPostgresDatabase } = await import("./hostAppDb.js");
+    await dropHostPostgresDatabase({ engine, database });
+    return;
+  }
   await docker([
     "exec",
     containerName,
@@ -107,6 +131,13 @@ async function ensureMongoReady(
   engine: AppDbEngine,
   containerName: string
 ): Promise<void> {
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { ensureHostMongoReady } = await import("./hostAppDb.js");
+    await ensureHostMongoReady(engine);
+    return;
+  }
   for (let i = 0; i < N_30; i++) {
     try {
       await docker([

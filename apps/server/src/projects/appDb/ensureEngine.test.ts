@@ -13,6 +13,7 @@ describe("ensureEngine", () => {
   let imagePresent = true;
 
   before(async () => {
+    process.env.SANDBOX_RUNTIME = "docker";
     mock.module("node:child_process", {
       namedExports: {
         execFile: (
