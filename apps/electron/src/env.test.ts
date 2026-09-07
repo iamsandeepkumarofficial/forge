@@ -54,6 +54,14 @@ describe("env", () => {
     assert.equal(env.OPENAI_COMPATIBLE_BASE_URL, "http://llm");
   });
 
+  it("materializeHostRuntimeEnv sets host catalog env", async () => {
+    const { materializeHostRuntimeEnv } = await import("./env.js");
+    const env = materializeHostRuntimeEnv();
+    assert.equal(env.SANDBOX_RUNTIME, "host");
+    assert.equal(env.FORGE_DESKTOP, "1");
+    assert.match(env.DATABASE_URL ?? "", /5433/);
+  });
+
   it("mergeEnvExtras lets later parts win", () => {
     const merged = mergeEnvExtras([{ A: "1", B: "2" }, { B: "3" }]);
     assert.deepEqual(merged, { A: "1", B: "3" });

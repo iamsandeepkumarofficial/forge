@@ -7,8 +7,15 @@ import {
   preflightDocker,
   waitForPostgres
 } from "./docker.js";
-import { materializeLlmEnv, materializePreviewEnv, mergeEnvExtras } from "./env.js";
+import {
+  materializeHostRuntimeEnv,
+  materializeLlmEnv,
+  materializePreviewEnv,
+  mergeEnvExtras
+} from "./env.js";
+import { isHostDesktopMode } from "./hostMode.js";
 import { waitForHttp } from "./httpWait.js";
+import { ensureNativeStack, type NativeStackHandle } from "./nativeStack.js";
 import { killProcessTree, spawnLogged } from "./processTree.js";
 import { findRepoRoot } from "./repoRoot.js";
 import { HEALTH_ATTEMPTS, TOOL_PLANE_HEALTH } from "./types.js";
@@ -21,11 +28,13 @@ export type SupervisorDeps = {
   ensureStack?: (root: string) => Promise<void>;
   spawnHarness?: (root: string) => ChildProcess[];
   waitHealth?: () => Promise<void>;
+  hostMode?: boolean;
 };
 
 export class Supervisor {
   private readonly children: ChildProcess[] = [];
   private started = false;
+  private native: NativeStackHandle | null = null;
   private readonly deps: SupervisorDeps;
 
   constructor(deps: SupervisorDeps = {}) {
@@ -48,12 +57,16 @@ export class Supervisor {
       return "Infra started (postgres, temporal, server, orchestrator; preview in-process)";
     } catch (err) {
       this.killChildren();
+      this.native?.stop();
+      this.native = null;
       throw err;
     }
   }
 
   async stopInfra(): Promise<string> {
     this.killChildren();
+    this.native?.stop();
+    this.native = null;
     this.started = false;
     this.maybeStopCompose();
     return "Infra stopped";
@@ -67,15 +80,31 @@ export class Supervisor {
     return this.deps.findRoot?.() ?? findRepoRoot({});
   }
 
-  private prepareStack(root: string): Promise<void> {
-    if (this.deps.ensureStack) return this.deps.ensureStack(root);
-    return defaultEnsureStack(root);
+  private useHostMode(): boolean {
+    return this.deps.hostMode ?? isHostDesktopMode();
+  }
+
+  private async prepareStack(root: string): Promise<void> {
+    if (this.deps.ensureStack) {
+      await this.deps.ensureStack(root);
+      return;
+    }
+    if (this.useHostMode()) {
+      this.native = await ensureNativeStack(root);
+      this.children.push(...this.native.children);
+      return;
+    }
+    await dockerEnsureStack(root);
   }
 
   private startHarness(root: string): void {
     const spawned = this.deps.spawnHarness
       ? this.deps.spawnHarness(root)
-      : defaultSpawnHarness(root, this.cfg());
+      : defaultSpawnHarness({
+          root,
+          config: this.cfg(),
+          hostMode: this.useHostMode()
+        });
     this.children.push(...spawned);
   }
 
@@ -99,6 +128,7 @@ export class Supervisor {
   }
 
   private maybeStopCompose(): void {
+    if (this.useHostMode()) return;
     if (!stopComposeOnQuit(this.cfg())) return;
     const stop = this.deps.stopCompose ?? composeStop;
     try {
@@ -109,21 +139,34 @@ export class Supervisor {
   }
 }
 
-async function defaultEnsureStack(root: string): Promise<void> {
+async function dockerEnsureStack(root: string): Promise<void> {
   preflightDocker();
   composeUpInfra(root);
   await waitForPostgres();
   ensureSandboxImage(root);
 }
 
-function defaultSpawnHarness(root: string, config: ForgeConfig): ChildProcess[] {
-  const env = mergeEnvExtras([
-    materializeLlmEnv(config),
-    materializePreviewEnv()
-  ]);
+function defaultSpawnHarness(options: {
+  root: string;
+  config: ForgeConfig;
+  hostMode: boolean;
+}): ChildProcess[] {
+  const parts = [materializeLlmEnv(options.config), materializePreviewEnv()];
+  if (options.hostMode) parts.push(materializeHostRuntimeEnv());
+  const env = mergeEnvExtras(parts);
   return [
-    spawnPnpm({ root, filter: "@forge/server", script: "dev", env }),
-    spawnPnpm({ root, filter: "@forge/orchestrator", script: "dev", env })
+    spawnPnpm({
+      root: options.root,
+      filter: "@forge/server",
+      script: "dev",
+      env
+    }),
+    spawnPnpm({
+      root: options.root,
+      filter: "@forge/orchestrator",
+      script: "dev",
+      env
+    })
   ];
 }
 

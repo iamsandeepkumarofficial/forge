@@ -1,4 +1,5 @@
 import type { ForgeConfig } from "./types.js";
+import { NATIVE_DATABASE_URL, NATIVE_TEMPORAL_PORT } from "./hostMode.js";
 
 export function defaultConfig(): ForgeConfig {
   return {
@@ -14,6 +15,17 @@ export function materializePreviewEnv(): Record<string, string> {
     PREVIEW_URL_SCHEME: "http",
     PREVIEW_PLANE_URL: "http://127.0.0.1:8081",
     PREVIEW_PUBLIC_ORIGIN: "http://127.0.0.1:8081"
+  };
+}
+
+export function materializeHostRuntimeEnv(): Record<string, string> {
+  return {
+    FORGE_DESKTOP: "1",
+    SANDBOX_RUNTIME: "host",
+    DATABASE_URL: NATIVE_DATABASE_URL,
+    TEMPORAL_ADDRESS: `127.0.0.1:${NATIVE_TEMPORAL_PORT}`,
+    TEMPORAL_NAMESPACE: "default",
+    TEMPORAL_TASK_QUEUE: "forge-orchestrator"
   };
 }
 
@@ -37,14 +49,19 @@ export function mergeEnvExtras(
   return out;
 }
 
-function fromNamedKeys(llm: NonNullable<ForgeConfig["llm"]>): Record<string, string> {
+function fromNamedKeys(
+  llm: NonNullable<ForgeConfig["llm"]>
+): Record<string, string> {
   const out: Record<string, string> = {};
   if (nonEmpty(llm.openaiApiKey)) out.OPENAI_API_KEY = llm.openaiApiKey;
-  if (nonEmpty(llm.anthropicApiKey)) out.ANTHROPIC_API_KEY = llm.anthropicApiKey;
+  if (nonEmpty(llm.anthropicApiKey))
+    out.ANTHROPIC_API_KEY = llm.anthropicApiKey;
   return out;
 }
 
-function fromGenericKey(llm: NonNullable<ForgeConfig["llm"]>): Record<string, string> {
+function fromGenericKey(
+  llm: NonNullable<ForgeConfig["llm"]>
+): Record<string, string> {
   if (!nonEmpty(llm.apiKey)) return {};
   const provider = (llm.provider ?? "openai-compatible").toLowerCase();
   if (provider === "anthropic") return { ANTHROPIC_API_KEY: llm.apiKey };
