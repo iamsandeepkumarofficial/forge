@@ -1,3 +1,4 @@
+import path from "node:path";
 import { dockerExec } from "./sandboxExec.js";
 
 const N_60 = 60;
@@ -15,18 +16,36 @@ export function sanitizeJobName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, N_60) || "job";
 }
 
+function isHostRuntime(): boolean {
+  return (
+    process.env.SANDBOX_RUNTIME?.trim().toLowerCase() === "host" ||
+    (process.env.FORGE_DESKTOP?.trim() === "1" &&
+      !process.env.SANDBOX_RUNTIME?.trim())
+  );
+}
+
 export function jobPidFile(options: {
   kind: BackgroundJobKind;
   name: string;
+  workspaceRoot?: string;
 }): string {
-  return `/tmp/forge-${options.kind}-${sanitizeJobName(options.name)}.pid`;
+  const base = `forge-${options.kind}-${sanitizeJobName(options.name)}.pid`;
+  if (options.workspaceRoot && isHostRuntime()) {
+    return path.join(options.workspaceRoot, ".forge-runtime", base);
+  }
+  return `/tmp/${base}`;
 }
 
 export function jobLogFile(options: {
   kind: BackgroundJobKind;
   name: string;
+  workspaceRoot?: string;
 }): string {
-  return `/tmp/forge-${options.kind}-${sanitizeJobName(options.name)}.log`;
+  const base = `forge-${options.kind}-${sanitizeJobName(options.name)}.log`;
+  if (options.workspaceRoot && isHostRuntime()) {
+    return path.join(options.workspaceRoot, ".forge-runtime", base);
+  }
+  return `/tmp/${base}`;
 }
 
 export function startJobScript(): string {
@@ -39,6 +58,12 @@ export function startJobScript(): string {
   ].join("; ");
 }
 
+async function resolveKind(): Promise<"host" | "docker" | "kubernetes"> {
+  const { resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  return resolveSandboxRuntimeKind();
+}
+
 export async function startBackgroundJob(options: {
   containerName: string;
   kind: BackgroundJobKind;
@@ -46,19 +71,35 @@ export async function startBackgroundJob(options: {
   cwd: string;
   command: string;
   extraEnv?: Record<string, string>;
+  sessionId?: string;
 }): Promise<void> {
+  const kind = await resolveKind();
+  const workspaceRoot = kind === "host" ? options.containerName : undefined;
   const env: Record<string, string> = {
     APPDIR: options.cwd,
-    PID: jobPidFile({ kind: options.kind, name: options.name }),
-    LOG: jobLogFile({ kind: options.kind, name: options.name }),
+    PID: jobPidFile({
+      kind: options.kind,
+      name: options.name,
+      workspaceRoot
+    }),
+    LOG: jobLogFile({
+      kind: options.kind,
+      name: options.name,
+      workspaceRoot
+    }),
     CMD: options.command,
-    HOST: "0.0.0.0",
+    HOST: kind === "host" ? "127.0.0.1" : "0.0.0.0",
     FORGE_PUBLISHED_APP_PORTS: "3000-3009",
     ...options.extraEnv
   };
+  const argv =
+    kind === "host"
+      ? ["sh", "-c", startJobScript()]
+      : ["setsid", "sh", "-c", startJobScript()];
   await dockerExec({
     container: options.containerName,
-    argv: ["setsid", "sh", "-c", startJobScript()],
+    sessionId: options.sessionId,
+    argv,
     env,
     detach: true
   });
@@ -68,10 +109,18 @@ export async function stopBackgroundJob(options: {
   containerName: string;
   kind: BackgroundJobKind;
   name: string;
+  sessionId?: string;
 }): Promise<void> {
-  const pf = jobPidFile({ kind: options.kind, name: options.name });
+  const kind = await resolveKind();
+  const workspaceRoot = kind === "host" ? options.containerName : undefined;
+  const pf = jobPidFile({
+    kind: options.kind,
+    name: options.name,
+    workspaceRoot
+  });
   await dockerExec({
     container: options.containerName,
+    sessionId: options.sessionId,
     argv: [
       "sh",
       "-c",
@@ -79,7 +128,6 @@ export async function stopBackgroundJob(options: {
     ]
   });
 }
-
 
 export function freeListeningPortScript(port: number): string {
   const p = Math.floor(port);
@@ -121,11 +169,16 @@ done
 export async function freeListeningPort(options: {
   containerName: string;
   port: number;
+  sessionId?: string;
 }): Promise<void> {
   const port = Math.floor(options.port);
   if (!Number.isFinite(port) || port < 1) return;
+  if ((await resolveKind()) === "host") {
+    return;
+  }
   await dockerExec({
     container: options.containerName,
+    sessionId: options.sessionId,
     argv: ["sh", "-c", freeListeningPortScript(port)]
   }).catch(() => undefined);
 }
@@ -134,10 +187,18 @@ export async function isBackgroundJobRunning(options: {
   containerName: string;
   kind: BackgroundJobKind;
   name: string;
+  sessionId?: string;
 }): Promise<boolean> {
-  const pf = jobPidFile({ kind: options.kind, name: options.name });
+  const kind = await resolveKind();
+  const workspaceRoot = kind === "host" ? options.containerName : undefined;
+  const pf = jobPidFile({
+    kind: options.kind,
+    name: options.name,
+    workspaceRoot
+  });
   const r = await dockerExec({
     container: options.containerName,
+    sessionId: options.sessionId,
     argv: [
       "sh",
       "-c",
@@ -152,11 +213,19 @@ export async function readBackgroundJobLogs(options: {
   kind: BackgroundJobKind;
   name: string;
   tail?: number;
+  sessionId?: string;
 }): Promise<string> {
+  const kind = await resolveKind();
+  const workspaceRoot = kind === "host" ? options.containerName : undefined;
   const tail = Math.max(1, Math.min(N_2000, options.tail ?? N_300));
-  const lf = jobLogFile({ kind: options.kind, name: options.name });
+  const lf = jobLogFile({
+    kind: options.kind,
+    name: options.name,
+    workspaceRoot
+  });
   const r = await dockerExec({
     container: options.containerName,
+    sessionId: options.sessionId,
     argv: ["sh", "-c", `tail -n ${tail} "${lf}" 2>/dev/null`]
   });
   return r.stdout;
@@ -168,6 +237,7 @@ export async function waitUntilJobRunning(options: {
   name: string;
   tries?: number;
   intervalMs?: number;
+  sessionId?: string;
 }): Promise<boolean> {
   const tries = options.tries ?? START_POLL_TRIES;
   const intervalMs = options.intervalMs ?? N_200;
@@ -176,7 +246,8 @@ export async function waitUntilJobRunning(options: {
       await isBackgroundJobRunning({
         containerName: options.containerName,
         kind: options.kind,
-        name: options.name
+        name: options.name,
+        sessionId: options.sessionId
       })
     ) {
       return true;
@@ -191,13 +262,18 @@ export async function waitUntilJobRunning(options: {
 export async function isTcpListening(options: {
   containerName: string;
   port: number;
+  sessionId?: string;
 }): Promise<boolean> {
   const port = Math.floor(options.port);
   if (!Number.isFinite(port) || port < 1) {
     return false;
   }
+  if ((await resolveKind()) === "host") {
+    return isHostTcpListening(port);
+  }
   const r = await dockerExec({
     container: options.containerName,
+    sessionId: options.sessionId,
     argv: [
       "bash",
       "-c",
@@ -212,6 +288,7 @@ export async function waitUntilTcpListening(options: {
   port: number;
   tries?: number;
   intervalMs?: number;
+  sessionId?: string;
 }): Promise<boolean> {
   const tries = options.tries ?? TCP_READY_TRIES;
   const intervalMs = options.intervalMs ?? TCP_READY_INTERVAL_MS;
@@ -219,7 +296,8 @@ export async function waitUntilTcpListening(options: {
     if (
       await isTcpListening({
         containerName: options.containerName,
-        port: options.port
+        port: options.port,
+        sessionId: options.sessionId
       })
     ) {
       return true;
@@ -230,7 +308,6 @@ export async function waitUntilTcpListening(options: {
   }
   return false;
 }
-
 
 export async function isHostTcpListening(port: number): Promise<boolean> {
   const net = await import("node:net");

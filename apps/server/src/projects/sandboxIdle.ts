@@ -50,6 +50,15 @@ export function isPastIdleTtl(options: {
 }
 
 export async function listRunningSandboxSessionIds(): Promise<string[]> {
+  const { resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { listSessionPortAllocations } =
+      await import("./sandboxRuntime/sessionPortRegistry.js");
+    const fromPorts = listSessionPortAllocations().map((r) => r.sessionId);
+    if (fromPorts.length > 0) return fromPorts;
+    return [];
+  }
   const { stdout } = await docker([
     "ps",
     "--filter",
@@ -75,6 +84,15 @@ export async function suspendSessionSandbox(sessionId: string): Promise<void> {
       `[sandboxIdle] revoke preview ${sessionId}: ${err instanceof Error ? err.message : String(err)}`
     );
   }
+  const { resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    const { getSandboxRuntime } = await import("./sandboxRuntime/resolve.js");
+    await getSandboxRuntime()
+      .destroySession(sessionId)
+      .catch(() => undefined);
+    return;
+  }
   await docker(["stop", sandboxContainerName(sessionId)]).catch(
     () => undefined
   );
@@ -93,6 +111,11 @@ export type IdleSweepDeps = {
 export async function sandboxStartedAt(
   sessionId: string
 ): Promise<Date | null> {
+  const { resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    return null;
+  }
   try {
     const { stdout } = await docker([
       "inspect",

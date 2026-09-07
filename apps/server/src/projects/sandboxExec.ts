@@ -24,9 +24,11 @@ export interface ExecOptions {
 export type DockerExecInput = {
   container: string;
   argv: string[];
+  sessionId?: string;
 } & ExecOptions;
 const DEFAULT_MAX_BUFFER = N_16 * N_1024 * N_1024;
-export function dockerExec(input: DockerExecInput): Promise<ExecResult> {
+
+export function dockerExecDirect(input: DockerExecInput): Promise<ExecResult> {
   const { container, argv, ...opts } = input;
   const args = ["exec"];
   if (opts.detach) {
@@ -78,14 +80,37 @@ export function dockerExec(input: DockerExecInput): Promise<ExecResult> {
     }
   });
 }
+
+export async function dockerExec(input: DockerExecInput): Promise<ExecResult> {
+  const { container, argv, sessionId, ...opts } = input;
+  const { getSandboxRuntime, resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  const kind = resolveSandboxRuntimeKind();
+  return getSandboxRuntime().exec({
+    handle: {
+      sessionId: sessionId ?? container,
+      runtime: kind,
+      ref: container
+    },
+    cmd: argv,
+    ...opts
+  });
+}
+
 export function shInSandbox(
   options: {
     container: string;
     script: string;
+    sessionId?: string;
   } & ExecOptions
 ): Promise<ExecResult> {
-  const { container, script, ...opts } = options;
-  return dockerExec({ container, argv: ["sh", "-c", script], ...opts });
+  const { container, script, sessionId, ...opts } = options;
+  return dockerExec({
+    container,
+    sessionId,
+    argv: ["sh", "-c", script],
+    ...opts
+  });
 }
 export function resolveWorkspacePath(
   relative: string,
@@ -133,17 +158,11 @@ export async function runtimeExec(
   } & ExecOptions
 ): Promise<ExecResult> {
   const { sessionId, argv, ...opts } = input;
-  const { getSandboxRuntime, resolveSandboxRuntimeKind } =
-    await import("./sandboxRuntime/resolve.js");
-  const runtime = getSandboxRuntime();
   const info = await resolveSandbox(sessionId);
-  return runtime.exec({
-    handle: {
-      sessionId,
-      runtime: resolveSandboxRuntimeKind(),
-      ref: info.hostWorkingDir ?? info.containerName
-    },
-    cmd: argv,
+  return dockerExec({
+    container: info.containerName,
+    sessionId,
+    argv,
     ...opts
   });
 }
@@ -151,14 +170,20 @@ export async function pathExistsInSandbox(
   container: string,
   absPath: string
 ): Promise<boolean> {
-  const r = await dockerExec({ container, argv: ["test", "-e", absPath] });
+  const r = await dockerExec({
+    container,
+    argv: ["test", "-e", absPath]
+  });
   return r.code === 0;
 }
 export async function readFileFromSandbox(
   container: string,
   absPath: string
 ): Promise<string | null> {
-  const r = await dockerExec({ container, argv: ["cat", "--", absPath] });
+  const r = await dockerExec({
+    container,
+    argv: ["cat", "--", absPath]
+  });
   if (r.code !== 0) {
     return null;
   }
@@ -168,10 +193,12 @@ export async function writeFileToSandbox(options: {
   container: string;
   absPath: string;
   content: string;
+  sessionId?: string;
 }): Promise<void> {
-  const { container, absPath, content } = options;
+  const { container, absPath, content, sessionId } = options;
   const r = await shInSandbox({
     container,
+    sessionId,
     script: 'mkdir -p "$(dirname "$P")" && cat > "$P"',
     input: content,
     env: { P: absPath }

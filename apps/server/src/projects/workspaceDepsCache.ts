@@ -19,6 +19,11 @@ export function workspaceDepsVolumeName(workspaceId: string): string {
 export async function ensureWorkspaceDepsVolume(
   workspaceId: string
 ): Promise<string> {
+  const { resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    return workspaceDepsVolumeName(workspaceId);
+  }
   const name = workspaceDepsVolumeName(workspaceId);
   try {
     await execFileAsync("docker", ["volume", "inspect", name]);

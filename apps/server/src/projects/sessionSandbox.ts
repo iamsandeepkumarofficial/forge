@@ -1,5 +1,3 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
 import { ProjectRepository } from "../catalog/projectRepository.js";
 import { WorkspaceRepository } from "../catalog/workspaceRepository.js";
@@ -32,8 +30,6 @@ export type { ProvisionSessionSource } from "./sessionSandbox/provision.js";
 
 const N_24 = 24;
 const N_40 = 40;
-
-const execFileAsync = promisify(execFile);
 
 export {
   allocateReservedAppPort,
@@ -98,6 +94,11 @@ export async function getSessionRepoInfo(
     throw new Error(`No chat/feature found for session: ${sessionId}`);
   }
 
+  const { resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  const kind = resolveSandboxRuntimeKind();
+  const dockerName = sandboxContainerName(sessionId);
+
   if (chat.workspaceId) {
     const workspaceRepo = new WorkspaceRepository();
     const members = await workspaceRepo.listMembers(chat.workspaceId);
@@ -110,8 +111,9 @@ export async function getSessionRepoInfo(
         hostWorktrees[m.repoName] = worktreeWorkDir(project.id, sessionId);
       }
     }
+    const hostRef = Object.values(hostWorktrees)[0];
     return {
-      containerName: sandboxContainerName(sessionId),
+      containerName: kind === "host" && hostRef ? hostRef : dockerName,
       repoDir: members[0]?.repoName || "repo",
       workingDir: WORKSPACE_MOUNT,
       sessionRoot: WORKSPACE_MOUNT,
@@ -135,7 +137,8 @@ export async function getSessionRepoInfo(
       ? worktreeWorkDir(project.id, sessionId)
       : undefined;
   return {
-    containerName: sandboxContainerName(sessionId),
+    containerName:
+      kind === "host" && hostWorkingDir ? hostWorkingDir : dockerName,
     repoDir,
     workingDir: WORKSPACE_MOUNT,
     sessionRoot: WORKSPACE_MOUNT,
@@ -147,41 +150,60 @@ export async function getSessionSandboxStatus(
   sessionId: string
 ): Promise<SandboxStatus> {
   const workingDir = WORKSPACE_MOUNT;
-  const containerName = sandboxContainerName(sessionId);
-  let containerId: string | undefined;
-  let running: boolean;
-  try {
-    const { stdout } = await execFileAsync("docker", [
-      "inspect",
-      "-f",
-      "{{.Id}} {{.State.Running}}",
-      containerName
-    ]);
-    const [id, isRunning] = stdout.trim().split(/\s+/);
-    containerId = id;
-    running = isRunning === "true";
-  } catch {
-    return { status: "absent", workingDir, running: false };
+  const { getSandboxRuntime, resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  const runtime = getSandboxRuntime();
+  const status = await runtime.getStatus(sessionId);
+  if (status.status === "absent" || !status.running) {
+    return {
+      status: "absent",
+      workingDir: status.workingDir ?? workingDir,
+      running: false,
+      ...(status.ref ? { containerId: status.ref } : {})
+    };
   }
-  let empty = true;
-  if (running) {
-    try {
-      const info = await getSessionRepoInfo(sessionId);
-      const mounts = mountsForSandboxReadyCheck(info.worktrees);
-      const checks = await Promise.all(
-        mounts.map((mount) => isRepoInitializedAt(containerName, mount))
-      );
-      empty = !checks.some(Boolean);
-    } catch {
-      empty = !(await isRepoInitialized(containerName));
-    }
+
+  if (resolveSandboxRuntimeKind() === "host") {
+    const info = await getSessionRepoInfo(sessionId);
+    const root = info.hostWorkingDir ?? info.containerName;
+    const empty = await hostWorkspaceLooksEmpty(root);
+    return {
+      status: empty ? "empty" : "ready",
+      workingDir,
+      containerId: status.ref ?? root,
+      running: true
+    };
+  }
+
+  const containerName = sandboxContainerName(sessionId);
+  let empty: boolean;
+  try {
+    const info = await getSessionRepoInfo(sessionId);
+    const mounts = mountsForSandboxReadyCheck(info.worktrees);
+    const checks = await Promise.all(
+      mounts.map((mount) => isRepoInitializedAt(containerName, mount))
+    );
+    empty = !checks.some(Boolean);
+  } catch {
+    empty = !(await isRepoInitialized(containerName));
   }
   return {
     status: empty ? "empty" : "ready",
     workingDir,
-    containerId,
-    running
+    containerId: status.ref ?? containerName,
+    running: true
   };
+}
+
+async function hostWorkspaceLooksEmpty(root: string): Promise<boolean> {
+  try {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    await fs.access(path.join(root, ".git"));
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 export function mountsForSandboxReadyCheck(

@@ -314,6 +314,14 @@ async function ensurePreviewHostPort(options: {
   if (await waitUntilHostTcpListening({ port: hostPort, tries: 8 })) {
     return true;
   }
+  const { resolveSandboxRuntimeKind } =
+    await import("../sandboxRuntime/resolve.js");
+  if (resolveSandboxRuntimeKind() === "host") {
+    console.warn(
+      `[runApp] session ${sessionId} app ${app.name}: host port ${hostPort} not reachable (host mode; no Docker port repair)`
+    );
+    return false;
+  }
   console.warn(
     `[runApp] session ${sessionId} app ${app.name}: host port ${hostPort} not reachable; repairing Docker port bindings`
   );

@@ -58,13 +58,17 @@ export async function sandboxSessionCreateOpts(options: {
   let image: string | undefined;
   let namedVolumes: NamedVolumeMount[] | undefined;
   if (workspaceId) {
+    const { resolveSandboxRuntimeKind } =
+      await import("../sandboxRuntime/resolve.js");
     const { selectSandboxImageForWorkspace } =
       await import("../sandboxImageSelect.js");
     image = await selectSandboxImageForWorkspace(workspaceId);
-    const { ensureWorkspaceDepsVolume, DEPS_CACHE_MOUNT } =
-      await import("../workspaceDepsCache.js");
-    const volumeName = await ensureWorkspaceDepsVolume(workspaceId);
-    namedVolumes = [{ volumeName, containerPath: DEPS_CACHE_MOUNT }];
+    if (resolveSandboxRuntimeKind() !== "host") {
+      const { ensureWorkspaceDepsVolume, DEPS_CACHE_MOUNT } =
+        await import("../workspaceDepsCache.js");
+      const volumeName = await ensureWorkspaceDepsVolume(workspaceId);
+      namedVolumes = [{ volumeName, containerPath: DEPS_CACHE_MOUNT }];
+    }
   }
   return {
     bindMounts,

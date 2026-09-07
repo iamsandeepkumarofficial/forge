@@ -95,6 +95,27 @@ function scrubEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
   return out;
 }
 
+function mapEnvPaths(env: NodeJS.ProcessEnv, root: string): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = { ...env };
+  for (const key of Object.keys(out)) {
+    const v = out[key];
+    if (typeof v === "string") {
+      out[key] = mapWorkspaceArg(v, root);
+    }
+  }
+  return out;
+}
+
+function mapWorkspaceArg(arg: string, root: string): string {
+  if (arg === WORKSPACE_MOUNT || arg.startsWith(`${WORKSPACE_MOUNT}/`)) {
+    return path.join(
+      root,
+      arg.slice(WORKSPACE_MOUNT.length).replace(/^\//, "")
+    );
+  }
+  return arg;
+}
+
 function mapWorkspacePath(cwd: string | undefined, root: string): string {
   if (!cwd) return root;
   if (cwd === WORKSPACE_MOUNT || cwd.startsWith(`${WORKSPACE_MOUNT}/`)) {
@@ -111,10 +132,11 @@ function hostExec(input: {
   argv: string[];
   opts: ExecOpts;
 }): Promise<ExecResult> {
-  const { root, argv, opts } = input;
+  const { root, opts } = input;
+  const argv = input.argv.map((a) => mapWorkspaceArg(a, root));
   const cwd = mapWorkspacePath(opts.cwd, root);
   const maxBuffer = opts.maxBuffer ?? DEFAULT_MAX_BUFFER;
-  const env = scrubEnv(opts.env);
+  const env = mapEnvPaths(scrubEnv(opts.env), root);
   return new Promise<ExecResult>((resolve, reject) => {
     const child = spawn(argv[0]!, argv.slice(1), {
       cwd,
@@ -238,6 +260,37 @@ async function hostPublishPreviewPort(
   };
 }
 
+async function killHostRuntimePids(root: string): Promise<void> {
+  const runtimeDir = path.join(root, ".forge-runtime");
+  let entries: string[];
+  try {
+    entries = await fs.readdir(runtimeDir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (!name.endsWith(".pid")) continue;
+    try {
+      const raw = await fs.readFile(path.join(runtimeDir, name), "utf8");
+      const pid = Number(raw.trim());
+      if (!Number.isFinite(pid) || pid <= 0) continue;
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch {
+        void 0;
+      }
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        void 0;
+      }
+      await fs.rm(path.join(runtimeDir, name), { force: true });
+    } catch {
+      void 0;
+    }
+  }
+}
+
 export function createHostSandboxRuntime(): SandboxRuntime {
   return {
     createSession: hostCreateSession,
@@ -253,6 +306,10 @@ export function createHostSandboxRuntime(): SandboxRuntime {
     publishPreviewPort: hostPublishPreviewPort,
     async destroySession(sessionId: string): Promise<void> {
       await revokePreviewSession(sessionId);
+      const root = sessionRoots.get(sessionId);
+      if (root) {
+        await killHostRuntimePids(root);
+      }
       await releaseSessionPorts(sessionId);
       sessionRoots.delete(sessionId);
     }
