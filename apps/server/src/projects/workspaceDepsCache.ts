@@ -57,10 +57,17 @@ lockhash() {
 }
 `;
 
+async function isHostRuntime(): Promise<boolean> {
+  const { resolveSandboxRuntimeKind } =
+    await import("./sandboxRuntime/resolve.js");
+  return resolveSandboxRuntimeKind() === "host";
+}
+
 export async function restoreCachedDeps(options: {
   containerName: string;
   repoName: string;
 }): Promise<boolean> {
+  if (await isHostRuntime()) return false;
   const abs = repoAbs(options.repoName);
   const cache = cacheDir(options.repoName);
   const script = `
@@ -130,6 +137,7 @@ export async function captureCachedDeps(options: {
   containerName: string;
   repoName: string;
 }): Promise<boolean> {
+  if (await isHostRuntime()) return false;
   const abs = repoAbs(options.repoName);
   const cache = cacheDir(options.repoName);
   const script = `
@@ -186,6 +194,7 @@ echo captured
 export async function clearWorkspaceDepsCache(
   workspaceId: string
 ): Promise<void> {
+  if (await isHostRuntime()) return;
   const name = await ensureWorkspaceDepsVolume(workspaceId);
   try {
     await execFileAsync("docker", [

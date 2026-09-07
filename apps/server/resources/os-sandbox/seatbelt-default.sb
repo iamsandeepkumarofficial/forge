@@ -1,7 +1,7 @@
 (version 1)
 (deny default)
 (allow process*)
-(allow signal*)
+(allow signal)
 (allow sysctl-read)
 (allow mach*)
 (allow file-read*)

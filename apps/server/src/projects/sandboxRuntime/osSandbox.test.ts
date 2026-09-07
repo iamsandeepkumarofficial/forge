@@ -48,12 +48,37 @@ describe("osSandbox", () => {
     const body = await fs.readFile(profilePath, "utf8");
     assert.ok(body.includes(sessionRoot));
     assert.ok(assertProfileDeniesSsh(body));
+    assert.match(body, /^\(allow signal\)$/m);
+    assert.doesNotMatch(body, /signal\*/);
     const argv = buildSeatbeltArgv({
       argv: ["touch", path.join(sessionRoot, "x")],
       profilePath
     });
     assert.equal(argv[0], "sandbox-exec");
     assert.ok(argv.includes(profilePath));
+  });
+
+  it("materialized seatbelt profile compiles on darwin", async () => {
+    if (process.platform !== "darwin") return;
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "forge-sb-compile-"));
+    const sessionRoot = path.join(tmp, "session");
+    await fs.mkdir(path.join(sessionRoot, ".forge-runtime"), {
+      recursive: true
+    });
+    const profilePath = path.join(sessionRoot, ".forge-runtime", "seatbelt.sb");
+    await materializeSeatbeltProfile({
+      writableRoots: defaultWritableRoots(sessionRoot),
+      profilePath
+    });
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+    const { stdout } = await execFileAsync(
+      "sandbox-exec",
+      ["-f", profilePath, "/bin/echo", "seatbelt-ok"],
+      { encoding: "utf8" }
+    );
+    assert.match(stdout, /seatbelt-ok/);
   });
 
   it("builds bwrap argv with bind-try for writable roots", () => {

@@ -11,7 +11,8 @@ import {
   materializeHostRuntimeEnv,
   materializeLlmEnv,
   materializePreviewEnv,
-  mergeEnvExtras
+  mergeEnvExtras,
+  applyRepoEnvFile
 } from "./env.js";
 import { isHostDesktopMode } from "./hostMode.js";
 import { waitForHttp } from "./httpWait.js";
@@ -151,6 +152,7 @@ function defaultSpawnHarness(options: {
   config: ForgeConfig;
   hostMode: boolean;
 }): ChildProcess[] {
+  applyRepoEnvFile(options.root);
   const parts = [materializeLlmEnv(options.config), materializePreviewEnv()];
   if (options.hostMode) parts.push(materializeHostRuntimeEnv());
   const env = mergeEnvExtras(parts);

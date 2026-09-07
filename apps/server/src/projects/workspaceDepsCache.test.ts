@@ -33,4 +33,13 @@ describe("workspaceDepsCache", () => {
     const skipAt = src.indexOf("already-linked");
     assert.ok(skipAt > 0 && skipAt < rmAt);
   });
+
+  it("skips docker volume ops in host mode", () => {
+    const src = readFileSync(
+      fileURLToPath(new URL("./workspaceDepsCache.ts", import.meta.url)),
+      "utf8"
+    );
+    assert.match(src, /isHostRuntime/);
+    assert.match(src, /resolveSandboxRuntimeKind\(\) === "host"/);
+  });
 });
