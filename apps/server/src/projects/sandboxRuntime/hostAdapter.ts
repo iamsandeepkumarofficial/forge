@@ -19,6 +19,7 @@ import {
 } from "../../services/project/projectsRoot.js";
 import { releaseSessionPorts } from "./sessionPortRegistry.js";
 import { resolveWrappedArgv } from "./osSandbox.js";
+import { scrubHostEnv } from "./hostEnv.js";
 import type {
   CreateOpts,
   ExecOpts,
@@ -35,31 +36,6 @@ const N_16 = 16;
 const N_48 = 48;
 const N_1024 = 1024;
 const DEFAULT_MAX_BUFFER = N_16 * N_1024 * N_1024;
-
-const ENV_ALLOWLIST = new Set([
-  "PATH",
-  "HOME",
-  "USER",
-  "LOGNAME",
-  "SHELL",
-  "TMPDIR",
-  "TEMP",
-  "TMP",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-  "TERM",
-  "COLORTERM",
-  "NODE_OPTIONS",
-  "npm_config_cache",
-  "PNPM_HOME",
-  "HTTP_PROXY",
-  "HTTPS_PROXY",
-  "NO_PROXY",
-  "http_proxy",
-  "https_proxy",
-  "no_proxy"
-]);
 
 const sessionRoots = new Map<string, string>();
 
@@ -80,20 +56,6 @@ export function hostSessionRuntimeDir(sessionId: string): string {
 function workspaceHostPath(opts?: CreateOpts): string | undefined {
   return opts?.bindMounts?.find((m) => m.containerPath === WORKSPACE_MOUNT)
     ?.hostPath;
-}
-
-function scrubEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
-  const out: NodeJS.ProcessEnv = {};
-  for (const key of ENV_ALLOWLIST) {
-    const v = process.env[key];
-    if (v !== undefined) out[key] = v;
-  }
-  if (extra) {
-    for (const [k, v] of Object.entries(extra)) {
-      out[k] = v;
-    }
-  }
-  return out;
 }
 
 function mapEnvPaths(env: NodeJS.ProcessEnv, root: string): NodeJS.ProcessEnv {
@@ -137,7 +99,7 @@ async function hostExec(input: {
   const argv = input.argv.map((a) => mapWorkspaceArg(a, root));
   const cwd = mapWorkspacePath(opts.cwd, root);
   const maxBuffer = opts.maxBuffer ?? DEFAULT_MAX_BUFFER;
-  const env = mapEnvPaths(scrubEnv(opts.env), root);
+  const env = mapEnvPaths(scrubHostEnv(opts.env), root);
   const wrappedArgv = await resolveWrappedArgv({
     argv,
     sessionRoot: root,
@@ -321,6 +283,8 @@ export function createHostSandboxRuntime(): SandboxRuntime {
       await revokePreviewSession(sessionId);
       const root = sessionRoots.get(sessionId);
       if (root) {
+        const { destroyHostShells } = await import("../hostSessionPty.js");
+        destroyHostShells(root);
         await killHostRuntimePids(root);
       }
       await releaseSessionPorts(sessionId);

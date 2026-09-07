@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { dockerExec } from "./sandboxExec.js";
 import { dockerExecAttach, type DockerExecAttach } from "./dockerExecHttp.js";
 import { WORKSPACE_MOUNT } from "./sessionSandbox/constants.js";
+import { resolveSandboxRuntimeKind } from "./sandboxRuntime/resolve.js";
 
 export const TMUX_SESSION = "forge";
 export const TMUX_REBUILD_MESSAGE =
@@ -55,15 +56,15 @@ function assertValidWindowName(name: string): string {
 
 const tmuxReadyContainers = new Set<string>();
 
+function isHostRuntime(): boolean {
+  return resolveSandboxRuntimeKind() === "host";
+}
+
 async function ensureTmuxAvailable(container: string): Promise<void> {
   if (tmuxReadyContainers.has(container)) return;
   const result = await dockerExec({
     container,
-    argv: [
-      "sh",
-      "-c",
-      "command -v tmux >/dev/null 2>&1 || exit 127"
-    ]
+    argv: ["sh", "-c", "command -v tmux >/dev/null 2>&1 || exit 127"]
   });
   if (result.code !== 0) {
     throw new Error(TMUX_REBUILD_MESSAGE);
@@ -75,6 +76,11 @@ export async function ensureTmuxSession(
   container: string,
   cwd = WORKSPACE_MOUNT
 ): Promise<void> {
+  if (isHostRuntime()) {
+    const { ensureHostShellSession } = await import("./hostSessionPty.js");
+    await ensureHostShellSession(container);
+    return;
+  }
   await ensureTmuxAvailable(container);
   await dockerExec({
     container,
@@ -86,7 +92,13 @@ export async function ensureTmuxSession(
   });
 }
 
-export async function listTmuxWindows(container: string): Promise<TmuxWindow[]> {
+export async function listTmuxWindows(
+  container: string
+): Promise<TmuxWindow[]> {
+  if (isHostRuntime()) {
+    const { listHostShellWindows } = await import("./hostSessionPty.js");
+    return listHostShellWindows(container);
+  }
   await ensureTmuxSession(container);
   const result = await dockerExec({
     container,
@@ -109,6 +121,10 @@ export async function newShellWindow(
   container: string,
   name?: string
 ): Promise<string> {
+  if (isHostRuntime()) {
+    const { newHostShellWindow } = await import("./hostSessionPty.js");
+    return newHostShellWindow(container, name);
+  }
   await ensureTmuxSession(container);
   const windowName = name ? assertValidWindowName(name) : shellWindowName();
   const result = await dockerExec({
@@ -136,6 +152,11 @@ export async function killShellWindow(
   container: string,
   windowName: string
 ): Promise<void> {
+  if (isHostRuntime()) {
+    const { killHostShellWindow } = await import("./hostSessionPty.js");
+    await killHostShellWindow(container, windowName);
+    return;
+  }
   if (windowName === "main") {
     const windows = await listTmuxWindows(container);
     if (windows.length <= 1) {
@@ -161,6 +182,17 @@ export async function attachShellWindow(options: {
   onData: (chunk: Buffer) => void;
   onClose: (code: number | null) => void;
 }): Promise<PtyAttachHandle> {
+  if (isHostRuntime()) {
+    const { attachHostShellWindow } = await import("./hostSessionPty.js");
+    return attachHostShellWindow({
+      root: options.container,
+      windowName: options.windowName,
+      cols: options.cols,
+      rows: options.rows,
+      onData: options.onData,
+      onClose: options.onClose
+    });
+  }
   await ensureTmuxSession(options.container);
   return dockerExecAttach({
     container: options.container,

@@ -10,6 +10,11 @@ describe("sessionAppLog", { concurrency: false }, () => {
   let capturedKind = "";
 
   before(async () => {
+    mock.module("./sandboxRuntime/resolve.js", {
+      exports: {
+        resolveSandboxRuntimeKind: () => "docker"
+      }
+    });
     mock.module("./backgroundJob.js", {
       exports: {
         jobLogFile: (opts: { kind: string; name: string }) =>
@@ -26,7 +31,9 @@ describe("sessionAppLog", { concurrency: false }, () => {
           onClose: () => void;
         }) => {
           capturedTailLines = options.tailLines ?? 0;
-          capturedKind = options.logPath.includes("forge-term-") ? "term" : "app";
+          capturedKind = options.logPath.includes("forge-term-")
+            ? "term"
+            : "app";
           options.onData(Buffer.from("live\r\n"));
           return {
             close: () => {
@@ -37,9 +44,8 @@ describe("sessionAppLog", { concurrency: false }, () => {
         }
       }
     });
-    ({ attachAppLogFollow, attachJobLogFollow } = await import(
-      "./sessionAppLog.js"
-    ));
+    ({ attachAppLogFollow, attachJobLogFollow } =
+      await import("./sessionAppLog.js"));
   });
 
   it("uses a single tail -F attach for app logs", async () => {

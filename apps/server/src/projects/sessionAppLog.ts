@@ -1,10 +1,11 @@
+import { spawn } from "node:child_process";
 import {
   isBackgroundJobRunning,
   jobLogFile,
   type BackgroundJobKind
 } from "./backgroundJob.js";
 import { dockerLogFollowAttach } from "./dockerExecHttp.js";
-
+import { resolveSandboxRuntimeKind } from "./sandboxRuntime/resolve.js";
 
 const INITIAL_TAIL = 500;
 const EXIT_POLL_MS = 2000;
@@ -15,6 +16,53 @@ export type LogFollowHandle = {
 
 export type AppLogFollowHandle = LogFollowHandle;
 
+function hostLogPath(options: {
+  containerName: string;
+  kind: BackgroundJobKind;
+  name: string;
+}): string {
+  const host = resolveSandboxRuntimeKind() === "host";
+  return jobLogFile({
+    kind: options.kind,
+    name: options.name,
+    workspaceRoot: host ? options.containerName : undefined
+  });
+}
+
+function hostLogFollowAttach(options: {
+  logPath: string;
+  tailLines: number;
+  onData: (chunk: Buffer) => void;
+  onClose: (code: number | null) => void;
+}): { close: () => void } {
+  const child = spawn(
+    "tail",
+    ["-n", String(options.tailLines), "-F", options.logPath],
+    { stdio: ["ignore", "pipe", "pipe"] }
+  );
+  let closed = false;
+  const finish = (code: number | null) => {
+    if (closed) return;
+    closed = true;
+    options.onClose(code);
+  };
+  child.stdout?.on("data", (c: Buffer) => {
+    if (!closed && c.length > 0) options.onData(c);
+  });
+  child.stderr?.on("data", (c: Buffer) => {
+    if (!closed && c.length > 0) options.onData(c);
+  });
+  child.on("close", (code) => finish(code));
+  child.on("error", () => finish(null));
+  return {
+    close: () => {
+      if (closed) return;
+      closed = true;
+      child.kill("SIGTERM");
+    }
+  };
+}
+
 export async function attachLogFollow(options: {
   containerName: string;
   kind: BackgroundJobKind;
@@ -22,8 +70,7 @@ export async function attachLogFollow(options: {
   onData: (chunk: Buffer) => void;
   onExited: () => void;
 }): Promise<LogFollowHandle> {
-  const logPath = jobLogFile({ kind: options.kind, name: options.name });
-
+  const logPath = hostLogPath(options);
   let closed = false;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let followClose: (() => void) | undefined;
@@ -42,13 +89,21 @@ export async function attachLogFollow(options: {
     }
   };
 
-  const follow = await dockerLogFollowAttach({
-    container: options.containerName,
-    logPath,
-    tailLines: INITIAL_TAIL,
-    onData: options.onData,
-    onClose: () => finish(true)
-  });
+  const follow =
+    resolveSandboxRuntimeKind() === "host"
+      ? hostLogFollowAttach({
+          logPath,
+          tailLines: INITIAL_TAIL,
+          onData: options.onData,
+          onClose: () => finish(true)
+        })
+      : await dockerLogFollowAttach({
+          container: options.containerName,
+          logPath,
+          tailLines: INITIAL_TAIL,
+          onData: options.onData,
+          onClose: () => finish(true)
+        });
   followClose = follow.close;
 
   pollTimer = setInterval(() => {
