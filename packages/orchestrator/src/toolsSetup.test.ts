@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { hostModeHidesDockerImageLookup } from "./toolsSetup.js";
+import { hostModeHidesDockerImageLookup } from "./tools.js";
 
-describe("toolsSetup", () => {
+describe("hostModeHidesDockerImageLookup", () => {
   const prevRuntime = process.env.SANDBOX_RUNTIME;
   const prevDesktop = process.env.FORGE_DESKTOP;
 

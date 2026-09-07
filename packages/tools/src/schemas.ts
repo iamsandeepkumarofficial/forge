@@ -1,0 +1,152 @@
+import { z } from "zod";
+import { AGENT_MODE_IDS } from "@forge/core";
+
+const N_8 = 8;
+
+export const createSubtaskInputSchema = z.object({
+  title: z.string(),
+  type: z.enum(["feature", "bug", "refactor"]).optional()
+});
+export type CreateSubtaskInput = z.infer<typeof createSubtaskInputSchema>;
+
+export const readFileInputSchema = z.object({ path: z.string() });
+export type ReadFileInput = z.infer<typeof readFileInputSchema>;
+
+export const writeFileInputSchema = z.object({
+  path: z.string(),
+  content: z.string()
+});
+export type WriteFileInput = z.infer<typeof writeFileInputSchema>;
+
+export const editFileInputSchema = z.object({
+  path: z.string(),
+  oldString: z.string(),
+  newString: z.string(),
+  replaceAll: z.boolean().optional()
+});
+export type EditFileInput = z.infer<typeof editFileInputSchema>;
+
+export const listFilesInputSchema = z.object({});
+export type ListFilesInput = z.infer<typeof listFilesInputSchema>;
+
+export const searchCodebaseInputSchema = z.object({ pattern: z.string() });
+export type SearchCodebaseInput = z.infer<typeof searchCodebaseInputSchema>;
+
+export const runTerminalInputSchema = z.object({
+  command: z.string().optional(),
+  workingDirectory: z.string().optional(),
+  background: z.boolean().optional(),
+  jobName: z.string().optional(),
+  action: z.enum(["run", "logs", "status", "stop"]).optional(),
+  tail: z.number().optional()
+});
+export type RunTerminalInput = z.infer<typeof runTerminalInputSchema>;
+
+export const previewStartInputSchema = z.object({
+  name: z.string().optional()
+});
+export type PreviewStartInput = z.infer<typeof previewStartInputSchema>;
+
+export const previewStopInputSchema = z.object({ name: z.string() });
+export type PreviewStopInput = z.infer<typeof previewStopInputSchema>;
+
+export const previewLogsInputSchema = z.object({
+  name: z.string().optional(),
+  tail: z.number().optional()
+});
+export type PreviewLogsInput = z.infer<typeof previewLogsInputSchema>;
+
+export const previewStatusInputSchema = z.object({
+  name: z.string().optional()
+});
+export type PreviewStatusInput = z.infer<typeof previewStatusInputSchema>;
+
+export const upsertLaunchAppInputSchema = z.object({
+  name: z.string(),
+  cwd: z
+    .string()
+    .describe(
+      "App working directory. In workspaces, start with the member repo (e.g. bp-frontend or bp-frontend/apps/web)."
+    ),
+  command: z.string(),
+  type: z.enum(["web", "api", "worker"]),
+  repo: z
+    .string()
+    .optional()
+    .describe(
+      "Workspace member repo name (optional if cwd starts with the member name)."
+    ),
+  port: z
+    .number()
+    .optional()
+    .describe(
+      "Container listen port. Must be 3000–3009 (only those are published). Prefer 3000 for the first web app."
+    )
+});
+export type UpsertLaunchAppInput = z.infer<typeof upsertLaunchAppInputSchema>;
+
+export const listSkillsInputSchema = z.object({});
+export type ListSkillsInput = z.infer<typeof listSkillsInputSchema>;
+
+export const invokeSkillInputSchema = z.object({ skillId: z.string() });
+export type InvokeSkillInput = z.infer<typeof invokeSkillInputSchema>;
+
+export const upsertWorkspaceParameterInputSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+  secret: z.boolean().optional()
+});
+export type UpsertWorkspaceParameterInput = z.infer<
+  typeof upsertWorkspaceParameterInputSchema
+>;
+
+export const provisionAppEngineInputSchema = z.object({
+  engineId: z.enum(["postgres", "mongo"]),
+  userApproved: z
+    .boolean()
+    .describe("Must be true only after the user explicitly approved.")
+});
+export type ProvisionAppEngineInput = z.infer<
+  typeof provisionAppEngineInputSchema
+>;
+
+export const dockerImageLookupInputSchema = z.object({
+  query: z.string().optional(),
+  engineId: z.enum(["postgres", "mongo"]).optional()
+});
+export type DockerImageLookupInput = z.infer<
+  typeof dockerImageLookupInputSchema
+>;
+
+export const webSearchInputSchema = z.object({
+  query: z.string(),
+  maxResults: z.number().int().min(1).max(N_8).optional()
+});
+export type WebSearchInput = z.infer<typeof webSearchInputSchema>;
+
+export const webFetchInputSchema = z.object({ url: z.string() });
+export type WebFetchInput = z.infer<typeof webFetchInputSchema>;
+
+export const switchModeInputSchema = z.object({
+  target: z.enum(AGENT_MODE_IDS)
+});
+export type SwitchModeInput = z.infer<typeof switchModeInputSchema>;
+
+export const askUserOptionSchema = z.object({
+  id: z.string(),
+  label: z.string()
+});
+export const askUserFieldSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  secret: z.boolean().optional(),
+  placeholder: z.string().optional(),
+  value: z.string().optional()
+});
+export const askUserInputSchema = z.object({
+  kind: z.enum(["mcq", "form"]),
+  prompt: z.string(),
+  options: z.array(askUserOptionSchema).optional(),
+  fields: z.array(askUserFieldSchema).optional()
+});
+export type AskUserInput = z.infer<typeof askUserInputSchema>;

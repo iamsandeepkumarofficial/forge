@@ -1,71 +1,41 @@
 import { tool, type Tool } from "ai";
-import { z } from "zod";
 import {
-  AGENT_MODE_IDS,
   formatToolDescription,
   parseAgentMode,
   type AgentMode
 } from "@forge/core";
+import {
+  askUserInputSchema,
+  switchModeInputSchema,
+  type AskUserInput
+} from "./schemas.js";
+import type { ToolResult } from "./types.js";
+
+export type { AskUserInput };
 
 export function switchModeTool(currentMode: AgentMode): Record<string, Tool> {
   return {
     switch_mode: tool({
       description: formatToolDescription("switch_mode"),
-      inputSchema: z.object({
-        target: z.enum(AGENT_MODE_IDS)
-      }),
+      inputSchema: switchModeInputSchema,
       execute: async (input) => executeSwitchMode({ currentMode, input })
     })
   };
 }
 
-const askUserOptionSchema = z.object({
-  id: z.string(),
-  label: z.string()
-});
-const askUserFieldSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  secret: z.boolean().optional(),
-  placeholder: z.string().optional(),
-  
-  value: z.string().optional()
-});
-
 export function askUserTool(): Record<string, Tool> {
   return {
     ask_user: tool({
       description: formatToolDescription("ask_user"),
-      inputSchema: z.object({
-        kind: z.enum(["mcq", "form"]),
-        prompt: z.string(),
-        options: z.array(askUserOptionSchema).optional(),
-        fields: z.array(askUserFieldSchema).optional()
-      }),
+      inputSchema: askUserInputSchema,
       execute: async (input) => executeAskUser(input)
     })
   };
 }
 
-export type AskUserInput = {
-  kind: string;
-  prompt: string;
-  options?: Array<{ id: string; label: string }>;
-  fields?: Array<{
-    id: string;
-    label: string;
-    secret?: boolean;
-    placeholder?: string;
-    value?: string;
-  }>;
-};
-
-export function executeAskUser(input: AskUserInput): {
-  success: boolean;
-  output: string;
-  metadata?: Record<string, unknown>;
-} {
-  const kind = input.kind === "form" ? "form" : input.kind === "mcq" ? "mcq" : null;
+export function executeAskUser(input: AskUserInput): ToolResult {
+  const kind =
+    input.kind === "form" ? "form" : input.kind === "mcq" ? "mcq" : null;
   const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
   if (!kind || !prompt) {
     return {
@@ -73,28 +43,34 @@ export function executeAskUser(input: AskUserInput): {
       output: "ask_user requires kind (mcq|form) and a non-empty prompt."
     };
   }
-  if (kind === "mcq") {
-    const options = (input.options ?? [])
-      .filter((o) => o?.id?.trim() && o?.label?.trim())
-      .map((o) => ({ id: o.id.trim(), label: o.label.trim() }));
-    if (options.length < 2) {
-      return {
-        success: false,
-        output: "ask_user mcq requires at least two options with id and label."
-      };
-    }
+  if (kind === "mcq") return executeAskUserMcq(prompt, input);
+  return executeAskUserForm(prompt, input);
+}
+
+function executeAskUserMcq(prompt: string, input: AskUserInput): ToolResult {
+  const options = (input.options ?? [])
+    .filter((o) => o?.id?.trim() && o?.label?.trim())
+    .map((o) => ({ id: o.id.trim(), label: o.label.trim() }));
+  if (options.length < 2) {
     return {
-      success: true,
-      output:
-        "Waiting for the user to answer in the chat widget. Stop now — do not call more tools this turn.",
-      metadata: {
-        needsUserInput: true,
-        kind: "mcq",
-        prompt,
-        options
-      }
+      success: false,
+      output: "ask_user mcq requires at least two options with id and label."
     };
   }
+  return {
+    success: true,
+    output:
+      "Waiting for the user to answer in the chat widget. Stop now — do not call more tools this turn.",
+    metadata: {
+      needsUserInput: true,
+      kind: "mcq",
+      prompt,
+      options
+    }
+  };
+}
+
+function executeAskUserForm(prompt: string, input: AskUserInput): ToolResult {
   const fields = (input.fields ?? [])
     .filter((f) => f?.id?.trim() && f?.label?.trim())
     .map((f) => ({
@@ -104,9 +80,7 @@ export function executeAskUser(input: AskUserInput): {
       ...(typeof f.placeholder === "string" && f.placeholder.trim()
         ? { placeholder: f.placeholder.trim() }
         : {}),
-      ...(typeof f.value === "string"
-        ? { value: f.value }
-        : {})
+      ...(typeof f.value === "string" ? { value: f.value } : {})
     }));
   if (fields.length < 1) {
     return {
@@ -130,11 +104,7 @@ export function executeAskUser(input: AskUserInput): {
 export function executeSwitchMode(options: {
   currentMode: AgentMode;
   input: { target: string };
-}): {
-  success: boolean;
-  output: string;
-  metadata?: Record<string, unknown>;
-} {
+}): ToolResult {
   const target = parseAgentMode(options.input.target);
   if (!target) {
     return {
@@ -157,4 +127,3 @@ export function executeSwitchMode(options: {
     metadata: { applied: true, target, mode: target }
   };
 }
-

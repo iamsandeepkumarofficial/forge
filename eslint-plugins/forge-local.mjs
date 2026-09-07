@@ -32,7 +32,8 @@ function shouldSkip(filename) {
   if (/\/types\.ts$/.test(normalized)) return true;
   if (/\.types\.ts$/.test(normalized)) return true;
   if (/\/migrations\//.test(normalized)) return true;
-  if (/\/definitions\//.test(normalized)) return true;
+  if (/\/packages\/agents\/definitions\//.test(normalized)) return true;
+  if (/\/packages\/workflows\/definitions\//.test(normalized)) return true;
   if (/\.stories\.(ts|tsx)$/.test(normalized)) return true;
   if (/\.native\.(ts|tsx)$/.test(normalized)) return true;
   return false;

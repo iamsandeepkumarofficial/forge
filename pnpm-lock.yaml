@@ -446,6 +446,9 @@ importers:
       '@forge/core':
         specifier: workspace:*
         version: link:../core
+      '@forge/tools':
+        specifier: workspace:*
+        version: link:../tools
       '@forge/workflows':
         specifier: workspace:*
         version: link:../workflows
@@ -495,9 +498,15 @@ importers:
 
   packages/tools:
     dependencies:
+      '@forge/core':
+        specifier: workspace:*
+        version: link:../core
+      ai:
+        specifier: ^6.0.177
+        version: 6.0.266(zod@4.4.3)
       zod:
-        specifier: ^3.x
-        version: 3.25.76
+        specifier: ^4.3.6
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^24.5.2
@@ -506,7 +515,7 @@ importers:
         specifier: ^4.20.5
         version: 4.23.12
       typescript:
-        specifier: ^5.x
+        specifier: ~5.9.2
         version: 5.9.3
 
   packages/workflows:
