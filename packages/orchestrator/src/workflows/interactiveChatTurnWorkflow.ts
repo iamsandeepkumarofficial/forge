@@ -41,12 +41,12 @@ const sandbox = proxyActivities<typeof activities>({
 const llmCloud = proxyActivities<typeof activities>({
   startToCloseTimeout: "15 minutes",
   heartbeatTimeout: "2 minutes",
-  retry: { maximumAttempts: 2, initialInterval: "5s" }
+  retry: { maximumAttempts: 1 }
 });
 const llmLocal = proxyActivities<typeof activities>({
   startToCloseTimeout: "45 minutes",
   heartbeatTimeout: "5 minutes",
-  retry: { maximumAttempts: 2, initialInterval: "5s" }
+  retry: { maximumAttempts: 1 }
 });
 const tools = proxyActivities<typeof activities>({
   startToCloseTimeout: "15 minutes",
@@ -65,27 +65,41 @@ type ToolCallLike = {
   thoughtSignature?: string;
 };
 
+function assistantPartsForStep(opts: {
+  reasoningText?: string;
+  text: string;
+  toolCalls?: ToolCallLike[];
+}): unknown[] {
+  return [
+    ...(opts.reasoningText
+      ? [{ type: "reasoning", text: opts.reasoningText }]
+      : []),
+    ...(opts.text ? [{ type: "text", text: opts.text }] : []),
+    ...(opts.toolCalls ?? []).map((tc) => ({
+      type: "tool-invocation",
+      toolCallId: tc.toolCallId,
+      toolName: tc.toolName,
+      args: tc.args,
+      state: "call",
+      ...(tc.thoughtSignature ? { thoughtSignature: tc.thoughtSignature } : {})
+    }))
+  ];
+}
+
 async function appendAssistantToolInvocations(opts: {
   args: InteractiveChatTurnArgs;
   text: string;
+  reasoningText?: string;
   toolCalls: ToolCallLike[];
 }): Promise<void> {
   await short.appendChatMessage({
     sessionId: opts.args.sessionId,
     role: "assistant",
-    parts: [
-      ...(opts.text ? [{ type: "text", text: opts.text }] : []),
-      ...opts.toolCalls.map((tc) => ({
-        type: "tool-invocation",
-        toolCallId: tc.toolCallId,
-        toolName: tc.toolName,
-        args: tc.args,
-        state: "call",
-        ...(tc.thoughtSignature
-          ? { thoughtSignature: tc.thoughtSignature }
-          : {})
-      }))
-    ],
+    parts: assistantPartsForStep({
+      reasoningText: opts.reasoningText,
+      text: opts.text,
+      toolCalls: opts.toolCalls
+    }),
     turnId: opts.args.turnId
   });
 }
@@ -132,6 +146,7 @@ async function skipRemainingTools(opts: {
 async function runToolCallsRound(opts: {
   args: InteractiveChatTurnArgs;
   text: string;
+  reasoningText?: string;
   toolCalls: ToolCallLike[];
   toolNameSet: Set<string>;
   currentMode: { value: ChatAgentMode };
@@ -190,6 +205,7 @@ async function runToolCallsRound(opts: {
 async function rejectTruncatedToolCalls(opts: {
   args: InteractiveChatTurnArgs;
   text: string;
+  reasoningText?: string;
   toolCalls: ToolCallLike[];
   toolNameSet: Set<string>;
 }): Promise<{ count: number; pauseForUserInput: boolean }> {
@@ -259,6 +275,7 @@ async function handleTurnFailure(opts: {
 async function applyToolStep(opts: {
   args: InteractiveChatTurnArgs;
   text: string;
+  reasoningText?: string;
   finishReason: string;
   toolCalls: ToolCallLike[];
   toolNameSet: Set<string>;
@@ -274,9 +291,15 @@ async function runToolRoundLoop(opts: {
   args: InteractiveChatTurnArgs;
   currentMode: { value: ChatAgentMode };
   toolNameSet: Set<string>;
-}): Promise<{ rounds: number; finalText: string; toolCallCount: number }> {
+}): Promise<{
+  rounds: number;
+  finalText: string;
+  finalReasoningText: string;
+  toolCallCount: number;
+}> {
   let rounds = 0;
   let finalText = "";
+  let finalReasoningText = "";
   let toolCallCount = 0;
   let pendingToolsAtCap = false;
   let messages = await short.loadChatMessages(opts.args.sessionId);
@@ -294,14 +317,19 @@ async function runToolRoundLoop(opts: {
     if (step.text) {
       finalText = step.text;
     }
+    if (step.reasoningText) {
+      finalReasoningText = step.reasoningText;
+    }
     if (!step.toolCalls.length) {
       pendingToolsAtCap = false;
       break;
     }
+    finalReasoningText = "";
     pendingToolsAtCap = true;
     const applied = await applyToolStep({
       args: opts.args,
       text: step.text,
+      reasoningText: step.reasoningText,
       finishReason: step.finishReason,
       toolCalls: step.toolCalls,
       toolNameSet: opts.toolNameSet,
@@ -319,7 +347,7 @@ async function runToolRoundLoop(opts: {
       .filter(Boolean)
       .join("\n\n");
   }
-  return { rounds, finalText, toolCallCount };
+  return { rounds, finalText, finalReasoningText, toolCallCount };
 }
 
 export async function interactiveChatTurnWorkflow(
@@ -348,7 +376,10 @@ export async function interactiveChatTurnWorkflow(
     await short.finalizeChatTurn({
       sessionId: args.sessionId,
       turnId: args.turnId,
-      assistantParts: [{ type: "text", text: finalText || "_(no response)_" }],
+      assistantParts: assistantPartsForStep({
+        reasoningText: loop.finalReasoningText,
+        text: finalText || "_(no response)_"
+      }),
       status: "completed"
     });
     return buildResult(args, {

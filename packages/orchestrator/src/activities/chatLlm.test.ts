@@ -5,7 +5,8 @@ import {
   buildPlanAwareSystemPrompt,
   extractThoughtSignature,
   formatLlmCallError,
-  resolveChatProvider
+  resolveChatProvider,
+  shouldFlushDeltaBatch
 } from "./chatLlm.js";
 
 describe("chatLlm", () => {
@@ -80,5 +81,20 @@ describe("chatLlm", () => {
       }
     );
     assert.equal(buildLlmProviderOptions({ provider: "openai" }), undefined);
+  });
+
+  it("shouldFlushDeltaBatch flushes on size or time", () => {
+    assert.equal(
+      shouldFlushDeltaBatch({ bufferLength: 64, elapsedMs: 0 }),
+      true
+    );
+    assert.equal(
+      shouldFlushDeltaBatch({ bufferLength: 10, elapsedMs: 50 }),
+      true
+    );
+    assert.equal(
+      shouldFlushDeltaBatch({ bufferLength: 10, elapsedMs: 10 }),
+      false
+    );
   });
 });

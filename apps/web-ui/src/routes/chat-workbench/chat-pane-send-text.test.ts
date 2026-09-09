@@ -24,6 +24,7 @@ function baseOpts(
     setAttachments: vi.fn(),
     setError: vi.fn(),
     setStreamingText: vi.fn(),
+    setStreamingReasoning: vi.fn(),
     setLiveToolParts: vi.fn(),
     setStatus: vi.fn(),
     setMessages: vi.fn(),

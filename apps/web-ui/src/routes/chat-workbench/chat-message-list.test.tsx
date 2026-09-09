@@ -67,7 +67,9 @@ describe("ChatMessageList", () => {
       />
     );
     expect(screen.getByText("What should we work on?")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Explain this workspace" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Explain this workspace" })
+    ).toBeTruthy();
   });
 
   it("shows thinking status after the latest message", () => {
@@ -122,6 +124,37 @@ describe("ChatMessageList", () => {
       />
     );
     expect(screen.getByRole("status").textContent).toContain("Running");
+  });
+
+  it("renders persisted reasoning on assistant messages", () => {
+    const scrollerRef = createRef<HTMLDivElement | null>();
+    render(
+      <ChatMessageList
+        scrollerRef={scrollerRef}
+        stickToBottomRef={{ current: true }}
+        sessionKind="workbench"
+        projectId="p1"
+        chatId="c1"
+        messages={[
+          {
+            id: "2",
+            role: "assistant",
+            parts: [
+              { type: "reasoning", text: "step by step" },
+              { type: "text", text: "Done" }
+            ]
+          }
+        ]}
+        isStreaming={false}
+        streamingText=""
+        liveToolParts={[]}
+        status="ready"
+        error={null}
+        clearError={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", { name: /thought/i })).toBeTruthy();
+    expect(screen.getByText("Done")).toBeTruthy();
   });
 
   it("detects numbered plans", () => {

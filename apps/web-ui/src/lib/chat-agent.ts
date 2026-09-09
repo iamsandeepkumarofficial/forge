@@ -26,12 +26,7 @@ export interface ModelListResponse {
   error?: string;
 }
 export type ChatMode =
-  | "agent"
-  | "plan"
-  | "debug"
-  | "ask"
-  | "multitask"
-  | "auto";
+  "agent" | "plan" | "debug" | "ask" | "multitask" | "auto";
 export type ReasoningEffort = "low" | "medium" | "high";
 export type UiChatMessage = {
   id: string;
@@ -203,7 +198,8 @@ export async function consumeTurnStream(options: {
     : `${runnerUrl()}${streamUrl}`;
   const res = await fetch(url, {
     headers: {
-      Accept: "text/event-stream"
+      Accept: "text/event-stream",
+      ...authHeaders()
     },
     signal
   });

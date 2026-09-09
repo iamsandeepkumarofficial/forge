@@ -1,5 +1,6 @@
 import { type RefObject } from "react";
 import { AssistantMarkdown } from "../../components/assistant-markdown.js";
+import { ThinkingBlock } from "../../components/thinking-block.js";
 import { ToolCalls } from "../../components/tool-calls.js";
 import type { UiChatMessage } from "../../lib/chat-agent.js";
 import {
@@ -43,6 +44,20 @@ function extractMessageText(message: UiChatMessage): string {
     .join("");
 }
 
+function extractMessageReasoning(message: UiChatMessage): string {
+  return message.parts
+    .filter(
+      (
+        p
+      ): p is {
+        type: string;
+        text: string;
+      } => p.type === "reasoning" && typeof p.text === "string"
+    )
+    .map((p) => p.text)
+    .join("");
+}
+
 function toolPartsOf(message: UiChatMessage): ToolPart[] {
   return toolPartsFromUnknown(message.parts);
 }
@@ -67,14 +82,22 @@ function UserTurn(options: { text: string }) {
 
 function AssistantTurn(options: {
   text: string;
+  reasoning?: string;
   tools: ToolPart[];
   streaming?: boolean;
   onOpenFile?: (path: string) => void;
 }) {
-  const { text, tools, streaming, onOpenFile } = options;
+  const { text, reasoning, tools, streaming, onOpenFile } = options;
   const plan = !streaming && looksLikePlan(text) && tools.length === 0;
   return (
     <div className="max-w-none space-y-2">
+      {reasoning ? (
+        <ThinkingBlock
+          text={reasoning}
+          defaultOpen={Boolean(streaming)}
+          streaming={Boolean(streaming && !text && tools.length === 0)}
+        />
+      ) : null}
       {text ? (
         <div
           className={cn(
@@ -86,9 +109,12 @@ function AssistantTurn(options: {
               Plan
             </p>
           ) : null}
-          <AssistantMarkdown text={text} streamingIndicator={Boolean(streaming)} />
+          <AssistantMarkdown
+            text={text}
+            streamingIndicator={Boolean(streaming)}
+          />
         </div>
-      ) : streaming ? (
+      ) : streaming && !reasoning ? (
         <AssistantMarkdown text="…" streamingIndicator />
       ) : null}
       <ToolCalls parts={tools} onOpenPath={onOpenFile} />
@@ -105,6 +131,7 @@ export function ChatMessageList(options: {
   messages: UiChatMessage[];
   isStreaming: boolean;
   streamingText: string;
+  streamingReasoning?: string;
   liveToolParts: ToolPart[];
   status: "ready" | "submitted" | "streaming" | "error";
   waiting?: boolean;
@@ -119,6 +146,7 @@ export function ChatMessageList(options: {
     messages,
     isStreaming,
     streamingText,
+    streamingReasoning = "",
     liveToolParts,
     status,
     waiting,
@@ -142,6 +170,7 @@ export function ChatMessageList(options: {
           messages={messages}
           isStreaming={isStreaming}
           streamingText={streamingText}
+          streamingReasoning={streamingReasoning}
           liveToolParts={liveToolParts}
           status={status}
           waiting={waiting}
@@ -159,6 +188,7 @@ function TranscriptBody(options: {
   messages: UiChatMessage[];
   isStreaming: boolean;
   streamingText: string;
+  streamingReasoning: string;
   liveToolParts: ToolPart[];
   status: "ready" | "submitted" | "streaming" | "error";
   waiting?: boolean;
@@ -171,6 +201,7 @@ function TranscriptBody(options: {
     messages,
     isStreaming,
     streamingText,
+    streamingReasoning,
     liveToolParts,
     status,
     waiting,
@@ -179,6 +210,9 @@ function TranscriptBody(options: {
     onPickStarter,
     onOpenFile
   } = options;
+  const showLive =
+    isStreaming &&
+    (streamingText || streamingReasoning || liveToolParts.length > 0);
   return (
     <>
       {messages.length === 0 && !isStreaming ? (
@@ -191,14 +225,16 @@ function TranscriptBody(options: {
           <AssistantTurn
             key={m.id}
             text={extractMessageText(m)}
+            reasoning={extractMessageReasoning(m)}
             tools={toolPartsOf(m)}
             onOpenFile={onOpenFile}
           />
         )
       )}
-      {isStreaming && (streamingText || liveToolParts.length > 0) ? (
+      {showLive ? (
         <AssistantTurn
           text={streamingText}
+          reasoning={streamingReasoning}
           tools={liveToolParts}
           streaming
           onOpenFile={onOpenFile}

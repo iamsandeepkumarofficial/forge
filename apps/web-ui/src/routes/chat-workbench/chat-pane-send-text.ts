@@ -4,64 +4,9 @@ import type {
   UiChatMessage
 } from "../../lib/chat-agent.js";
 import type { ComposerAgentMode } from "../../components/chat-composer-shared.js";
-import { parseComposerMode } from "../../lib/mode-switch.js";
 import type { ToolPart } from "../../lib/tool-display.js";
-import {
-  applyStreamToolEvent,
-  readAttachmentsAsText,
-  runChatSend
-} from "./chat-pane-send.js";
-
-function maybeApplySwitchMode(options: {
-  eventType: string;
-  payload: Record<string, unknown>;
-  onAppliedMode?: (mode: ComposerAgentMode) => void;
-}): void {
-  if (options.eventType !== "tool_result") return;
-  if (options.payload.toolName !== "switch_mode") return;
-  const meta =
-    options.payload.metadata && typeof options.payload.metadata === "object"
-      ? (options.payload.metadata as Record<string, unknown>)
-      : null;
-  if (meta?.applied !== true) return;
-  const mode = parseComposerMode(meta.mode ?? meta.target);
-  if (mode) options.onAppliedMode?.(mode);
-}
-
-function handleStreamEvent(options: {
-  eventType: string;
-  payload: Record<string, unknown>;
-  setStreamingText: React.Dispatch<React.SetStateAction<string>>;
-  setLiveToolParts: React.Dispatch<React.SetStateAction<ToolPart[]>>;
-  setError: (e: Error | null) => void;
-  onAppliedMode?: (mode: ComposerAgentMode) => void;
-}) {
-  const {
-    eventType,
-    payload,
-    setStreamingText,
-    setLiveToolParts,
-    setError,
-    onAppliedMode
-  } = options;
-  if (eventType === "text_delta" && typeof payload.text === "string") {
-    setStreamingText((prev) => prev + payload.text);
-    return;
-  }
-  if (eventType === "tool_call" || eventType === "tool_result") {
-    setLiveToolParts((prev) =>
-      applyStreamToolEvent({ prev, eventType, payload })
-    );
-    maybeApplySwitchMode({ eventType, payload, onAppliedMode });
-    return;
-  }
-  if (eventType === "turn_status" || eventType === "done") {
-    const st = String(payload.status ?? "");
-    if (st === "failed" && typeof payload.error === "string") {
-      setError(new Error(payload.error));
-    }
-  }
-}
+import { readAttachmentsAsText, runChatSend } from "./chat-pane-send.js";
+import { applyTurnStreamEvent } from "./chat-pane-stream-events.js";
 
 export type SendChatPaneTextOptions = {
   raw: string;
@@ -76,6 +21,7 @@ export type SendChatPaneTextOptions = {
   setAttachments: (v: File[]) => void;
   setError: (e: Error | null) => void;
   setStreamingText: React.Dispatch<React.SetStateAction<string>>;
+  setStreamingReasoning: React.Dispatch<React.SetStateAction<string>>;
   setLiveToolParts: React.Dispatch<React.SetStateAction<ToolPart[]>>;
   setStatus: (s: "ready" | "submitted" | "streaming" | "error") => void;
   setMessages: React.Dispatch<React.SetStateAction<UiChatMessage[]>>;
@@ -90,6 +36,7 @@ function beginOptimisticSend(options: SendChatPaneTextOptions, text: string) {
   options.setAttachments([]);
   options.setError(null);
   options.setStreamingText("");
+  options.setStreamingReasoning("");
   options.setLiveToolParts([]);
   options.setStatus("submitted");
   options.stickToBottomRef.current = true;
@@ -127,10 +74,11 @@ export async function sendChatPaneText(
       signal: ac.signal,
       onTurnId: options.setActiveTurnId,
       onEvent: ({ eventType, payload }) => {
-        handleStreamEvent({
+        applyTurnStreamEvent({
           eventType,
           payload,
           setStreamingText: options.setStreamingText,
+          setStreamingReasoning: options.setStreamingReasoning,
           setLiveToolParts: options.setLiveToolParts,
           setError: options.setError,
           onAppliedMode: options.onAppliedMode
@@ -139,6 +87,7 @@ export async function sendChatPaneText(
     });
     options.setMessages(rows);
     options.setStreamingText("");
+    options.setStreamingReasoning("");
     options.setLiveToolParts([]);
     options.setActiveTurnId(null);
     options.setStatus("ready");

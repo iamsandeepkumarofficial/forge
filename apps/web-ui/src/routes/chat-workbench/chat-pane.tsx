@@ -211,6 +211,7 @@ function ChatPaneWired(options: {
       messages={c.session.messages}
       isStreaming={c.session.isStreaming}
       streamingText={c.session.streamingText}
+      streamingReasoning={c.session.streamingReasoning}
       liveToolParts={c.session.liveToolParts}
       status={c.session.status}
       error={c.session.error}

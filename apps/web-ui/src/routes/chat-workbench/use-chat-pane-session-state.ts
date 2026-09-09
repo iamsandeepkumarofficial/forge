@@ -10,6 +10,7 @@ export function useChatPaneSessionState() {
   const [error, setError] = useState<Error | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState("");
+  const [streamingReasoning, setStreamingReasoning] = useState("");
   const [liveToolParts, setLiveToolParts] = useState<ToolPart[]>([]);
   const streamAbortRef = useRef<AbortController | null>(null);
   const isStreaming = status === "submitted" || status === "streaming";
@@ -28,6 +29,8 @@ export function useChatPaneSessionState() {
     setActiveTurnId,
     streamingText,
     setStreamingText,
+    streamingReasoning,
+    setStreamingReasoning,
     liveToolParts,
     setLiveToolParts,
     streamAbortRef,

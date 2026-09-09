@@ -1,5 +1,5 @@
-import { generateText, stepCountIs } from "ai";
-import { heartbeat } from "@temporalio/activity";
+import { streamText, stepCountIs } from "ai";
+import { cancellationSignal, heartbeat } from "@temporalio/activity";
 import {
   resolveChatLanguageModel,
   coerceChatProvider,
@@ -17,6 +17,8 @@ import {
 import { partsToModelMessages, withFirstTurnRepoEval } from "./chatMessages.js";
 
 const N_6 = 6;
+const N_50 = 50;
+const N_64 = 64;
 const N_800 = 800;
 const N_8192 = 8192;
 
@@ -35,6 +37,7 @@ export type ToolCallSpec = {
 
 export type LlmStepResult = {
   text: string;
+  reasoningText: string;
   toolCalls: ToolCallSpec[];
   finishReason: string;
   systemPrompt?: string;
@@ -145,39 +148,93 @@ function toolsWithoutExecute(
   );
 }
 
-function mapResultToolCalls(
-  toolCalls: Array<{
-    toolCallId: string;
-    toolName: string;
-    input?: unknown;
-    providerMetadata?: unknown;
-  }>
-): ToolCallSpec[] {
-  return toolCalls.map((tc) => {
-    const thoughtSignature = extractThoughtSignature(tc.providerMetadata);
-    return {
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      args: (tc.input ?? {}) as Record<string, unknown>,
-      ...(thoughtSignature ? { thoughtSignature } : {})
-    };
-  });
-}
+export type StreamDeltaBatcher = {
+  push: (chunk: string) => Promise<void>;
+  flush: () => Promise<void>;
+  fullText: () => string;
+};
 
-async function emitLlmStepChunks(opts: {
+export function createStreamDeltaBatcher(opts: {
   turnId: string;
-  text: string;
-  toolCalls: ToolCallSpec[];
-  finishReason: unknown;
-}): Promise<void> {
-  if (opts.text) {
+  eventType: "text_delta" | "reasoning_delta";
+  maxChars?: number;
+  maxMs?: number;
+}): StreamDeltaBatcher {
+  const maxChars = opts.maxChars ?? N_64;
+  const maxMs = opts.maxMs ?? N_50;
+  let buffer = "";
+  let all = "";
+  let lastFlushAt = Date.now();
+  const flush = async () => {
+    if (!buffer) return;
+    const text = buffer;
+    buffer = "";
+    lastFlushAt = Date.now();
     await appendChunk({
       turnId: opts.turnId,
-      eventType: "text_delta",
-      payload: { text: opts.text }
+      eventType: opts.eventType,
+      payload: { text }
     });
-  }
-  for (const tc of opts.toolCalls) {
+  };
+  return {
+    push: async (chunk: string) => {
+      if (!chunk) return;
+      all += chunk;
+      buffer += chunk;
+      if (
+        shouldFlushDeltaBatch({
+          bufferLength: buffer.length,
+          elapsedMs: Date.now() - lastFlushAt,
+          maxChars,
+          maxMs
+        })
+      ) {
+        await flush();
+      }
+    },
+    flush,
+    fullText: () => all
+  };
+}
+
+export function shouldFlushDeltaBatch(opts: {
+  bufferLength: number;
+  elapsedMs: number;
+  maxChars?: number;
+  maxMs?: number;
+}): boolean {
+  const maxChars = opts.maxChars ?? N_64;
+  const maxMs = opts.maxMs ?? N_50;
+  return opts.bufferLength >= maxChars || opts.elapsedMs >= maxMs;
+}
+
+async function consumeLlmFullStream(opts: {
+  turnId: string;
+  result: ReturnType<typeof streamText>;
+  textBatch: StreamDeltaBatcher;
+  reasoningBatch: StreamDeltaBatcher;
+  toolCalls: ToolCallSpec[];
+}): Promise<unknown> {
+  for await (const part of opts.result.fullStream) {
+    if (part.type === "text-delta") {
+      await opts.textBatch.push(part.text);
+      continue;
+    }
+    if (part.type === "reasoning-delta") {
+      await opts.reasoningBatch.push(part.text);
+      continue;
+    }
+    if (part.type !== "tool-call") continue;
+    await opts.reasoningBatch.flush();
+    await opts.textBatch.flush();
+    const thoughtSignature = extractThoughtSignature(part.providerMetadata);
+    const tc: ToolCallSpec = {
+      toolCallId: part.toolCallId,
+      toolName: part.toolName,
+      args: (part.input ?? {}) as Record<string, unknown>,
+      ...(thoughtSignature ? { thoughtSignature } : {})
+    };
+    opts.toolCalls.push(tc);
     await appendChunk({
       turnId: opts.turnId,
       eventType: "tool_call",
@@ -188,17 +245,21 @@ async function emitLlmStepChunks(opts: {
       }
     });
   }
+  await opts.reasoningBatch.flush();
+  await opts.textBatch.flush();
+  const finishReason = await opts.result.finishReason;
   await appendChunk({
     turnId: opts.turnId,
     eventType: "llm_finish",
     payload: {
-      finishReason: opts.finishReason,
+      finishReason,
       toolCallCount: opts.toolCalls.length
     }
   });
+  return finishReason;
 }
 
-async function generateLlmStepText(opts: {
+async function streamLlmStepText(opts: {
   provider: ChatLlmProvider;
   model: Awaited<ReturnType<typeof resolveChatLanguageModel>>;
   baseSystem: string;
@@ -207,28 +268,49 @@ async function generateLlmStepText(opts: {
   providerOptions: ReturnType<typeof buildLlmProviderOptions>;
   turnId: string;
 }): Promise<{
-  text?: string;
-  toolCalls?: Array<{
-    toolCallId: string;
-    toolName: string;
-    input?: unknown;
-    providerMetadata?: unknown;
-  }>;
-  finishReason?: unknown;
+  text: string;
+  reasoningText: string;
+  toolCalls: ToolCallSpec[];
+  finishReason: unknown;
 }> {
+  const textBatch = createStreamDeltaBatcher({
+    turnId: opts.turnId,
+    eventType: "text_delta"
+  });
+  const reasoningBatch = createStreamDeltaBatcher({
+    turnId: opts.turnId,
+    eventType: "reasoning_delta"
+  });
+  const toolCalls: ToolCallSpec[] = [];
   try {
     return await withHeartbeats({
-      work: generateText({
-        model: opts.model,
-        system: opts.baseSystem,
-        messages: partsToModelMessages(withFirstTurnRepoEval(opts.messages)),
-        tools: opts.toolsForModel as Parameters<
-          typeof generateText
-        >[0]["tools"],
-        stopWhen: stepCountIs(1),
-        maxOutputTokens: opts.provider === "anthropic" ? N_8192 : undefined,
-        providerOptions: opts.providerOptions
-      }),
+      work: (async () => {
+        const result = streamText({
+          model: opts.model,
+          system: opts.baseSystem,
+          messages: partsToModelMessages(withFirstTurnRepoEval(opts.messages)),
+          tools: opts.toolsForModel as Parameters<
+            typeof streamText
+          >[0]["tools"],
+          stopWhen: stepCountIs(1),
+          maxOutputTokens: opts.provider === "anthropic" ? N_8192 : undefined,
+          providerOptions: opts.providerOptions,
+          abortSignal: cancellationSignal()
+        });
+        const finishReason = await consumeLlmFullStream({
+          turnId: opts.turnId,
+          result,
+          textBatch,
+          reasoningBatch,
+          toolCalls
+        });
+        return {
+          text: textBatch.fullText().trim(),
+          reasoningText: reasoningBatch.fullText().trim(),
+          toolCalls,
+          finishReason
+        };
+      })(),
       detail: {
         detail: `runLlmStep:${opts.turnId}`,
         systemPromptChars: opts.baseSystem.length,
@@ -287,7 +369,7 @@ export async function runLlmStep(input: {
       systemPrompt: baseSystem
     }
   });
-  const result = await generateLlmStepText({
+  const result = await streamLlmStepText({
     provider,
     model,
     baseSystem,
@@ -296,24 +378,10 @@ export async function runLlmStep(input: {
     providerOptions,
     turnId: input.turnId
   });
-  const text = result.text?.trim() ?? "";
-  const toolCalls = mapResultToolCalls(
-    (result.toolCalls ?? []) as Array<{
-      toolCallId: string;
-      toolName: string;
-      input?: unknown;
-      providerMetadata?: unknown;
-    }>
-  );
-  await emitLlmStepChunks({
-    turnId: input.turnId,
-    text,
-    toolCalls,
-    finishReason: result.finishReason
-  });
   return {
-    text,
-    toolCalls,
+    text: result.text,
+    reasoningText: result.reasoningText,
+    toolCalls: result.toolCalls,
     finishReason: String(result.finishReason ?? "stop"),
     systemPromptChars: baseSystem.length,
     systemPrompt: baseSystem

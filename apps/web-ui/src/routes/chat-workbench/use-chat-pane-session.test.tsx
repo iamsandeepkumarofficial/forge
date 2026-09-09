@@ -6,7 +6,9 @@ import { useChatPaneSession } from "./use-chat-pane-session";
 
 vi.mock("../../lib/chat-agent.js", () => ({
   fetchSessionMessages: vi.fn(async () => []),
-  cancelChatTurn: vi.fn()
+  fetchRunningTurn: vi.fn(async () => null),
+  cancelChatTurn: vi.fn(),
+  consumeTurnStream: vi.fn(async () => undefined)
 }));
 vi.mock("../../lib/tool-display.js", () => ({
   mergeSessionMessagesForUi: vi.fn(() => [])

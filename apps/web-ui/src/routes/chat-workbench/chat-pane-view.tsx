@@ -22,6 +22,7 @@ export type ChatPaneViewProps = {
   messages: UiChatMessage[];
   isStreaming: boolean;
   streamingText: string;
+  streamingReasoning?: string;
   liveToolParts: ToolPart[];
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | null;
@@ -70,6 +71,7 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         messages={o.messages}
         isStreaming={o.isStreaming}
         streamingText={o.streamingText}
+        streamingReasoning={o.streamingReasoning}
         liveToolParts={o.liveToolParts}
         status={o.status}
         waiting={Boolean(o.pendingAskUser)}
