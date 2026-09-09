@@ -8,10 +8,10 @@ Thanks for helping build Forge—an open-source, locally runnable coding agent h
 
 - Node.js 20+
 - pnpm (version pinned in root `packageManager`)
-- **Host mode (recommended for desktop):** Postgres 16 tools + Temporal CLI (or `~/.forge/runtime/bin/`) — Docker optional
-- **Docker mode:** Docker daemon running; set `SANDBOX_RUNTIME=docker`
+- **Desktop:** Postgres 16 tools + Temporal CLI (or `~/.forge/runtime/bin/`) — Docker optional
+- **Cloud sessions:** Docker daemon running when you select Cloud in the UI (`FORGE_CLOUD_SANDBOX=docker`)
 
-### Host mode (desktop)
+### Desktop
 
 ```bash
 pnpm install
@@ -20,16 +20,16 @@ cp .env.example .env
 pnpm desktop
 ```
 
-No Docker daemon required. Use the home **Activity** dialog to list/stop sessions and preview apps.
+No Docker daemon required for Normal (local) sessions. Use the home **Activity** dialog to list/stop sessions and preview apps.
 
-### Docker mode (browser + compose)
+### Browser + compose
 
 ```bash
 docker compose up -d
 pnpm install
 cp .env.example .env
 # Add LLM provider keys to .env
-# SANDBOX_RUNTIME=docker
+# FORGE_CLOUD_SANDBOX=docker
 pnpm docker:sandbox
 pnpm --filter @forge/db db:migrate
 pnpm dev

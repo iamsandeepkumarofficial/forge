@@ -70,7 +70,7 @@
 
 ## Unavailable / wrong DB blocks setup with no alternate path (2026-08-31)
 
-**Observed:** Workspace setup assumes a provisioned DB engine (e.g. Mongo from `provision_app_engine` or workspace parameters). If the configured database is **stopped, wrong, or never provisioned**, the user/agent can be **blocked** with no clear way to connect to a **different** DB instance (local Docker, external URI, alternate engine) without manual env hacking.
+**Observed:** Workspace setup assumes a provisioned DB engine (e.g. Mongo from `setup_project_infra` or workspace parameters). If the configured database is **stopped, wrong, or never provisioned**, the user/agent can be **blocked** with no clear way to connect to a **different** DB instance (local Docker, external URI, alternate engine) without manual env hacking.
 
 **Examples:**
 
@@ -85,7 +85,7 @@
 3. Whether alternate connection updates `workspace_databases`, parameters, and session env atomically.
 4. Agent SOP: when engine down, offer reconnect/replace before endless `preview_start` / install retries.
 
-**Scope:** Workspace setup, `provision_app_engine`, parameters, health/analyze — needs product UX pass. Not terminal work.
+**Scope:** Workspace setup, `setup_project_infra` / `install_project_infra`, parameters, health/analyze — needs product UX pass. Not terminal work.
 
 ---
 

@@ -20,13 +20,16 @@ Desktop boot today assumes Docker for Postgres, Temporal, the sandbox image, and
 
 ## Goals
 
-1. `SANDBOX_RUNTIME=host` (default when `FORGE_DESKTOP=1`) runs chats, tools, and previews with **no Docker daemon**.
-2. Preserve **multi-session isolation**: separate worktrees, ports, process trees, and OS-sandbox writable roots.
-3. Keep the **preview reverse proxy** (`*.preview.localhost`); only drop Docker `-p` / port-repair.
-4. Ship a **light OS sandbox** around agent-spawned processes (not around the tool-plane itself).
-5. Make the **full agent tool catalog** work in host mode (hybrid in-process FS + sandboxed spawn; host `web_fetch` / `web_search`).
-6. Run **Postgres 16** and **Temporal CLI `start-dev`** as supervised host processes under `~/.forge/`.
-7. Provide an **Activity** UI for live sessions, ports, and previews.
+1. **Normal** sessions (`execution_target=local`) run chats, tools, and previews on the **host** SandboxRuntime with **no Docker daemon**.
+2. **Cloud** sessions (`execution_target=cloud`) use Docker by default (`FORGE_CLOUD_SANDBOX=docker`), or Kubernetes when configured.
+3. Preserve **multi-session isolation**: separate worktrees, ports, process trees, and OS-sandbox writable roots.
+4. Keep the **preview reverse proxy** (`*.preview.localhost`); only drop Docker `-p` / port-repair for host sessions.
+5. Ship a **light OS sandbox** around agent-spawned processes (not around the tool-plane itself).
+6. Make the **full agent tool catalog** work in host mode (hybrid in-process FS + sandboxed spawn; host `web_fetch` / `web_search`).
+7. Run **Postgres 16** and **Temporal CLI `start-dev`** as supervised host processes under `~/.forge/` (desktop always uses this catalog stack).
+8. Provide an **Activity** UI for live sessions, ports, and previews.
+
+> **Amendment:** Process-wide `SANDBOX_RUNTIME` / `FORGE_DESKTOP` env switches were removed in favor of per-session `execution_target` (`local` | `cloud`) chosen in the UI.
 
 ## Non-goals (this phase)
 
@@ -72,9 +75,9 @@ flowchart LR
 
 ### Runtime selection
 
-- `SANDBOX_RUNTIME=host` | `docker` | `kubernetes` (`k8s` alias).
-- Default: `FORGE_DESKTOP=1` → `host`; otherwise `docker` unless overridden.
-- Cloud deployments keep `docker` / `kubernetes`.
+- Per chat: `execution_target` = `local` (host SandboxRuntime) | `cloud` (Docker by default).
+- Cloud backend: `FORGE_CLOUD_SANDBOX=docker` | `kubernetes` | `k8s` (k8s not wired in desktop create yet).
+- Desktop catalog stack is always native Postgres + Temporal under `~/.forge/`.
 
 ### Path contract
 
@@ -103,13 +106,13 @@ Escape hatch: `FORGE_HOST_SANDBOX=0` (debug only).
 
 ### Agent tools (hybrid)
 
-| Class           | Tools                                                               | Host behavior                                                  |
-| --------------- | ------------------------------------------------------------------- | -------------------------------------------------------------- |
-| In-process FS   | `read_file`, `write_file`, `edit_file`, `list_*`, `search_codebase` | Host FS + path allowlist                                       |
-| Sandboxed spawn | `run_terminal`, PTY, preview jobs                                   | Host adapter under OS sandbox; scrubbed env                    |
-| Host web        | `web_fetch`, `web_search`                                           | Host Playwright (or curl); host search workers — **no Docker** |
-| Meta            | `docker_image_lookup`                                               | Hidden / unavailable in host mode                              |
-| App DB          | `provision_app_engine`                                              | Localhost engines (no `forge` network aliases)                 |
+| Class           | Tools                                                               | Host behavior                                                   |
+| --------------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| In-process FS   | `read_file`, `write_file`, `edit_file`, `list_*`, `search_codebase` | Host FS + path allowlist                                        |
+| Sandboxed spawn | `run_terminal`, PTY, preview jobs                                   | Host adapter under OS sandbox; scrubbed env                     |
+| Host web        | `web_fetch`, `web_search`                                           | Host Playwright (or curl); host search workers — **no Docker**  |
+| Meta            | `docker_image_lookup`                                               | Hidden / unavailable in host mode                               |
+| App DB / infra  | `setup_project_infra` / `install_project_infra`                     | Localhost engines; host tarball install into `~/.forge/runtime` |
 
 ### Zero-Docker catalog infra
 

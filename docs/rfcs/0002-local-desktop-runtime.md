@@ -12,7 +12,7 @@ Implementation lives in **Electron** (`apps/electron`, `pnpm desktop`). The orig
 
 Forge ships an **Electron desktop app** whose supervisor owns local infrastructure lifecycle: detect Docker, bring up docker-compose services, ensure the sandbox image exists, spawn the Node harness processes, inject a loopback auth token, and open the chat UI in Chromium. LLM credentials and preferences live in `~/.forge/config.json`. Previews use the local preview-plane at `*.preview.localhost`.
 
-> **Amendment (RFC 0006):** Default **host mode** boot uses managed Postgres + Temporal CLI under `~/.forge/` instead of compose/sandbox image. Docker compose remains an optional contributor/cloud path (`SANDBOX_RUNTIME=docker`).
+> **Amendment (RFC 0006):** Desktop catalog uses managed Postgres + Temporal CLI under `~/.forge/`. Per-session **Normal** (host) vs **Cloud** (Docker / optional k8s via `FORGE_CLOUD_SANDBOX`) replaces process-wide `SANDBOX_RUNTIME`.
 
 ## Motivation
 
