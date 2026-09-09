@@ -10,6 +10,7 @@ import {
 } from "../sessionSandbox.js";
 import { normalizeLaunchCwd, safeRelDir } from "../launchCwd.js";
 import type { ForgeApp, ForgeConfig, LaunchConfigSource } from "./types.js";
+import { matchLaunchApp } from "./matchLaunchApp.js";
 
 export type {
   AppType,
@@ -93,30 +94,35 @@ function assertCwdUnderRepo(options: {
   return `${repo}/${cleaned.replace(/^\.\//, "")}`;
 }
 
-async function readLaunchAt(
-  containerName: string,
-  mountPath: string
-): Promise<{ source: LaunchConfigSource; config: ForgeConfig } | null> {
-  const launchRaw = await readFileFromSandbox(
-    containerName,
-    `${mountPath}/${LAUNCH_FILE}`
-  );
+async function readLaunchAt(options: {
+  containerName: string;
+  mountPath: string;
+  sessionId: string;
+}): Promise<{ source: LaunchConfigSource; config: ForgeConfig } | null> {
+  const { containerName, mountPath, sessionId } = options;
+  const launchRaw = await readFileFromSandbox({
+    container: containerName,
+    absPath: `${mountPath}/${LAUNCH_FILE}`,
+    sessionId
+  });
   const launchConfig = parseConfigJson(launchRaw);
   if (launchConfig) {
     return { source: "launch", config: launchConfig };
   }
-  const legacyLaunchRaw = await readFileFromSandbox(
-    containerName,
-    `${mountPath}/${LEGACY_LAUNCH_FILE}`
-  );
+  const legacyLaunchRaw = await readFileFromSandbox({
+    container: containerName,
+    absPath: `${mountPath}/${LEGACY_LAUNCH_FILE}`,
+    sessionId
+  });
   const legacyLaunchConfig = parseConfigJson(legacyLaunchRaw);
   if (legacyLaunchConfig) {
     return { source: "legacy", config: legacyLaunchConfig };
   }
-  const legacyRaw = await readFileFromSandbox(
-    containerName,
-    `${mountPath}/${LEGACY_ROOT_FILE}`
-  );
+  const legacyRaw = await readFileFromSandbox({
+    container: containerName,
+    absPath: `${mountPath}/${LEGACY_ROOT_FILE}`,
+    sessionId
+  });
   const legacyConfig = parseConfigJson(legacyRaw);
   if (legacyConfig) {
     return { source: "legacy", config: legacyConfig };
@@ -135,7 +141,11 @@ export async function readForgeConfig(sessionId: string): Promise<{
   const memberRepos = trees ? Object.keys(trees).sort() : [];
 
   if (trees) {
-    const rootFound = await readLaunchAt(containerName, workingDir);
+    const rootFound = await readLaunchAt({
+      containerName,
+      mountPath: workingDir,
+      sessionId
+    });
     if (!rootFound) {
       return { exists: false, source: "none", config: { apps: [] } };
     }
@@ -151,7 +161,11 @@ export async function readForgeConfig(sessionId: string): Promise<{
     };
   }
 
-  const found = await readLaunchAt(containerName, workingDir);
+  const found = await readLaunchAt({
+    containerName,
+    mountPath: workingDir,
+    sessionId
+  });
   if (found) {
     return { exists: true, source: found.source, config: found.config };
   }
@@ -208,6 +222,7 @@ export async function writeForgeConfig(
     }
     await writeFileToSandbox({
       container: containerName,
+      sessionId,
       absPath: `${workingDir}/${LAUNCH_FILE}`,
       content: JSON.stringify({ apps: rootApps }, null, 2) + "\n"
     });
@@ -216,6 +231,7 @@ export async function writeForgeConfig(
 
   await writeFileToSandbox({
     container: containerName,
+    sessionId,
     absPath: `${workingDir}/${LAUNCH_FILE}`,
     content: JSON.stringify({ apps: config.apps }, null, 2) + "\n"
   });
@@ -379,11 +395,14 @@ export async function findApp(
   name: string
 ): Promise<ForgeApp> {
   const { config } = await readForgeConfig(sessionId);
-  const app = config.apps.find((a) => a.name === name);
+  const app = matchLaunchApp(config.apps, name);
   if (!app) {
+    const known = config.apps.map((a) => a.name).join(", ") || "(none)";
     throw new Error(
-      `App not found in .forge/launch.json: ${name}. Use upsert_launch_app, then retry.`
+      `App not found in .forge/launch.json: ${name}. Known: ${known}. Use upsert_launch_app, then retry.`
     );
   }
   return app;
 }
+
+export { matchLaunchApp } from "./matchLaunchApp.js";

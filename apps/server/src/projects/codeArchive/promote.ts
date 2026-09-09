@@ -12,6 +12,7 @@ const EXCLUDES = [
 
 export async function promoteGithubBranch(options: {
   containerName: string;
+  sessionId: string;
   workingDir: string;
   project: Project;
   branch: string;
@@ -21,6 +22,7 @@ export async function promoteGithubBranch(options: {
   }
   const r = await dockerExec({
     container: options.containerName,
+    sessionId: options.sessionId,
     argv: [
       "sh",
       "-c",
@@ -36,9 +38,9 @@ export async function promoteGithubBranch(options: {
   return { target: "github", branch: options.branch };
 }
 
-
 export async function promoteLocalBranch(options: {
   containerName: string;
+  sessionId: string;
   workingDir: string;
   project: Project;
   branch: string;
@@ -48,6 +50,7 @@ export async function promoteLocalBranch(options: {
   }
   const r = await dockerExec({
     container: options.containerName,
+    sessionId: options.sessionId,
     argv: [
       "sh",
       "-c",

@@ -2,14 +2,31 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { resolveSandbox } from "./sandboxExec.js";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
 import { ProjectRepository } from "../catalog/projectRepository.js";
-import { EXCLUDES, promoteGithubBranch, promoteLocalBranch } from "./codeArchive/promote.js";
+import {
+  EXCLUDES,
+  promoteGithubBranch,
+  promoteLocalBranch
+} from "./codeArchive/promote.js";
 
 export async function spawnRepoTarGz(sessionId: string): Promise<{
   child: ChildProcessWithoutNullStreams;
   filename: string;
 }> {
-  const { containerName, workingDir, repoDir } =
+  const { containerName, workingDir, repoDir, hostWorkingDir } =
     await resolveSandbox(sessionId);
+  const { isHostSession, getSandboxRuntime } =
+    await import("./sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) {
+    const runtime = await getSandboxRuntime(sessionId);
+    const status = await runtime.getStatus(sessionId);
+    const cwd = hostWorkingDir ?? status.ref ?? containerName;
+    const child = spawn(
+      "sh",
+      ["-c", `cd "${cwd}" && tar czf - ${EXCLUDES.join(" ")} .`],
+      { env: process.env }
+    );
+    return { child, filename: `${repoDir}.tar.gz` };
+  }
   const child = spawn(
     "docker",
     [
@@ -45,6 +62,7 @@ export async function promoteToCanonical(sessionId: string): Promise<{
   if (project.source === "github") {
     return promoteGithubBranch({
       containerName,
+      sessionId,
       workingDir,
       project,
       branch: chat.branchName
@@ -52,6 +70,7 @@ export async function promoteToCanonical(sessionId: string): Promise<{
   }
   return promoteLocalBranch({
     containerName,
+    sessionId,
     workingDir,
     project,
     branch: chat.branchName

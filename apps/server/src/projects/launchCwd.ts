@@ -48,7 +48,11 @@ export async function resolveLaunchAppDir(options: {
   const rel = safeRelDir(options.cwd || ".") || ".";
   const primary = appDirForCwd({ workingDir: options.workingDir, relCwd: rel });
   if (
-    await pathExistsInSandbox(options.containerName, primary, options.sessionId)
+    await pathExistsInSandbox({
+      container: options.containerName,
+      absPath: primary,
+      sessionId: options.sessionId
+    })
   ) {
     return { appDir: primary, relCwd: rel === "." ? "." : rel };
   }
@@ -58,11 +62,11 @@ export async function resolveLaunchAppDir(options: {
   if (
     repo &&
     rel === repo &&
-    (await pathExistsInSandbox(
-      options.containerName,
-      options.workingDir,
-      options.sessionId
-    ))
+    (await pathExistsInSandbox({
+      container: options.containerName,
+      absPath: options.workingDir,
+      sessionId: options.sessionId
+    }))
   ) {
     return { appDir: options.workingDir, relCwd: "." };
   }

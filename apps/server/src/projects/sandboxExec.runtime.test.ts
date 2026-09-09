@@ -4,16 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { dockerExec } from "./sandboxExec.js";
-import { resetSandboxRuntimeCache } from "./sandboxRuntime/resolve.js";
+import {
+  rememberSessionExecutionTarget,
+  resetSandboxRuntimeCache
+} from "./sandboxRuntime/resolve.js";
 
 describe("dockerExec runtime routing", () => {
-  const prevRuntime = process.env.SANDBOX_RUNTIME;
   const prevSessions = process.env.FORGE_SESSIONS_ROOT;
   let tmp = "";
 
   afterEach(async () => {
-    if (prevRuntime === undefined) delete process.env.SANDBOX_RUNTIME;
-    else process.env.SANDBOX_RUNTIME = prevRuntime;
     if (prevSessions === undefined) delete process.env.FORGE_SESSIONS_ROOT;
     else process.env.FORGE_SESSIONS_ROOT = prevSessions;
     resetSandboxRuntimeCache();
@@ -22,9 +22,10 @@ describe("dockerExec runtime routing", () => {
 
   it("routes host exec through SandboxRuntime without docker CLI", async () => {
     tmp = await fs.mkdtemp(path.join(os.tmpdir(), "forge-route-"));
-    process.env.SANDBOX_RUNTIME = "host";
     process.env.FORGE_SESSIONS_ROOT = path.join(tmp, "sessions");
+    rememberSessionExecutionTarget("s-route", "local");
     resetSandboxRuntimeCache();
+    rememberSessionExecutionTarget("s-route", "local");
 
     const ws = path.join(tmp, "ws");
     await fs.mkdir(ws, { recursive: true });

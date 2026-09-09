@@ -86,11 +86,11 @@ export async function readTerminalJobMeta(options: {
       raw = null;
     }
   } else {
-    raw = await readFileFromSandbox(
-      options.containerName,
+    raw = await readFileFromSandbox({
+      container: options.containerName,
       absPath,
-      options.sessionId ?? ""
-    );
+      sessionId: options.sessionId ?? ""
+    });
   }
   if (!raw) {
     return null;

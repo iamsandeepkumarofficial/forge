@@ -15,14 +15,20 @@ import type {
   AppStartFailure,
   LaunchConfigSource
 } from "./types.js";
-import { ctx, readForgeConfig } from "./config.js";
+import { ctx, readForgeConfig, matchLaunchApp } from "./config.js";
 import { runApp } from "./run.js";
 
 const N_800 = 800;
 
 export async function stopApp(sessionId: string, name: string): Promise<void> {
   const { containerName } = await ctx(sessionId);
-  await stopBackgroundJob({ containerName, kind: "app", name });
+  const app = await findAppName(sessionId, name);
+  await stopBackgroundJob({
+    containerName,
+    kind: "app",
+    name: app,
+    sessionId
+  });
 }
 export async function appLogs(options: {
   sessionId: string;
@@ -31,12 +37,19 @@ export async function appLogs(options: {
 }): Promise<string> {
   const { sessionId, name, tail = 300 } = options;
   const { containerName } = await ctx(sessionId);
+  const appName = await findAppName(sessionId, name);
   return readBackgroundJobLogs({
     containerName,
     kind: "app",
-    name,
-    tail
+    name: appName,
+    tail,
+    sessionId
   });
+}
+
+async function findAppName(sessionId: string, name: string): Promise<string> {
+  const { config } = await readForgeConfig(sessionId);
+  return matchLaunchApp(config.apps, name)?.name ?? name;
 }
 export async function appLogsForSession(
   sessionId: string,
@@ -142,7 +155,8 @@ export async function statusForApp(options: {
   const running = await isBackgroundJobRunning({
     containerName,
     kind: "app",
-    name: app.name
+    name: app.name,
+    sessionId
   });
   const hostPort =
     app.port != null ? hostPortForContainerPort(sessionId, app.port) : null;
@@ -200,18 +214,23 @@ export async function listAppRunningFlags(
   const { containerName } = await ctx(sessionId);
   const { pathExistsInSandbox } = await import("../sandboxExec.js");
   const { jobLogFile } = await import("../backgroundJob.js");
+  const { isHostSession } = await import("../sandboxRuntime/resolve.js");
+  const host = await isHostSession(sessionId);
+  const workspaceRoot = host ? containerName : undefined;
   const flags = await Promise.all(
     config.apps.map(async (app) => {
       const running = await isBackgroundJobRunning({
         containerName,
         kind: "app",
-        name: app.name
+        name: app.name,
+        sessionId
       });
       if (running) return { name: app.name, running: true };
-      const hasLog = await pathExistsInSandbox(
-        containerName,
-        jobLogFile({ kind: "app", name: app.name })
-      );
+      const hasLog = await pathExistsInSandbox({
+        container: containerName,
+        absPath: jobLogFile({ kind: "app", name: app.name, workspaceRoot }),
+        sessionId
+      });
       return hasLog ? { name: app.name, running: false } : null;
     })
   );

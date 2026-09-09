@@ -78,6 +78,7 @@ async function handleTerminalRun(options: {
   const sandbox = await resolveSandbox(options.sessionId);
   const cwd = await resolveTerminalCwd({
     containerName: sandbox.containerName,
+    sessionId: options.sessionId,
     repoDir: sandbox.repoDir,
     workingDir: sandbox.workingDir,
     worktrees: sandbox.worktrees,
@@ -115,6 +116,7 @@ async function handleTerminalRun(options: {
 
 export async function resolveTerminalCwd(options: {
   containerName: string;
+  sessionId: string;
   repoDir: string;
   workingDir: string;
   command: string;
@@ -146,7 +148,11 @@ export async function resolveTerminalCwd(options: {
 
   if (
     options.command.startsWith("git") &&
-    !(await pathExistsInSandbox(options.containerName, `${cwd}/.git`))
+    !(await pathExistsInSandbox({
+      container: options.containerName,
+      absPath: `${cwd}/.git`,
+      sessionId: options.sessionId
+    }))
   ) {
     const hint = knownRepos
       ? `Pass workingDirectory as a member repo (${[...knownRepos].sort().join(", ")}).`
@@ -187,11 +193,13 @@ async function startBackgroundTerminal(options: {
   const running = await waitUntilJobRunning({
     containerName: options.containerName,
     kind: "term",
-    name: jobName
+    name: jobName,
+    sessionId: options.sessionId
   });
   const logs = await terminalJobLogs({
     containerName: options.containerName,
-    name: jobName
+    name: jobName,
+    sessionId: options.sessionId
   });
   if (logs.includes("cwd not found:")) {
     return {
@@ -230,7 +238,8 @@ async function handleTerminalLogs(options: {
   const logs = await terminalJobLogs({
     containerName,
     name: jobName,
-    tail: options.tail
+    tail: options.tail,
+    sessionId: options.sessionId
   });
   return {
     success: true,
@@ -244,7 +253,7 @@ async function handleTerminalStatus(options: {
   jobName?: string;
 }): Promise<ToolResult> {
   const { containerName } = await resolveSandbox(options.sessionId);
-  const jobs = await listTerminalJobStatuses(containerName);
+  const jobs = await listTerminalJobStatuses(containerName, options.sessionId);
   const jobName = sanitizeOptionalJobName(options.jobName);
   const filtered = jobName ? jobs.filter((j) => j.name === jobName) : jobs;
   if (filtered.length === 0) {
@@ -280,7 +289,11 @@ async function handleTerminalStop(options: {
     return { success: false, output: "jobName is required for action=stop" };
   }
   const { containerName } = await resolveSandbox(options.sessionId);
-  await stopTerminalJob({ containerName, name: jobName });
+  await stopTerminalJob({
+    containerName,
+    name: jobName,
+    sessionId: options.sessionId
+  });
   return {
     success: true,
     output: `Stopped terminal job ${jobName}`,

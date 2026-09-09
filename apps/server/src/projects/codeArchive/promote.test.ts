@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 describe("codeArchive promote helpers", () => {
   let promoteGithubBranch: (options: {
     containerName: string;
+    sessionId: string;
     workingDir: string;
     project: { dedupeKey: string };
     branch: string;
@@ -34,6 +35,7 @@ describe("codeArchive promote helpers", () => {
       () =>
         promoteGithubBranch({
           containerName: "c",
+          sessionId: "s1",
           workingDir: "/w",
           project: { dedupeKey: "not-a-slug" },
           branch: "main"

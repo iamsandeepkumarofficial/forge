@@ -158,11 +158,11 @@ async function readSandboxFile(options: {
   absPath: string;
   sessionId: string;
 }): Promise<string | null> {
-  return readFileFromSandbox(
-    options.containerName,
-    options.absPath,
-    options.sessionId
-  );
+  return readFileFromSandbox({
+    container: options.containerName,
+    absPath: options.absPath,
+    sessionId: options.sessionId
+  });
 }
 
 export async function loadRepoInventoryFromSandbox(options: {

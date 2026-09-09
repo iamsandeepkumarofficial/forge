@@ -20,7 +20,8 @@ import { executeListSkills } from "./listSkills.tool.js";
 import { executeInvokeSkill } from "./invokeSkill.tool.js";
 import { executeUpsertWorkspaceParameter } from "./upsertWorkspaceParameter.tool.js";
 import { executeDockerImageLookup } from "./dockerImageLookup.tool.js";
-import { executeProvisionAppEngine } from "./provisionAppEngine.tool.js";
+import { executeSetupProjectInfra } from "./setupProjectInfra.tool.js";
+import { executeInstallProjectInfra } from "./installProjectInfra.tool.js";
 
 const N_200 = 200;
 const N_400 = 400;
@@ -141,35 +142,23 @@ async function routeNamedTool(options: {
   if (toolName === "invoke_skill") {
     const skillId = typeof args.skillId === "string" ? args.skillId : "";
     const body = await executeInvokeSkill({ sessionId, skillId });
-    return {
-      kind: "result",
-      status: body.success ? N_200 : N_400,
-      body
-    };
+    return { kind: "result", status: N_200, body };
   }
   if (toolName === "upsert_workspace_parameter") {
     const body = await executeUpsertWorkspaceParameter({ sessionId, args });
-    return {
-      kind: "result",
-      status: body.success ? N_200 : N_400,
-      body
-    };
+    return { kind: "result", status: N_200, body };
   }
   if (toolName === "docker_image_lookup") {
-    const body = await executeDockerImageLookup({ args });
-    return {
-      kind: "result",
-      status: body.success ? N_200 : N_400,
-      body
-    };
+    const body = await executeDockerImageLookup({ sessionId, args });
+    return { kind: "result", status: N_200, body };
   }
-  if (toolName === "provision_app_engine") {
-    const body = await executeProvisionAppEngine({ sessionId, args });
-    return {
-      kind: "result",
-      status: body.success ? N_200 : N_400,
-      body
-    };
+  if (toolName === "setup_project_infra") {
+    const body = await executeSetupProjectInfra({ sessionId, args });
+    return { kind: "result", status: N_200, body };
+  }
+  if (toolName === "install_project_infra") {
+    const body = await executeInstallProjectInfra({ sessionId, args });
+    return { kind: "result", status: N_200, body };
   }
   return null;
 }

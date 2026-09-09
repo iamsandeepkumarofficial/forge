@@ -177,9 +177,9 @@ export function withFirstTurnRepoEval(
           type: "text",
           text: [
             "[Repo readiness eval] Read ## Working repositories, ## Workspace repos, ## Repo setup, ## Workspace setup SOP, ## Environment, and ## Workspace health in the system prompt.",
-            "Order: (1) identify stack per member from shadows/inventory (2) invoke_skill for that stack (3) install via run_terminal per skill (ask_user for toolchain if missing) (4) ask_user then upsert_workspace_parameter for env; ask_user then provision_app_engine with userApproved after consent (5) upsert_launch_app with cwd under the member (6) preview_start backends before frontends when dependsOn says so.",
+            "Order: (1) identify stack per member from shadows/inventory (2) invoke_skill for that stack (3) install via run_terminal per skill (ask_user for toolchain if missing) (4) ask_user then upsert_workspace_parameter for env; ask_user then setup_project_infra with userApproved after consent; on missing host binaries use install_project_infra then retry setup (5) upsert_launch_app with cwd under the member (6) preview_start backends before frontends when dependsOn says so.",
             "Never use run_terminal for npm/pnpm/yarn run dev|start or long-running app servers — use preview_start (network plane).",
-            "Do not install Postgres/Mongo server packages; use ask_user then provision_app_engine after user approval.",
+            "Do not install Postgres/Mongo via run_terminal; use install_project_infra then setup_project_infra after user approval.",
             "Then continue with the user's request."
           ].join(" ")
         }

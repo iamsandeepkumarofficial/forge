@@ -6,16 +6,16 @@ import {
   readFileFromSandbox,
   writeFileToSandbox
 } from "../projects/sandboxExec.js";
-import {
-  parsePorcelain,
-  type SessionRepoChanges
-} from "../utilities/diff/diff.service.js";
 import type { ToolResult } from "./types.js";
 import {
   parseTerminalAction,
   runTerminalInSession
 } from "./runTerminal.tool.js";
 export { runTerminalInSession } from "./runTerminal.tool.js";
+export {
+  collectSandboxChanges,
+  diffFileInSandbox
+} from "./sandboxChanges.tool.js";
 export const SANDBOX_TOOL_NAMES = new Set([
   "read_file",
   "write_file",
@@ -25,7 +25,6 @@ export const SANDBOX_TOOL_NAMES = new Set([
   "list_files",
   "list_dir"
 ]);
-const MAX_DIFF_BYTES = 512000;
 const MAX_READ_CHARS = 40000;
 const MAX_OUTPUT_CHARS = 20000;
 const MAX_SEARCH_HITS = 200;
@@ -81,6 +80,7 @@ export function pathOpts(worktrees?: Record<string, string>): {
 
 async function handleReadFile(options: {
   containerName: string;
+  sessionId: string;
   args: Record<string, unknown>;
   knownRepos?: Set<string>;
 }): Promise<ToolResult> {
@@ -89,7 +89,11 @@ async function handleReadFile(options: {
     const abs = resolveWorkspacePath(rel, {
       knownRepos: options.knownRepos
     });
-    const content = await readFileFromSandbox(options.containerName, abs);
+    const content = await readFileFromSandbox({
+      container: options.containerName,
+      absPath: abs,
+      sessionId: options.sessionId
+    });
     if (content === null) {
       return { success: false, output: `File not found: ${rel}` };
     }
@@ -107,6 +111,7 @@ async function handleReadFile(options: {
 }
 async function handleWriteFile(options: {
   containerName: string;
+  sessionId: string;
   args: Record<string, unknown>;
   knownRepos?: Set<string>;
 }): Promise<ToolResult> {
@@ -117,6 +122,7 @@ async function handleWriteFile(options: {
     });
     await writeFileToSandbox({
       container: options.containerName,
+      sessionId: options.sessionId,
       absPath: abs,
       content: String(options.args.content ?? "")
     });
@@ -130,6 +136,7 @@ async function handleWriteFile(options: {
 }
 async function handleEditFile(options: {
   containerName: string;
+  sessionId: string;
   args: Record<string, unknown>;
   knownRepos?: Set<string>;
 }): Promise<ToolResult> {
@@ -141,7 +148,11 @@ async function handleEditFile(options: {
     const abs = resolveWorkspacePath(rel, {
       knownRepos: options.knownRepos
     });
-    const content = await readFileFromSandbox(options.containerName, abs);
+    const content = await readFileFromSandbox({
+      container: options.containerName,
+      absPath: abs,
+      sessionId: options.sessionId
+    });
     if (content === null) {
       return { success: false, output: `File not found: ${rel}` };
     }
@@ -159,6 +170,7 @@ async function handleEditFile(options: {
     }
     await writeFileToSandbox({
       container: options.containerName,
+      sessionId: options.sessionId,
       absPath: abs,
       content: updated
     });
@@ -173,6 +185,7 @@ async function handleEditFile(options: {
 async function handleSearchCodebase(options: {
   containerName: string;
   sessionRoot: string;
+  sessionId: string;
   args: Record<string, unknown>;
   knownRepos?: Set<string>;
 }): Promise<ToolResult> {
@@ -189,6 +202,7 @@ async function handleSearchCodebase(options: {
       : options.sessionRoot;
     const r = await dockerExec({
       container: options.containerName,
+      sessionId: options.sessionId,
       argv: ["node"],
       input: SEARCH_SCRIPT,
       env: { PATTERN: pattern, ROOT: root, BASE: options.sessionRoot }
@@ -214,9 +228,11 @@ async function handleSearchCodebase(options: {
 async function handleListFiles(options: {
   containerName: string;
   sessionRoot: string;
+  sessionId: string;
 }): Promise<ToolResult> {
   const r = await shInSandbox({
     container: options.containerName,
+    sessionId: options.sessionId,
     script: `cd "${options.sessionRoot}" && find . -type f -not -path '*/.git/*' -not -path '*/node_modules/*' | sed 's|^\\./||' | sort`
   });
   const listed = r.stdout.trim();
@@ -230,6 +246,7 @@ async function handleListFiles(options: {
 async function handleListDir(options: {
   containerName: string;
   sessionRoot: string;
+  sessionId: string;
   args: Record<string, unknown>;
   knownRepos?: Set<string>;
 }): Promise<ToolResult> {
@@ -242,6 +259,7 @@ async function handleListDir(options: {
       : options.sessionRoot;
     const r = await shInSandbox({
       container: options.containerName,
+      sessionId: options.sessionId,
       script: 'ls -Ap1 "$D" 2>/dev/null',
       env: { D: abs }
     });
@@ -279,9 +297,9 @@ export async function executeSandboxTool(options: {
   const { sessionId, toolName, args } = options;
   const info = await resolveSandbox(sessionId);
   const { containerName, sessionRoot, worktrees } = info;
-  const { resolveSandboxRuntimeKind } =
+  const { isHostSession } =
     await import("../projects/sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  if (await isHostSession(sessionId)) {
     const { executeHostSandboxFsTool } =
       await import("./sandboxHostFs.tool.js");
     const hostFs = await executeHostSandboxFsTool({ info, toolName, args });
@@ -290,11 +308,11 @@ export async function executeSandboxTool(options: {
   const known = pathOpts(worktrees);
   switch (toolName) {
     case "read_file":
-      return handleReadFile({ containerName, args, ...known });
+      return handleReadFile({ containerName, sessionId, args, ...known });
     case "write_file":
-      return handleWriteFile({ containerName, args, ...known });
+      return handleWriteFile({ containerName, sessionId, args, ...known });
     case "edit_file":
-      return handleEditFile({ containerName, args, ...known });
+      return handleEditFile({ containerName, sessionId, args, ...known });
     case "run_terminal":
       return runTerminalInSession({
         sessionId,
@@ -310,92 +328,21 @@ export async function executeSandboxTool(options: {
       return handleSearchCodebase({
         containerName,
         sessionRoot,
+        sessionId,
         args,
         ...known
       });
     case "list_files":
-      return handleListFiles({ containerName, sessionRoot });
+      return handleListFiles({ containerName, sessionRoot, sessionId });
     case "list_dir":
-      return handleListDir({ containerName, sessionRoot, args, ...known });
+      return handleListDir({
+        containerName,
+        sessionRoot,
+        sessionId,
+        args,
+        ...known
+      });
     default:
       return { success: false, output: `Unknown tool: ${toolName}` };
   }
-}
-export async function collectSandboxChanges(
-  sessionId: string
-): Promise<SessionRepoChanges[]> {
-  const { containerName, repoDir, workingDir, worktrees } =
-    await resolveSandbox(sessionId);
-  const trees =
-    worktrees && Object.keys(worktrees).length > 0
-      ? worktrees
-      : { [repoDir]: workingDir };
-  const out: SessionRepoChanges[] = [];
-  for (const [repo, path] of Object.entries(trees)) {
-    const r = await dockerExec({
-      container: containerName,
-      argv: ["git", "-C", path, "status", "--porcelain=v1", "-uall"]
-    });
-    if (r.code !== 0) {
-      out.push({
-        repo,
-        worktreePath: path,
-        files: [],
-        error: r.stderr.trim()
-      });
-      continue;
-    }
-    out.push({
-      repo,
-      worktreePath: path,
-      files: parsePorcelain(r.stdout)
-    });
-  }
-  return out;
-}
-export async function diffFileInSandbox(options: {
-  sessionId: string;
-  repo: string;
-  relPath: string;
-}): Promise<string> {
-  const { sessionId, repo, relPath } = options;
-  const { containerName, repoDir, workingDir, worktrees } =
-    await resolveSandbox(sessionId);
-  const trees =
-    worktrees && Object.keys(worktrees).length > 0
-      ? worktrees
-      : { [repoDir]: workingDir };
-  const mount = trees[repo];
-  if (!mount) {
-    throw new Error(`unknown repo: ${repo}`);
-  }
-  const safeRel = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (!safeRel || safeRel.includes("..")) {
-    throw new Error("Invalid path");
-  }
-  let out = await dockerExec({
-    container: containerName,
-    argv: ["git", "-C", mount, "diff", "HEAD", "--", safeRel]
-  });
-  let stdout = out.stdout;
-  if (!stdout) {
-    out = await dockerExec({
-      container: containerName,
-      argv: [
-        "git",
-        "-C",
-        mount,
-        "diff",
-        "--no-index",
-        "--",
-        "/dev/null",
-        safeRel
-      ]
-    });
-    stdout = out.stdout;
-  }
-  if (Buffer.byteLength(stdout, "utf8") > MAX_DIFF_BYTES) {
-    return `${stdout.slice(0, MAX_DIFF_BYTES)}\n\n… (diff truncated)`;
-  }
-  return stdout || "(no diff — file matches HEAD)";
 }

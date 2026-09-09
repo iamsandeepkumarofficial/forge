@@ -127,11 +127,11 @@ async function detectAppsInDir(options: {
     options;
   const devCmd = devCommand(pm);
   const apps: ForgeApp[] = [];
-  const rootPkg = await readFileFromSandbox(
-    containerName,
-    `${baseDir}/package.json`,
+  const rootPkg = await readFileFromSandbox({
+    container: containerName,
+    absPath: `${baseDir}/package.json`,
     sessionId
-  );
+  });
   if (rootPkg) {
     try {
       const app = appFromPackageJson({
@@ -157,11 +157,11 @@ async function detectAppsInDir(options: {
     .map((s) => s.trim())
     .filter(Boolean);
   for (const dir of dirs) {
-    const pkgRaw = await readFileFromSandbox(
-      containerName,
-      `${baseDir}/apps/${dir}/package.json`,
+    const pkgRaw = await readFileFromSandbox({
+      container: containerName,
+      absPath: `${baseDir}/apps/${dir}/package.json`,
       sessionId
-    );
+    });
     if (pkgRaw === null) continue;
     try {
       const app = appFromPackageJson({

@@ -9,8 +9,8 @@ describe("launchCwd", { concurrency: false }, () => {
   before(async () => {
     mock.module("./sandboxExec.js", {
       exports: {
-        pathExistsInSandbox: async (_c: string, absPath: string) =>
-          existing.has(absPath)
+        pathExistsInSandbox: async (opts: { absPath: string }) =>
+          existing.has(opts.absPath)
       }
     });
     ({ normalizeLaunchCwd, resolveLaunchAppDir } =

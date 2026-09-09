@@ -28,6 +28,15 @@ export type DockerExecInput = {
 } & ExecOptions;
 const DEFAULT_MAX_BUFFER = N_16 * N_1024 * N_1024;
 
+function looksLikeHostFsRef(container: string): boolean {
+  const c = container.trim();
+  if (!c) return false;
+  if (c.startsWith("host:")) return true;
+  if (c.startsWith("/")) return true;
+  if (/^[A-Za-z]:[\\/]/.test(c)) return true;
+  return c.includes("/.forge/") || c.includes("\\.forge\\");
+}
+
 export function dockerExecDirect(input: DockerExecInput): Promise<ExecResult> {
   const { container, argv, ...opts } = input;
   const args = ["exec"];
@@ -83,10 +92,24 @@ export function dockerExecDirect(input: DockerExecInput): Promise<ExecResult> {
 
 export async function dockerExec(input: DockerExecInput): Promise<ExecResult> {
   const { container, argv, sessionId, ...opts } = input;
-  const { getSandboxRuntime, resolveSandboxRuntimeKind } =
-    await import("./sandboxRuntime/resolve.js");
-  const kind = resolveSandboxRuntimeKind();
-  return getSandboxRuntime().exec({
+  if (!sessionId && looksLikeHostFsRef(container)) {
+    throw new Error(
+      `Missing sessionId for host workspace exec (ref=${container}). ` +
+        `Pass sessionId so Forge uses the host runtime instead of Docker.`
+    );
+  }
+  const {
+    getSandboxRuntime,
+    getSandboxRuntimeByKind,
+    resolveSandboxRuntimeKindForSession
+  } = await import("./sandboxRuntime/resolve.js");
+  const kind = sessionId
+    ? await resolveSandboxRuntimeKindForSession(sessionId)
+    : "docker";
+  const runtime = sessionId
+    ? await getSandboxRuntime(sessionId)
+    : getSandboxRuntimeByKind("docker");
+  return runtime.exec({
     handle: {
       sessionId: sessionId ?? container,
       runtime: kind,
@@ -116,9 +139,12 @@ export function resolveWorkspacePath(
   relative: string,
   options?: { knownRepos?: ReadonlySet<string> | string[] }
 ): string {
-  const cleaned = String(relative || "")
+  let cleaned = String(relative || "")
     .replace(/\\/g, "/")
     .replace(/^\/+/, "");
+  if (cleaned === "workspace" || cleaned.startsWith("workspace/")) {
+    cleaned = cleaned.slice("workspace".length).replace(/^\/+/, "");
+  }
   const segments: string[] = [];
   for (const seg of cleaned.split("/")) {
     if (!seg || seg === ".") continue;
@@ -166,23 +192,27 @@ export async function runtimeExec(
     ...opts
   });
 }
-export async function pathExistsInSandbox(
-  container: string,
-  absPath: string
-): Promise<boolean> {
+export async function pathExistsInSandbox(options: {
+  container: string;
+  absPath: string;
+  sessionId: string;
+}): Promise<boolean> {
   const r = await dockerExec({
-    container,
-    argv: ["test", "-e", absPath]
+    container: options.container,
+    sessionId: options.sessionId,
+    argv: ["test", "-e", options.absPath]
   });
   return r.code === 0;
 }
-export async function readFileFromSandbox(
-  container: string,
-  absPath: string
-): Promise<string | null> {
+export async function readFileFromSandbox(options: {
+  container: string;
+  absPath: string;
+  sessionId: string;
+}): Promise<string | null> {
   const r = await dockerExec({
-    container,
-    argv: ["cat", "--", absPath]
+    container: options.container,
+    sessionId: options.sessionId,
+    argv: ["cat", "--", options.absPath]
   });
   if (r.code !== 0) {
     return null;
@@ -193,7 +223,7 @@ export async function writeFileToSandbox(options: {
   container: string;
   absPath: string;
   content: string;
-  sessionId?: string;
+  sessionId: string;
 }): Promise<void> {
   const { container, absPath, content, sessionId } = options;
   const r = await shInSandbox({
