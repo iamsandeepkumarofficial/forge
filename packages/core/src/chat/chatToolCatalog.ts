@@ -11,7 +11,7 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "read_file",
     toolName: "Read file",
     description:
-      "Read a file under `/workspace`. In workspaces paths must start with a member repo (e.g. `bp-frontend/package.json`).",
+      "Read a file in the session workspace. Follow path rules from the system prompt (member-repo prefix in workspaces).",
     exampleUsecases: [
       "You need the contents of a known path before editing or answering."
     ],
@@ -61,65 +61,79 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "run_terminal",
     toolName: "Run terminal",
     description:
-      "Run a shell command. Default cwd is `/workspace`. In workspaces pass `workingDirectory` as a member repo (e.g. `bp-frontend`). Set background:true for long installs/tests.",
+      "Run a finite shell command (installs, git, tests, builds). Optional workingDirectory; set background:true for long jobs, then action=logs or stop. Not for declared forever-running apps — those use preview_* (managed app jobs).",
     exampleUsecases: [
-      "git, pnpm, tests, typecheck, or Playwright scripts from a skill.",
-      "Long pnpm install or test suites: background:true, then action=logs."
+      "Package install, migration, typecheck, test, or git.",
+      "Long install/test: background:true, then action=logs."
     ],
     negativeUsecases: [
-      "Reading a file — use read_file.",
-      "Starting a long-running dev server (npm/pnpm/yarn run dev, vite, next dev) — use preview_start, even with background:true. Foreground run_terminal will time out."
+      "Reading or editing files — use read_file / write_file / edit_file.",
+      "Starting a long-lived web/api/dev server — upsert_launch_app then preview_start (even with background:true, run_terminal will hang or time out)."
     ]
   },
   {
     toolId: "preview_status",
     toolName: "Preview status",
     description:
-      "List `.forge/launch.json` apps and whether each is running in this sandbox.",
-    exampleUsecases: ["Checking which declared apps exist and are up."],
-    negativeUsecases: ["Guessing app names that are not in launch.json."]
+      "List apps declared in `.forge/launch.json` and whether each managed app job is running (ports, preview URL when published).",
+    exampleUsecases: [
+      "See which apps are registered and which are up before start/stop."
+    ],
+    negativeUsecases: [
+      "Inventing app names — only names from launch.json (or upsert_launch_app first)."
+    ]
   },
   {
     toolId: "preview_logs",
     toolName: "Preview logs",
-    description: "Tail stdout/stderr from a launch.json app in this sandbox.",
-    exampleUsecases: ["Debugging a running or recently started app."],
-    negativeUsecases: ["Apps not listed in `.forge/launch.json`."]
+    description:
+      "Tail stdout/stderr for a declared app job (same log stream as the app terminal tab). Name must be in `.forge/launch.json`.",
+    exampleUsecases: [
+      "Debug a failed or running preview_start without re-running the process."
+    ],
+    negativeUsecases: [
+      "Ad-hoc shell output — use run_terminal action=logs for background terminal jobs.",
+      "Unknown names not in launch.json."
+    ]
   },
   {
     toolId: "preview_start",
     toolName: "Preview start",
     description:
-      "Start a `.forge/launch.json` app on the network plane. Name must already be listed. Succeeds only after the process is up and its published port (3000–3009) is listening; otherwise returns failure with logs. Confirm install and DATABASE_URL/migrations for APIs before calling.",
+      "Start a declared app job from `.forge/launch.json`: stop previous instance, free its port, run the command, wait until port 3000–3009 is listening, return preview URL or failure with logs. Prefer over run_terminal for long-lived servers.",
     exampleUsecases: [
-      "Starting a declared web/api app to get its preview URL."
+      "Bring up a registered web or api app after deps/env are ready.",
+      "Retry after fixing a crash — check logs via preview_logs or the app terminal tab."
     ],
     negativeUsecases: [
-      "App is not in launch.json — upsert_launch_app first.",
-      "Do not invent one-off processes outside launch.json.",
-      "Do not start until install succeeded and required env/DB (including migrations) are ready."
+      "App missing from launch.json — upsert_launch_app first.",
+      "One-off commands (install, test, migrate) — use run_terminal.",
+      "Deps/env/DB not ready — install and setup_project_infra / migrations first."
     ]
   },
   {
     toolId: "preview_stop",
     toolName: "Preview stop",
-    description: "Stop a `.forge/launch.json` app in this sandbox.",
-    exampleUsecases: ["Stopping a running declared app by name."],
-    negativeUsecases: ["Unknown names not listed in launch.json."]
+    description:
+      "Stop a declared app job by name (the managed process started via preview_start).",
+    exampleUsecases: [
+      "Shut down a running app before changing ports or restarting cleanly."
+    ],
+    negativeUsecases: ["Unknown names not in launch.json."]
   },
   {
     toolId: "upsert_launch_app",
     toolName: "Upsert launch app",
     description:
-      "Add or update one app in `.forge/launch.json` when missing or incomplete (no user confirmation required). For web/api apps set port in 3000–3009 (prefer 3000 for the first app). In workspaces, Forge writes the session-root `/workspace/.forge/launch.json` — set cwd under the member (e.g. bp-frontend or bp-frontend/apps/web) and optionally repo.",
+      "Register or update one app in `.forge/launch.json` (name, cwd, command, type, port). No user confirmation. Web/api ports must be 3000–3009 (prefer 3000 for the first app). Then call preview_start. Path/cwd rules come from the system prompt.",
     exampleUsecases: [
-      "Launch.json missing or app not listed; then preview_start that name."
+      "App missing or incomplete in launch.json before preview_start."
     ],
     negativeUsecases: [
-      "Do not use this to edit source files.",
-      "Ask mode cannot call this — switch modes first.",
-      "Do not use ports outside 3000–3009 (e.g. 4000, 5173) — they are not published.",
-      "Do not install databases/system packages instead of preview_start."
+      "Editing source files — use write_file / edit_file.",
+      "Ask mode — switch_mode first.",
+      "Ports outside 3000–3009 — they are not published for preview.",
+      "Installing databases — use setup_project_infra / install_project_infra, not this tool."
     ]
   },
   {
@@ -210,27 +224,45 @@ const CATALOG: ChatToolCatalogItem[] = [
     ]
   },
   {
-    toolId: "provision_app_engine",
-    toolName: "Provision app engine",
+    toolId: "setup_project_infra",
+    toolName: "Setup project infra",
     description:
-      "Attach a Forge-managed Postgres or Mongo database to the workspace. Requires userApproved: true after the user explicitly agrees.",
+      "Attach/start project infrastructure for the workspace (Postgres/Mongo today): inject DATABASE_URL / MONGODB_URI. Requires userApproved: true after ask_user. On local/host missing binaries, do not end on the error — ask_user then install_project_infra, then retry setup_project_infra. Never install host infra via run_terminal.",
     exampleUsecases: [
-      "User approved provisioning Postgres/Mongo for DATABASE_URL / MONGODB_URI."
+      "User approved setting up Postgres/Mongo for DATABASE_URL / MONGODB_URI.",
+      "After install_project_infra places mongod, call setup_project_infra to start and inject URI."
     ],
     negativeUsecases: [
       "Calling without userApproved: true.",
-      "Installing database servers inside the sandbox via apt."
+      "Installing database servers inside the sandbox via apt or run_terminal.",
+      "Ending the turn with only a setup error — use ask_user / install_project_infra."
+    ]
+  },
+  {
+    toolId: "install_project_infra",
+    toolName: "Install project infra",
+    description:
+      "Privileged host install: download a dependency tarball into ~/.forge/runtime and link binaries under ~/.forge/runtime/bin (unsandboxed). Extensible dependencyId registry (mongo, postgres today; more later). Requires userApproved: true. Local/host sessions only for DB deps. Then call setup_project_infra.",
+    exampleUsecases: [
+      "Local session missing mongod after setup_project_infra failed — user approved install_project_infra dependencyId=mongo.",
+      "Install postgres binaries before setup_project_infra on a fresh machine."
+    ],
+    negativeUsecases: [
+      "Calling without userApproved: true.",
+      "Using run_terminal to curl binaries into ~/.forge — sandbox cannot write there.",
+      "Cloud sessions for mongo/postgres — use setup_project_infra (Docker) instead."
     ]
   },
   {
     toolId: "ask_user",
     toolName: "Ask user",
     description:
-      "Pause the turn and show an interactive MCQ or form widget in the chat composer. Use for setup consent (params, secrets, infra, toolchain) — not free-form prose questions. For form fields always set `value` to a sensible default (example URL, generated secret, NODE_ENV=development, etc.) so the user can accept or edit.",
+      "Pause the turn and show an interactive MCQ or form widget in the chat composer. Use for setup consent (params, secrets, infra, toolchain) and for recoverable failures (missing local deps) — not free-form prose questions. Deduce concrete MCQ actions from the failure (e.g. install_project_infra, start existing service, skip). For form fields always set `value` to a sensible default (example URL, generated secret, NODE_ENV=development, etc.) so the user can accept or edit.",
     exampleUsecases: [
       "Ask which Mongo connection string to store before upsert_workspace_parameter — prefill value from .env.example or a local mongo URL.",
-      "Confirm provision_app_engine (Postgres/Mongo) before calling with userApproved: true.",
-      "Ask the user to approve installing a missing runtime (e.g. python3)."
+      "Confirm setup_project_infra (Postgres/Mongo) before calling with userApproved: true.",
+      "Ask the user to approve installing a missing runtime (e.g. python3).",
+      "After setup_project_infra fails because mongod is missing: MCQ including install via install_project_infra, start mongod if installed, skip."
     ],
     negativeUsecases: [
       "Do not ask in plain text when a widget would collect the answer.",

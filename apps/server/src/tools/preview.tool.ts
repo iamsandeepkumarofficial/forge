@@ -5,6 +5,7 @@ import {
   runApp,
   stopApp,
   upsertLaunchApp,
+  matchLaunchApp,
   type AppStatus,
   type AppType,
   type ForgeApp
@@ -23,13 +24,14 @@ async function resolveAppName(options: {
     typeof options.args.name === "string" ? options.args.name.trim() : "";
   const { config } = await readForgeConfig(options.sessionId);
   if (explicit) {
-    const found = config.apps.some((a) => a.name === explicit);
-    if (!found) {
+    const matched = matchLaunchApp(config.apps, explicit);
+    if (!matched) {
+      const known = config.apps.map((a) => a.name).join(", ") || "(none)";
       return {
-        error: `App "${explicit}" is not in .forge/launch.json. Use upsert_launch_app, then preview_start.`
+        error: `App "${explicit}" is not in .forge/launch.json (known: ${known}). Use upsert_launch_app, then preview_start.`
       };
     }
-    return { name: explicit };
+    return { name: matched.name };
   }
   const web = config.apps.find((a) => a.type === "web");
   const api = config.apps.find((a) => a.type === "api");

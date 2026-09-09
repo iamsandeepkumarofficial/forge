@@ -30,11 +30,18 @@ export function useTrackBackgroundJobs(options: {
     if (!historyLoaded) return;
     if (historyScannedFor.current === sessionId) return;
     historyScannedFor.current = sessionId;
-    trackTerminalsFromToolParts(sessionId, historyToolParts(messages));
+    trackTerminalsFromToolParts({
+      sessionId,
+      parts: historyToolParts(messages)
+    });
   }, [sessionId, historyLoaded, messages]);
 
   useEffect(() => {
     if (liveToolParts.length === 0) return;
-    trackTerminalsFromToolParts(sessionId, liveToolParts);
+    trackTerminalsFromToolParts({
+      sessionId,
+      parts: liveToolParts,
+      openTabs: true
+    });
   }, [sessionId, liveToolParts]);
 }

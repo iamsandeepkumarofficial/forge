@@ -77,8 +77,9 @@ describe("runApp readiness", { concurrency: false }, () => {
     });
     mock.module("./sandboxRuntime/resolve.js", {
       exports: {
-        resolveSandboxRuntimeKind: () => "docker",
-        getSandboxRuntime: () => ({
+        isHostSession: async () => false,
+        resolveSandboxRuntimeKindForSession: async () => "docker",
+        getSandboxRuntime: async () => ({
           publishPreviewPort: async (
             _handle: unknown,
             port: number

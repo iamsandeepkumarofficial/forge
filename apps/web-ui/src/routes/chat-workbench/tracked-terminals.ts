@@ -8,6 +8,7 @@ import {
 } from "../../lib/terminal-session-client.js";
 import type { ToolPart } from "../../lib/tool-display.js";
 import { toolPartName } from "../../lib/tool-display.js";
+import { requestOpenTerminalTab } from "./terminal-toggle.js";
 
 export type TrackedKind = "app" | "job";
 
@@ -88,15 +89,15 @@ function track(options: {
   rawName: string;
   streamId: string;
   restart?: boolean;
-}): void {
+}): boolean {
   const id = options.sessionId.trim();
   const name = options.rawName.trim();
-  if (!id || !name) return;
+  if (!id || !name) return false;
   const key = entryKey({ sessionId: id, kind: options.kind, name });
   if (options.restart) {
     exitedKeys.delete(key);
   }
-  if (exitedKeys.has(key) || tracked.has(key)) return;
+  if (exitedKeys.has(key) || tracked.has(key)) return false;
 
   const client = retainTerminalSessionClient(id);
   const unsubscribe = client.subscribe(options.streamId, {
@@ -110,6 +111,7 @@ function track(options: {
     unsubscribe
   });
   emit();
+  return true;
 }
 
 export function trackApp(sessionId: string, appName: string): void {
@@ -266,14 +268,7 @@ export function shouldUntrackBackgroundToolPart(part: ToolPart): boolean {
 export function shouldTrackPreviewStartToolPart(part: ToolPart): boolean {
   if (toolPartName(part) !== "preview_start") return false;
   const name = terminalAppNameFromToolPart(part);
-  if (!name || part.errorText) return false;
-  const meta = part.metadata;
-  const app = meta?.app;
-  if (app && typeof app === "object" && !Array.isArray(app)) {
-    const running = (app as { running?: unknown }).running;
-    if (running === false) return false;
-  }
-  return true;
+  return Boolean(name) && !part.errorText;
 }
 
 export function shouldUntrackPreviewStopToolPart(part: ToolPart): boolean {
@@ -283,10 +278,13 @@ export function shouldUntrackPreviewStopToolPart(part: ToolPart): boolean {
   return part.output !== undefined || part.result !== undefined;
 }
 
-export function trackTerminalsFromToolParts(
-  sessionId: string,
-  parts: ToolPart[]
-): void {
+export function trackTerminalsFromToolParts(options: {
+  sessionId: string;
+  parts: ToolPart[];
+  openTabs?: boolean;
+}): void {
+  const { sessionId, parts } = options;
+  const openTabs = options.openTabs === true;
   for (const part of parts) {
     if (shouldUntrackBackgroundToolPart(part)) {
       const name = terminalJobNameFromToolPart(part);
@@ -300,23 +298,29 @@ export function trackTerminalsFromToolParts(
       const name = terminalJobNameFromToolPart(part);
       if (!name) continue;
       const input = toolInput(part);
-      track({
+      const added = track({
         sessionId,
         kind: "job",
         rawName: name,
         streamId: streamIdForJobTab(name),
         restart: input?.background === true
       });
+      if (added && openTabs) {
+        requestOpenTerminalTab({ id: `job:${name}`, kind: "job" });
+      }
     }
     if (shouldTrackPreviewStartToolPart(part)) {
       const name = terminalAppNameFromToolPart(part);
-      if (name) {
-        track({
-          sessionId,
-          kind: "app",
-          rawName: name,
-          streamId: streamIdForAppTab(`app:${name}`)
-        });
+      if (!name) continue;
+      const added = track({
+        sessionId,
+        kind: "app",
+        rawName: name,
+        streamId: streamIdForAppTab(`app:${name}`),
+        restart: true
+      });
+      if (added && openTabs) {
+        requestOpenTerminalTab({ id: `app:${name}`, kind: "app" });
       }
     }
   }

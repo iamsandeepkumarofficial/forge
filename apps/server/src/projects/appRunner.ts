@@ -10,7 +10,9 @@ export {
   readForgeConfig,
   writeForgeConfig,
   upsertLaunchApp,
-  inferWorkspaceRepo
+  inferWorkspaceRepo,
+  matchLaunchApp,
+  findApp
 } from "./appRunner/config.js";
 export { runApp } from "./appRunner/run.js";
 export {

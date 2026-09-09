@@ -1,9 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  parseTerminalAction,
-  resolveTerminalCwd
-} from "./runTerminal.tool.js";
+import { parseTerminalAction, resolveTerminalCwd } from "./runTerminal.tool.js";
 
 describe("parseTerminalAction", () => {
   it("accepts known actions", () => {
@@ -23,6 +20,7 @@ describe("parseTerminalAction", () => {
 describe("resolveTerminalCwd", () => {
   const base = {
     containerName: "c",
+    sessionId: "s1",
     repoDir: "frontend",
     workingDir: "/workspace",
     command: "ls"

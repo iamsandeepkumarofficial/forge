@@ -1,7 +1,11 @@
 import { useCallback, useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { TerminalTab } from "../../lib/session-terminal.js";
-import { isBackgroundJobTracked, trackApp } from "./tracked-terminals.js";
+import {
+  isBackgroundJobTracked,
+  isTracked,
+  trackApp
+} from "./tracked-terminals.js";
 import {
   appNameFromTabId,
   appTab,
@@ -43,16 +47,16 @@ export function useTerminalOpenEvents(options: {
   const openAppTab = useCallback(
     (tabId: string) => {
       const id = tabId.startsWith("app:") ? tabId : `app:${tabId}`;
-      trackApp(sessionId, appNameFromTabId(id));
+      const name = appNameFromTabId(id);
+      trackApp(sessionId, name);
+      const running = isTracked({ sessionId, kind: "app", name });
       setHidden((prev) => {
         if (!prev.has(id)) return prev;
         const next = new Set(prev);
         next.delete(id);
         return next;
       });
-      setTabs((prev) =>
-        mergeShellTab(prev, appTab(appNameFromTabId(id), true))
-      );
+      setTabs((prev) => mergeShellTab(prev, appTab(name, running)));
       selectTab(id);
     },
     [sessionId, selectTab, setHidden, setTabs]

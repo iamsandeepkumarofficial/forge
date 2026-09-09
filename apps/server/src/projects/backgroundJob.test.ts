@@ -8,6 +8,7 @@ describe("backgroundJob", { concurrency: false }, () => {
   let sanitizeJobName: typeof import("./backgroundJob.js").sanitizeJobName;
   let jobPidFile: typeof import("./backgroundJob.js").jobPidFile;
   let freeListeningPortScript: typeof import("./backgroundJob.js").freeListeningPortScript;
+  let freeListeningPortHostScript: typeof import("./backgroundJob.js").freeListeningPortHostScript;
   let waitUntilJobRunning: typeof import("./backgroundJob.js").waitUntilJobRunning;
   let waitUntilTcpListening: typeof import("./backgroundJob.js").waitUntilTcpListening;
 
@@ -36,6 +37,7 @@ describe("backgroundJob", { concurrency: false }, () => {
       sanitizeJobName,
       jobPidFile,
       freeListeningPortScript,
+      freeListeningPortHostScript,
       waitUntilJobRunning,
       waitUntilTcpListening
     } = await import("./backgroundJob.js"));
@@ -47,7 +49,7 @@ describe("backgroundJob", { concurrency: false }, () => {
     assert.match(script, /cwd not found/);
     assert.match(script, /printf '\$ %s\\n' "\$CMD"/);
     const logIdx = script.indexOf(': > "$LOG"');
-    const cmdIdx = script.indexOf('printf');
+    const cmdIdx = script.indexOf("printf");
     const pidIdx = script.indexOf('echo $$ > "$PID"');
     assert.ok(logIdx >= 0 && cmdIdx > logIdx && pidIdx > cmdIdx);
   });
@@ -70,6 +72,15 @@ describe("backgroundJob", { concurrency: false }, () => {
     assert.match(script, /\/proc\/net\/tcp/);
     assert.match(script, /socket:\[\$inode\]/);
     assert.match(script, /kill -KILL/);
+  });
+
+  it("freeListeningPortHostScript prefers lsof then falls back to /proc", () => {
+    const script = freeListeningPortHostScript(3001);
+    assert.match(script, /port=3001/);
+    assert.match(script, /lsof -nP -iTCP:"\$port"/);
+    assert.match(script, /kill_pids TERM/);
+    assert.match(script, /kill_pids KILL/);
+    assert.match(script, /\/proc\/net\/tcp/);
   });
 
   it("waitUntilJobRunning returns false then true", async () => {

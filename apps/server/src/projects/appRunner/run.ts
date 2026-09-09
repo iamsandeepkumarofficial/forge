@@ -63,6 +63,7 @@ async function resolveAppForLaunch(options: {
 }): Promise<{ nextApp: ForgeApp; appDir: string; error?: string }> {
   const resolved = await resolveLaunchAppDir({
     containerName: options.containerName,
+    sessionId: options.sessionId,
     workingDir: options.workingDir,
     repoDir: options.repoDir,
     cwd: options.app.cwd
@@ -133,7 +134,8 @@ export async function runApp(
         await stopBackgroundJob({
           containerName,
           kind: "app",
-          name: app.name
+          name: app.name,
+          sessionId
         }).catch(() => undefined);
         return loadStatusForApp({
           sessionId,
@@ -194,7 +196,7 @@ async function resolveAppExtraEnv(
   }
   try {
     const { sessionAppDbEnvFor } = await import("../sessionAppDb.js");
-    Object.assign(base, sessionAppDbEnvFor(sessionId));
+    Object.assign(base, await sessionAppDbEnvFor(sessionId));
   } catch {
     void 0;
   }
@@ -268,10 +270,11 @@ async function startAppProcess(options: {
   await stopBackgroundJob({
     containerName,
     kind: "app",
-    name: app.name
+    name: app.name,
+    sessionId
   }).catch(() => undefined);
   if (app.port != null) {
-    await freeListeningPort({ containerName, port: app.port });
+    await freeListeningPort({ containerName, port: app.port, sessionId });
   }
   await startBackgroundJob({
     containerName,
@@ -279,24 +282,28 @@ async function startAppProcess(options: {
     name: app.name,
     cwd: appDir,
     command: app.command,
-    extraEnv: Object.keys(extraEnv).length > 0 ? extraEnv : undefined
+    extraEnv: Object.keys(extraEnv).length > 0 ? extraEnv : undefined,
+    sessionId
   });
   const running = await waitUntilJobRunning({
     containerName,
     kind: "app",
-    name: app.name
+    name: app.name,
+    sessionId
   });
   if (!running) return { ok: false, failure: "process" };
   if (app.port == null) return { ok: true };
   const listening = await waitUntilTcpListening({
     containerName,
-    port: app.port
+    port: app.port,
+    sessionId
   });
   if (!listening) {
     await stopBackgroundJob({
       containerName,
       kind: "app",
-      name: app.name
+      name: app.name,
+      sessionId
     }).catch(() => undefined);
     return { ok: false, failure: "port" };
   }
@@ -314,9 +321,8 @@ async function ensurePreviewHostPort(options: {
   if (await waitUntilHostTcpListening({ port: hostPort, tries: 8 })) {
     return true;
   }
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  const { isHostSession } = await import("../sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) {
     console.warn(
       `[runApp] session ${sessionId} app ${app.name}: host port ${hostPort} not reachable (host mode; no Docker port repair)`
     );
@@ -346,12 +352,14 @@ export async function publishAppPreview(input: {
   containerName: string;
   port: number;
 }): Promise<void> {
-  const { getSandboxRuntime, resolveSandboxRuntimeKind } =
+  const { getSandboxRuntime, resolveSandboxRuntimeKindForSession } =
     await import("../sandboxRuntime/resolve.js");
-  await getSandboxRuntime().publishPreviewPort(
+  await (
+    await getSandboxRuntime(input.sessionId)
+  ).publishPreviewPort(
     {
       sessionId: input.sessionId,
-      runtime: resolveSandboxRuntimeKind(),
+      runtime: await resolveSandboxRuntimeKindForSession(input.sessionId),
       ref: input.containerName
     },
     input.port

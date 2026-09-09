@@ -44,15 +44,18 @@ describe("tracked-terminals", () => {
   });
 
   it("tracks background run starts only", () => {
-    trackTerminalsFromToolParts("s1", [
-      {
-        type: "tool-invocation",
-        toolName: "run_terminal",
-        args: { command: "pnpm i", background: true, jobName: "install" },
-        metadata: { jobName: "install", running: true },
-        output: "started"
-      }
-    ]);
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "run_terminal",
+          args: { command: "pnpm i", background: true, jobName: "install" },
+          metadata: { jobName: "install", running: true },
+          output: "started"
+        }
+      ]
+    });
     expect(listTrackedBackgroundJobs("s1")).toEqual(["install"]);
     expect(isBackgroundJobTracked("s1", "install")).toBe(true);
   });
@@ -67,25 +70,28 @@ describe("tracked-terminals", () => {
         output: "log line"
       })
     ).toBe(false);
-    trackTerminalsFromToolParts("s1", [
-      {
-        type: "tool-invocation",
-        toolName: "run_terminal",
-        args: { action: "logs", jobName: "install" },
-        metadata: { jobName: "install" }
-      },
-      {
-        type: "tool-invocation",
-        toolName: "run_terminal",
-        args: { action: "stop", jobName: "install" },
-        metadata: { jobName: "install" },
-        output: "stopped"
-      }
-    ]);
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "run_terminal",
+          args: { action: "logs", jobName: "install" },
+          metadata: { jobName: "install" }
+        },
+        {
+          type: "tool-invocation",
+          toolName: "run_terminal",
+          args: { action: "stop", jobName: "install" },
+          metadata: { jobName: "install" },
+          output: "stopped"
+        }
+      ]
+    });
     expect(listTrackedBackgroundJobs("s1")).toEqual([]);
   });
 
-  it("tracks preview_start apps", () => {
+  it("tracks preview_start apps including soft-fail", () => {
     expect(
       shouldTrackPreviewStartToolPart({
         type: "tool-invocation",
@@ -94,15 +100,56 @@ describe("tracked-terminals", () => {
         output: "Started web"
       })
     ).toBe(true);
-    trackTerminalsFromToolParts("s1", [
-      {
+    expect(
+      shouldTrackPreviewStartToolPart({
         type: "tool-invocation",
         toolName: "preview_start",
-        metadata: { app: { name: "web", running: true } },
-        output: "Started web"
-      }
-    ]);
+        metadata: { app: { name: "api", running: false } },
+        output: "Failed to start api. Port 3001 is not listening."
+      })
+    ).toBe(true);
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "preview_start",
+          metadata: { app: { name: "web", running: true } },
+          output: "Started web"
+        }
+      ]
+    });
     expect(listTrackedApps("s1")).toEqual(["web"]);
+  });
+
+  it("opens terminal tab for live preview_start", () => {
+    const opened: Array<{ id: string; kind: string }> = [];
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; kind: string }>)
+        .detail;
+      opened.push(detail);
+    };
+    window.addEventListener("forge-open-terminal-tab", onOpen);
+    try {
+      trackTerminalsFromToolParts({
+        sessionId: "s1",
+        parts: [
+          {
+            type: "tool-invocation",
+            toolName: "preview_start",
+            metadata: { app: { name: "api", running: false } },
+            output: "Failed to start"
+          }
+        ],
+        openTabs: true
+      });
+      expect(listTrackedApps("s1")).toEqual(["api"]);
+      expect(opened.some((d) => d.id === "app:api" && d.kind === "app")).toBe(
+        true
+      );
+    } finally {
+      window.removeEventListener("forge-open-terminal-tab", onOpen);
+    }
   });
 
   it("does not track finished jobs", () => {
@@ -130,14 +177,17 @@ describe("tracked-terminals", () => {
     trackBackgroundJob("s1", "build");
     subscribed.get("job:build")?.onExited?.();
     expect(listTrackedBackgroundJobs("s1")).toEqual([]);
-    trackTerminalsFromToolParts("s1", [
-      {
-        type: "tool-invocation",
-        toolName: "run_terminal",
-        metadata: { jobName: "build", running: true },
-        output: "still running in chat metadata"
-      }
-    ]);
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "run_terminal",
+          metadata: { jobName: "build", running: true },
+          output: "still running in chat metadata"
+        }
+      ]
+    });
     expect(listTrackedBackgroundJobs("s1")).toEqual([]);
   });
 
