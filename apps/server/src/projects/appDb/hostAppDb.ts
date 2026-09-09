@@ -59,7 +59,7 @@ function resolveBin(name: string): string {
   const fromPath = which(name);
   if (fromPath) return fromPath;
   throw new Error(
-    `Missing \`${name}\` for host-mode app DB. Install PostgreSQL 16 / MongoDB locally, or place binaries in ~/.forge/runtime/bin/. Use SANDBOX_RUNTIME=docker for compose app DBs.`
+    `Missing \`${name}\` for host-mode app DB. Call install_project_infra after user approval, or place binaries in ~/.forge/runtime/bin/. Use a Cloud (Docker) session for compose app DBs.`
   );
 }
 
@@ -163,9 +163,18 @@ async function ensureHostMongo(
       pulled: false
     };
   }
+  let mongod: string;
+  try {
+    mongod = resolveBin("mongod");
+  } catch {
+    throw new Error(
+      `MongoDB is not running on 127.0.0.1:${engine.hostPort} and \`mongod\` was not found. ` +
+        `For a local (host) session, call install_project_infra (dependencyId=mongo) after user approval, or start mongod yourself, then call setup_project_infra again. ` +
+        `Place the binary on PATH or in ~/.forge/runtime/bin/. Docker app-DB containers are only used for Cloud sessions.`
+    );
+  }
   const data = join(appDbHome(), "mongo", "data");
   mkdirSync(data, { recursive: true });
-  const mongod = resolveBin("mongod");
   const child = spawn(
     mongod,
     [

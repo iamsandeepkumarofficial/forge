@@ -94,9 +94,9 @@ export async function getSessionRepoInfo(
     throw new Error(`No chat/feature found for session: ${sessionId}`);
   }
 
-  const { resolveSandboxRuntimeKind } =
+  const { resolveSandboxRuntimeKindForSession } =
     await import("./sandboxRuntime/resolve.js");
-  const kind = resolveSandboxRuntimeKind();
+  const kind = await resolveSandboxRuntimeKindForSession(sessionId);
   const dockerName = sandboxContainerName(sessionId);
 
   if (chat.workspaceId) {
@@ -150,9 +150,9 @@ export async function getSessionSandboxStatus(
   sessionId: string
 ): Promise<SandboxStatus> {
   const workingDir = WORKSPACE_MOUNT;
-  const { getSandboxRuntime, resolveSandboxRuntimeKind } =
+  const { getSandboxRuntime, isHostSession } =
     await import("./sandboxRuntime/resolve.js");
-  const runtime = getSandboxRuntime();
+  const runtime = await getSandboxRuntime(sessionId);
   const status = await runtime.getStatus(sessionId);
   if (status.status === "absent" || !status.running) {
     return {
@@ -163,7 +163,7 @@ export async function getSessionSandboxStatus(
     };
   }
 
-  if (resolveSandboxRuntimeKind() === "host") {
+  if (await isHostSession(sessionId)) {
     const info = await getSessionRepoInfo(sessionId);
     const root = info.hostWorkingDir ?? info.containerName;
     const empty = await hostWorkspaceLooksEmpty(root);
@@ -233,8 +233,10 @@ export async function destroySessionSandbox(sessionId: string): Promise<void> {
       err instanceof Error ? err.message : err
     );
   }
-  const { getSandboxRuntime } = await import("./sandboxRuntime/resolve.js");
-  await getSandboxRuntime().destroySession(sessionId);
+  const { forgetSessionRuntimeKind, getSandboxRuntime } =
+    await import("./sandboxRuntime/resolve.js");
+  await (await getSandboxRuntime(sessionId)).destroySession(sessionId);
+  forgetSessionRuntimeKind(sessionId);
 }
 
 async function pruneLocalSessionWorktrees(sessionId: string): Promise<void> {

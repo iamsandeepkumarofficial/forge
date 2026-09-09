@@ -1,61 +1,46 @@
 import assert from "node:assert/strict";
-import { describe, it, afterEach } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import {
+  cloudSandboxKindFromEnv,
+  executionTargetToKind,
   getSandboxRuntime,
-  resetSandboxRuntimeCache,
-  resolveSandboxRuntimeKind
+  getSandboxRuntimeByKind,
+  rememberSessionExecutionTarget,
+  resetSandboxRuntimeCache
 } from "./resolve.js";
 
 describe("resolveSandboxRuntime", () => {
+  const prevCloud = process.env.FORGE_CLOUD_SANDBOX;
+
   afterEach(() => {
-    delete process.env.SANDBOX_RUNTIME;
-    delete process.env.FORGE_DESKTOP;
+    if (prevCloud === undefined) delete process.env.FORGE_CLOUD_SANDBOX;
+    else process.env.FORGE_CLOUD_SANDBOX = prevCloud;
     resetSandboxRuntimeCache();
   });
 
-  it("defaults to docker", () => {
-    assert.equal(resolveSandboxRuntimeKind(), "docker");
+  it("maps local to host and cloud to docker by default", () => {
+    delete process.env.FORGE_CLOUD_SANDBOX;
+    assert.equal(executionTargetToKind("local"), "host");
+    assert.equal(executionTargetToKind("cloud"), "docker");
+    assert.equal(cloudSandboxKindFromEnv(), "docker");
   });
 
-  it("defaults to host when FORGE_DESKTOP=1", () => {
-    process.env.FORGE_DESKTOP = "1";
-    assert.equal(resolveSandboxRuntimeKind(), "host");
+  it("maps cloud to kubernetes when FORGE_CLOUD_SANDBOX=k8s", () => {
+    process.env.FORGE_CLOUD_SANDBOX = "k8s";
+    assert.equal(executionTargetToKind("cloud"), "kubernetes");
   });
 
-  it("SANDBOX_RUNTIME=docker wins over FORGE_DESKTOP", () => {
-    process.env.FORGE_DESKTOP = "1";
-    process.env.SANDBOX_RUNTIME = "docker";
-    assert.equal(resolveSandboxRuntimeKind(), "docker");
-  });
-
-  it("maps host and kubernetes aliases", () => {
-    process.env.SANDBOX_RUNTIME = "host";
-    assert.equal(resolveSandboxRuntimeKind(), "host");
-    process.env.SANDBOX_RUNTIME = "k8s";
-    assert.equal(resolveSandboxRuntimeKind(), "kubernetes");
-  });
-
-  it("returns docker runtime when selected", () => {
-    const rt = getSandboxRuntime();
+  it("returns host runtime for local session cache", async () => {
+    rememberSessionExecutionTarget("sess-local", "local");
+    const rt = await getSandboxRuntime("sess-local");
     assert.equal(typeof rt.createSession, "function");
-    assert.equal(typeof rt.exec, "function");
-    assert.equal(typeof rt.getStatus, "function");
+    assert.equal(getSandboxRuntimeByKind("host"), rt);
   });
 
-  it("returns host runtime when selected", () => {
-    process.env.SANDBOX_RUNTIME = "host";
-    resetSandboxRuntimeCache();
-    const rt = getSandboxRuntime();
+  it("returns docker runtime for cloud session cache", async () => {
+    delete process.env.FORGE_CLOUD_SANDBOX;
+    rememberSessionExecutionTarget("sess-cloud", "cloud");
+    const rt = await getSandboxRuntime("sess-cloud");
     assert.equal(typeof rt.createSession, "function");
-    assert.equal(typeof rt.publishPreviewPort, "function");
-    assert.equal(typeof rt.getStatus, "function");
-  });
-
-  it("returns kubernetes runtime when selected", () => {
-    process.env.SANDBOX_RUNTIME = "kubernetes";
-    resetSandboxRuntimeCache();
-    const rt = getSandboxRuntime();
-    assert.equal(typeof rt.createSession, "function");
-    assert.equal(typeof rt.publishPreviewPort, "function");
   });
 });

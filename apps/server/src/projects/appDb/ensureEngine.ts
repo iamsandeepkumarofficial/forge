@@ -109,11 +109,17 @@ export type EnsureEngineResult = {
 };
 
 export async function ensureEngineRunning(
-  engine: AppDbEngine
+  engine: AppDbEngine,
+  options?: { hostMode?: boolean; sessionId?: string }
 ): Promise<EnsureEngineResult> {
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  const hostMode =
+    options?.hostMode ??
+    (options?.sessionId
+      ? await (
+          await import("../sandboxRuntime/resolve.js")
+        ).isHostSession(options.sessionId)
+      : false);
+  if (hostMode) {
     const { ensureHostEngineRunning } = await import("./hostAppDb.js");
     return ensureHostEngineRunning(engine);
   }
@@ -156,10 +162,18 @@ export async function ensureEngineRunning(
   };
 }
 
-export async function isEngineRunning(engine: AppDbEngine): Promise<boolean> {
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+export async function isEngineRunning(
+  engine: AppDbEngine,
+  options?: { hostMode?: boolean; sessionId?: string }
+): Promise<boolean> {
+  const hostMode =
+    options?.hostMode ??
+    (options?.sessionId
+      ? await (
+          await import("../sandboxRuntime/resolve.js")
+        ).isHostSession(options.sessionId)
+      : false);
+  if (hostMode) {
     const { isHostEngineRunning } = await import("./hostAppDb.js");
     return isHostEngineRunning(engine);
   }
@@ -170,11 +184,17 @@ export async function isEngineRunning(engine: AppDbEngine): Promise<boolean> {
 }
 
 export async function resolveEngineContainer(
-  engine: AppDbEngine
+  engine: AppDbEngine,
+  options?: { hostMode?: boolean; sessionId?: string }
 ): Promise<string | null> {
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  const hostMode =
+    options?.hostMode ??
+    (options?.sessionId
+      ? await (
+          await import("../sandboxRuntime/resolve.js")
+        ).isHostSession(options.sessionId)
+      : false);
+  if (hostMode) {
     const { isHostEngineRunning } = await import("./hostAppDb.js");
     return (await isHostEngineRunning(engine)) ? `host:${engine.id}` : null;
   }
@@ -190,10 +210,17 @@ export async function waitForPostgresReady(options: {
   user: string;
   attempts?: number;
   engine?: AppDbEngine;
+  hostMode?: boolean;
+  sessionId?: string;
 }): Promise<void> {
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host" && options.engine) {
+  const hostMode =
+    options.hostMode ??
+    (options.sessionId
+      ? await (
+          await import("../sandboxRuntime/resolve.js")
+        ).isHostSession(options.sessionId)
+      : false);
+  if (hostMode && options.engine) {
     const { waitForHostPostgresReady } = await import("./hostAppDb.js");
     await waitForHostPostgresReady(options.engine, options.attempts);
     return;

@@ -150,7 +150,10 @@ export async function handleAttachDatabase(req: Request, res: Response) {
     }
     const { attachWorkspaceDatabase } =
       await import("../../projects/sessionAppDb.js");
-    const provisioned = await attachWorkspaceDatabase(workspaceId, engineId);
+    const provisioned = await attachWorkspaceDatabase({
+      workspaceId,
+      engineId
+    });
     res.status(N_201).json({
       engineId: provisioned.engineId,
       label: provisioned.label,
@@ -180,7 +183,7 @@ export async function handleDetachDatabase(req: Request, res: Response) {
     }
     const { detachWorkspaceDatabase } =
       await import("../../projects/sessionAppDb.js");
-    await detachWorkspaceDatabase(workspaceId, engineId);
+    await detachWorkspaceDatabase({ workspaceId, engineId });
     res.status(N_204).end();
   } catch (error: unknown) {
     res.status(statusFromError(error)).json({ error: errorMessage(error) });

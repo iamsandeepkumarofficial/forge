@@ -9,15 +9,15 @@ import { resetHostShellRegistryForTests } from "./hostSessionPty.js";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { resetSandboxRuntimeCache } from "./sandboxRuntime/resolve.js";
+import {
+  rememberSessionExecutionTarget,
+  resetSandboxRuntimeCache
+} from "./sandboxRuntime/resolve.js";
 
 describe("sessionPty", () => {
-  const prevRuntime = process.env.SANDBOX_RUNTIME;
   let tmp = "";
 
   afterEach(async () => {
-    if (prevRuntime === undefined) delete process.env.SANDBOX_RUNTIME;
-    else process.env.SANDBOX_RUNTIME = prevRuntime;
     resetSandboxRuntimeCache();
     resetHostShellRegistryForTests();
     if (tmp) await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
@@ -51,11 +51,10 @@ describe("sessionPty", () => {
   });
 
   it("listTmuxWindows uses host node-pty registry in host mode", async () => {
-    process.env.SANDBOX_RUNTIME = "host";
     process.env.FORGE_HOST_SANDBOX = "0";
-    resetSandboxRuntimeCache();
+    rememberSessionExecutionTarget("sess-pty", "local");
     tmp = await fs.mkdtemp(path.join(os.tmpdir(), "forge-sp-"));
-    const windows = await listTmuxWindows(tmp);
+    const windows = await listTmuxWindows(tmp, "sess-pty");
     assert.ok(windows.some((w) => w.name === "main"));
   });
 });

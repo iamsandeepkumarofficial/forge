@@ -1,5 +1,3 @@
-import { resolveSandboxRuntimeKind } from "../sandboxRuntime/resolve.js";
-
 const N_48 = 48;
 
 export type AppDbEngineId = "postgres" | "mongo";
@@ -75,13 +73,14 @@ export function sessionDbName(sessionId: string): string {
   return `forge_${cleaned || "session"}`;
 }
 
-export function connectionUrlFor(
-  engine: AppDbEngine,
-  database: string
-): string {
+export function connectionUrlFor(options: {
+  engine: AppDbEngine;
+  database: string;
+  hostMode: boolean;
+}): string {
+  const { engine, database, hostMode } = options;
   const { user, password, networkAlias, containerPort, hostPort, envKey } =
     engine;
-  const hostMode = resolveSandboxRuntimeKind() === "host";
   const host = hostMode ? "127.0.0.1" : networkAlias;
   const port = hostMode ? hostPort : containerPort;
   if (envKey === "DATABASE_URL") {
@@ -93,9 +92,13 @@ export function connectionUrlFor(
   return `mongodb://${user}:${password}@${host}:${port}/${database}?authSource=admin`;
 }
 
-export function appDbInjectionHint(): string {
-  if (resolveSandboxRuntimeKind() === "host") {
-    return "Forge injects `DATABASE_URL` / `MONGODB_URI` pointing at localhost app engines (`127.0.0.1:5434` / `127.0.0.1:27017`). Do not install database servers via the agent.";
+export function appDbInjectionHint(hostMode = false): string {
+  if (hostMode) {
+    return (
+      "Forge injects `DATABASE_URL` / `MONGODB_URI` at localhost (`127.0.0.1:5434` / `127.0.0.1:27017`). " +
+      "Local sessions never start Docker for app DBs — if setup fails, call `install_project_infra` after ask_user " +
+      "(or place binaries in ~/.forge/runtime/bin/), then retry `setup_project_infra`."
+    );
   }
   return "Forge reuses one shared container per image on docker network `forge` (`postgres-apps` / `mongo-apps`) and injects `DATABASE_URL` / `MONGODB_URI`. Do not install database servers.";
 }

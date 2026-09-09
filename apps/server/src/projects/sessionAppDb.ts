@@ -10,7 +10,7 @@ import {
   workspaceDbName
 } from "./appDb/engines.js";
 import { ensureEngineRunning } from "./appDb/ensureEngine.js";
-import { resolveSandboxRuntimeKind } from "./sandboxRuntime/resolve.js";
+import { isHostSession } from "./sandboxRuntime/resolve.js";
 import {
   detachWorkspaceEngine,
   ensureAttachedWorkspaceEngines,
@@ -37,9 +37,13 @@ export type SessionAppDbEnv = {
 };
 
 export async function workspaceAppDbEnv(
-  workspaceId: string
+  workspaceId: string,
+  options?: { sessionId?: string; hostMode?: boolean }
 ): Promise<SessionAppDbEnv> {
   if (!appDbEnabled()) return {};
+  const hostMode =
+    options?.hostMode ??
+    (options?.sessionId ? await isHostSession(options.sessionId) : false);
   const repo = new WorkspaceDatabaseRepository();
   const rows = await repo.list(workspaceId);
   const env: SessionAppDbEnv = {};
@@ -47,18 +51,25 @@ export async function workspaceAppDbEnv(
   for (const row of rows) {
     const engine = getAppDbEngine(row.engineId);
     if (!engine) continue;
-    env[engine.envKey] = connectionUrlFor(engine, database);
+    env[engine.envKey] = connectionUrlFor({ engine, database, hostMode });
   }
   return env;
 }
 
-export function sessionAppDbEnvFor(sessionId: string): SessionAppDbEnv {
+export async function sessionAppDbEnvFor(
+  sessionId: string
+): Promise<SessionAppDbEnv> {
   if (!appDbEnabled()) return {};
 
   const engine = getAppDbEngine("postgres");
   if (!engine) return {};
+  const hostMode = await isHostSession(sessionId);
   return {
-    DATABASE_URL: connectionUrlFor(engine, sessionDbName(sessionId))
+    DATABASE_URL: connectionUrlFor({
+      engine,
+      database: sessionDbName(sessionId),
+      hostMode
+    })
   };
 }
 
@@ -96,41 +107,57 @@ async function injectParam(options: {
   });
 }
 
-export async function attachWorkspaceDatabase(
-  workspaceId: string,
-  engineId: AppDbEngineId
-): Promise<ProvisionedWorkspaceEngine> {
-  const provisioned = await provisionWorkspaceEngine(workspaceId, engineId);
+export async function attachWorkspaceDatabase(options: {
+  workspaceId: string;
+  engineId: AppDbEngineId;
+  hostMode?: boolean;
+  sessionId?: string;
+}): Promise<ProvisionedWorkspaceEngine> {
+  const provisioned = await provisionWorkspaceEngine({
+    workspaceId: options.workspaceId,
+    engineId: options.engineId,
+    hostMode: options.hostMode,
+    sessionId: options.sessionId
+  });
   const repo = new WorkspaceDatabaseRepository();
   await repo.attach({
-    workspaceId,
+    workspaceId: options.workspaceId,
     engineId: provisioned.engineId,
     databaseName: provisioned.database
   });
   await injectParam({
-    workspaceId,
+    workspaceId: options.workspaceId,
     key: provisioned.envKey,
     value: provisioned.connectionUrl
   });
   return provisioned;
 }
 
-export async function detachWorkspaceDatabase(
-  workspaceId: string,
-  engineId: AppDbEngineId
-): Promise<void> {
-  await detachWorkspaceEngine(workspaceId, engineId);
+export async function detachWorkspaceDatabase(options: {
+  workspaceId: string;
+  engineId: AppDbEngineId;
+  hostMode?: boolean;
+}): Promise<void> {
+  await detachWorkspaceEngine({
+    workspaceId: options.workspaceId,
+    engineId: options.engineId,
+    hostMode: options.hostMode
+  });
   const repo = new WorkspaceDatabaseRepository();
-  await repo.detach(workspaceId, engineId);
-  const engine = getAppDbEngine(engineId);
+  await repo.detach(options.workspaceId, options.engineId);
+  const engine = getAppDbEngine(options.engineId);
   if (engine) {
     const paramRepo = new ParameterRepository();
-    await paramRepo.deleteWorkspaceParameter(workspaceId, engine.envKey);
+    await paramRepo.deleteWorkspaceParameter(
+      options.workspaceId,
+      engine.envKey
+    );
   }
 }
 
 export async function provisionWorkspaceAppDatabases(
-  workspaceId: string
+  workspaceId: string,
+  options?: { hostMode?: boolean; sessionId?: string }
 ): Promise<SessionAppDbEnv> {
   if (!appDbEnabled()) return {};
   const repo = new WorkspaceDatabaseRepository();
@@ -138,20 +165,32 @@ export async function provisionWorkspaceAppDatabases(
   const ids = rows
     .map((r) => r.engineId)
     .filter((id): id is AppDbEngineId => Boolean(getAppDbEngine(id)));
-  const env = await ensureAttachedWorkspaceEngines(workspaceId, ids);
+  const env = await ensureAttachedWorkspaceEngines({
+    workspaceId,
+    engineIds: ids,
+    hostMode: options?.hostMode,
+    sessionId: options?.sessionId
+  });
   for (const [key, value] of Object.entries(env)) {
     await injectParam({ workspaceId, key, value });
   }
   return env;
 }
 
-export async function provisionDetectedWorkspaceDatabases(
-  workspaceId: string,
-  engineIds: AppDbEngineId[]
-): Promise<SessionAppDbEnv> {
+export async function provisionDetectedWorkspaceDatabases(options: {
+  workspaceId: string;
+  engineIds: AppDbEngineId[];
+  hostMode?: boolean;
+  sessionId?: string;
+}): Promise<SessionAppDbEnv> {
   const env: SessionAppDbEnv = {};
-  for (const id of engineIds) {
-    const provisioned = await attachWorkspaceDatabase(workspaceId, id);
+  for (const id of options.engineIds) {
+    const provisioned = await attachWorkspaceDatabase({
+      workspaceId: options.workspaceId,
+      engineId: id,
+      hostMode: options.hostMode,
+      sessionId: options.sessionId
+    });
     env[provisioned.envKey as keyof SessionAppDbEnv] =
       provisioned.connectionUrl;
   }
@@ -164,44 +203,60 @@ export async function provisionSessionAppDatabases(
   if (!appDbEnabled()) return {};
   const engine = getAppDbEngine("postgres");
   if (!engine) return {};
-  const ensured = await ensureEngineRunning(engine);
+  const hostMode = await isHostSession(sessionId);
+  const ensured = await ensureEngineRunning(engine, { hostMode, sessionId });
   const database = sessionDbName(sessionId);
-  const { execFile } = await import("node:child_process");
-  const { promisify } = await import("node:util");
-  const execFileAsync = promisify(execFile);
   const { waitForPostgresReady } = await import("./appDb/ensureEngine.js");
   await waitForPostgresReady({
     containerName: ensured.containerName,
-    user: engine.user
+    user: engine.user,
+    engine,
+    hostMode,
+    sessionId
   });
-  try {
-    await execFileAsync(
-      "docker",
-      [
-        "exec",
-        ensured.containerName,
-        "psql",
-        "-U",
-        engine.user,
-        "-d",
-        "postgres",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-c",
-        `CREATE DATABASE "${database}"`
-      ],
-      { env: process.env }
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!/already exists/i.test(msg)) {
-      console.warn(
-        `[sessionAppDb] create session postgres db ${database}: ${msg}`
+  if (hostMode) {
+    const { createHostPostgresDatabase } = await import("./appDb/hostAppDb.js");
+    await createHostPostgresDatabase({ engine, database }).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/already exists/i.test(msg)) {
+        console.warn(
+          `[sessionAppDb] create session postgres db ${database}: ${msg}`
+        );
+      }
+    });
+  } else {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+    try {
+      await execFileAsync(
+        "docker",
+        [
+          "exec",
+          ensured.containerName,
+          "psql",
+          "-U",
+          engine.user,
+          "-d",
+          "postgres",
+          "-v",
+          "ON_ERROR_STOP=1",
+          "-c",
+          `CREATE DATABASE "${database}"`
+        ],
+        { env: process.env }
       );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/already exists/i.test(msg)) {
+        console.warn(
+          `[sessionAppDb] create session postgres db ${database}: ${msg}`
+        );
+      }
     }
   }
   return {
-    DATABASE_URL: connectionUrlFor(engine, database)
+    DATABASE_URL: connectionUrlFor({ engine, database, hostMode })
   };
 }
 
@@ -211,10 +266,20 @@ export async function destroySessionAppDatabases(
   if (!appDbEnabled()) return;
   const engine = getAppDbEngine("postgres");
   if (!engine) return;
-  const { resolveEngineContainer } = await import("./appDb/ensureEngine.js");
-  const container = await resolveEngineContainer(engine);
-  if (!container) return;
+  const hostMode = await isHostSession(sessionId);
   const database = sessionDbName(sessionId);
+  if (hostMode) {
+    const { dropHostPostgresDatabase } = await import("./appDb/hostAppDb.js");
+    await dropHostPostgresDatabase({ engine, database }).catch((err) => {
+      console.warn(
+        `[sessionAppDb] drop postgres ${database}: ${err instanceof Error ? err.message : String(err)}`
+      );
+    });
+    return;
+  }
+  const { resolveEngineContainer } = await import("./appDb/ensureEngine.js");
+  const container = await resolveEngineContainer(engine, { hostMode: false });
+  if (!container) return;
   const { execFile } = await import("node:child_process");
   const { promisify } = await import("node:util");
   const execFileAsync = promisify(execFile);
@@ -243,10 +308,11 @@ export async function destroySessionAppDatabases(
   }
 }
 
-export function describeWorkspaceAppDatabases(
-  workspaceId: string,
-  provisioned: { postgres: boolean; mongo: boolean }
-): {
+export function describeWorkspaceAppDatabases(options: {
+  workspaceId: string;
+  provisioned: { postgres: boolean; mongo: boolean };
+  hostMode?: boolean;
+}): {
   enabled: boolean;
   network: string;
   postgres: {
@@ -268,15 +334,15 @@ export function describeWorkspaceAppDatabases(
     injectedAs: "MONGODB_URI";
   };
 } {
-  const db = workspaceDbName(workspaceId);
+  const hostMode = options.hostMode ?? false;
+  const db = workspaceDbName(options.workspaceId);
   const pg = getAppDbEngine("postgres")!;
   const mongo = getAppDbEngine("mongo")!;
-  const hostMode = resolveSandboxRuntimeKind() === "host";
   return {
     enabled: appDbEnabled(),
     network: hostMode ? "localhost" : "forge",
     postgres: {
-      provisioned: provisioned.postgres,
+      provisioned: options.provisioned.postgres,
       database: db,
       sandboxHost: hostMode ? "127.0.0.1" : pg.networkAlias,
       sandboxPort: hostMode ? pg.hostPort : pg.containerPort,
@@ -285,7 +351,7 @@ export function describeWorkspaceAppDatabases(
       injectedAs: "DATABASE_URL"
     },
     mongo: {
-      provisioned: provisioned.mongo,
+      provisioned: options.provisioned.mongo,
       database: db,
       sandboxHost: hostMode ? "127.0.0.1" : mongo.networkAlias,
       sandboxPort: hostMode ? mongo.hostPort : mongo.containerPort,

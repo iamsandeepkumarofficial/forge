@@ -13,7 +13,7 @@ describe("ensureEngine", () => {
   let imagePresent = true;
 
   before(async () => {
-    process.env.SANDBOX_RUNTIME = "docker";
+    process.env.FORGE_APP_DB_ENABLED = "1";
     mock.module("node:child_process", {
       namedExports: {
         execFile: (

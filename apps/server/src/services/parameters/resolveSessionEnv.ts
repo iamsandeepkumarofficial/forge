@@ -26,7 +26,6 @@ function mergeParams(
   }
 }
 
-
 export async function resolveSessionEnv(
   sessionId: string
 ): Promise<ResolvedSessionEnv> {
@@ -40,13 +39,16 @@ export async function resolveSessionEnv(
 
   const chat = await chatRepo.getBySessionId(sessionId);
   if (!chat) {
-    Object.assign(containerEnv, sessionAppDbEnvFor(sessionId));
+    Object.assign(containerEnv, await sessionAppDbEnvFor(sessionId));
     for (const k of Object.keys(containerEnv)) keyNames.add(k);
     return { containerEnv, byRepo, envKeyNames: [...keyNames].sort() };
   }
 
   if (chat.workspaceId) {
-    Object.assign(containerEnv, await workspaceAppDbEnv(chat.workspaceId));
+    Object.assign(
+      containerEnv,
+      await workspaceAppDbEnv(chat.workspaceId, { sessionId })
+    );
     for (const k of Object.keys(containerEnv)) keyNames.add(k);
     const members = await workspaceRepo.listMembers(chat.workspaceId);
     const workspaceParams = await paramRepo.listWorkspaceParameters(
@@ -73,7 +75,7 @@ export async function resolveSessionEnv(
     return { containerEnv, byRepo, envKeyNames: [...keyNames].sort() };
   }
 
-  Object.assign(containerEnv, sessionAppDbEnvFor(sessionId));
+  Object.assign(containerEnv, await sessionAppDbEnvFor(sessionId));
   for (const k of Object.keys(containerEnv)) keyNames.add(k);
 
   if (chat.projectId) {
@@ -87,7 +89,6 @@ export async function resolveSessionEnv(
 
   return { containerEnv, byRepo, envKeyNames: [...keyNames].sort() };
 }
-
 
 export async function forgeProvidedKeysForWorkspace(
   workspaceId: string

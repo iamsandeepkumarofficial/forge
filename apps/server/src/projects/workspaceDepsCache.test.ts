@@ -40,6 +40,6 @@ describe("workspaceDepsCache", () => {
       "utf8"
     );
     assert.match(src, /isHostRuntime/);
-    assert.match(src, /resolveSandboxRuntimeKind\(\) === "host"/);
+    assert.match(src, /isHostSession/);
   });
 });

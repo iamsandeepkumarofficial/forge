@@ -10,12 +10,15 @@ describe("workbench-sessions-parts", () => {
     render(
       <WorkbenchCreateForm
         title=""
+        executionTarget="local"
         creating={false}
         onTitleChange={vi.fn()}
+        onExecutionTargetChange={vi.fn()}
         onSubmit={vi.fn()}
       />
     );
     expect(screen.getByLabelText(/New manual chat/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Agent runtime/i)).toBeTruthy();
     expect(screen.getByText(/Start workbench session/i)).toBeTruthy();
   });
 

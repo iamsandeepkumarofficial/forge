@@ -9,6 +9,8 @@
 (allow file-write* (subpath "{{WRITABLE_ROOTS}}"))
 (allow network*)
 (allow system-socket)
+(deny file-read* (subpath "{{HOME}}/.forge/projects"))
+(deny file-write* (subpath "{{HOME}}/.forge/projects"))
 (deny file-write* (subpath "{{HOME}}/.ssh"))
 (deny file-read* (subpath "{{HOME}}/.ssh"))
 (deny file-write* (subpath "{{HOME}}/.aws"))

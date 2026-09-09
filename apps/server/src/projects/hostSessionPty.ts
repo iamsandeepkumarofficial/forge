@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { spawn as nodePtySpawn, type IPty } from "node-pty";
+import { extraWritableRootsForHostRoot } from "./sandboxRuntime/hostAdapter.js";
 import { resolveWrappedArgv } from "./sandboxRuntime/osSandbox.js";
-import { scrubHostEnv } from "./sandboxRuntime/hostEnv.js";
+import { hostProcessEnv } from "./sandboxRuntime/hostEnv.js";
 
 export type HostShellWindow = {
   windowId: string;
@@ -86,16 +87,18 @@ async function spawnHostShell(options: {
   const wrapped = await resolveWrappedArgv({
     argv: shellArgv(bin),
     sessionRoot: options.root,
-    cwd: options.root
+    cwd: options.root,
+    extraWritableRoots: extraWritableRootsForHostRoot(options.root)
   });
   const file = wrapped[0]!;
   const args = wrapped.slice(1);
+  const env = (await hostProcessEnv(options.root)) as Record<string, string>;
   const pty = nodePtySpawn(file, args, {
     name: "xterm-256color",
     cols: options.cols ?? DEFAULT_COLS,
     rows: options.rows ?? DEFAULT_ROWS,
     cwd: options.root,
-    env: scrubHostEnv() as Record<string, string>
+    env
   });
   const tab: HostShellTab = {
     name: options.name,

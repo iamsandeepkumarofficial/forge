@@ -17,11 +17,6 @@ import { attachPreviewHost, registerPreviewIpc } from "./previewIpc.js";
 const supervisor = new Supervisor();
 let quitting = false;
 
-process.env.FORGE_DESKTOP = "1";
-if (!process.env.SANDBOX_RUNTIME?.trim()) {
-  process.env.SANDBOX_RUNTIME = "host";
-}
-
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 app.whenReady().then(() => {

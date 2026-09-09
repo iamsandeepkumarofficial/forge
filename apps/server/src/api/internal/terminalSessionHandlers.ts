@@ -50,6 +50,7 @@ export async function openStream(options: {
     let attach: PtyAttachHandle | null = null;
     attach = await attachShellWindow({
       container: options.containerName,
+      sessionId: options.sessionId,
       windowName: parsed.name,
       cols: DEFAULT_COLS,
       rows: DEFAULT_ROWS,
@@ -66,6 +67,7 @@ export async function openStream(options: {
     let follow: LogFollowHandle | null = null;
     follow = await attachAppLogFollow({
       containerName: options.containerName,
+      sessionId: options.sessionId,
       appName: parsed.name,
       onData: options.onData,
       onExited: options.onExited
@@ -76,6 +78,7 @@ export async function openStream(options: {
     let follow: LogFollowHandle | null = null;
     follow = await attachJobLogFollow({
       containerName: options.containerName,
+      sessionId: options.sessionId,
       jobName: parsed.name,
       onData: options.onData,
       onExited: options.onExited

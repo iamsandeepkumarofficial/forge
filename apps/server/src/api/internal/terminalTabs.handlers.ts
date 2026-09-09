@@ -32,7 +32,7 @@ export async function handleTerminalTabs(
   try {
     const { containerName } = await resolveSandbox(sessionId);
     const [shells, apps] = await Promise.all([
-      listTmuxWindows(containerName),
+      listTmuxWindows(containerName, sessionId),
       listAppRunningFlags(sessionId)
     ]);
     res.json({ tabs: mergeTerminalTabs({ shells, apps }) });
@@ -56,7 +56,11 @@ export async function handleTerminalTabCreate(
     typeof req.body?.name === "string" ? req.body.name.trim() : undefined;
   try {
     const { containerName } = await resolveSandbox(sessionId);
-    const tabId = await newShellWindow(containerName, name || undefined);
+    const tabId = await newShellWindow({
+      container: containerName,
+      sessionId,
+      name: name || undefined
+    });
     res.json({
       tabId,
       kind: "shell",
@@ -80,8 +84,7 @@ export async function handleTerminalTabDelete(
   res: Response
 ): Promise<void> {
   const sessionId = sessionIdFrom(req);
-  const tabId =
-    typeof req.params.id === "string" ? req.params.id.trim() : "";
+  const tabId = typeof req.params.id === "string" ? req.params.id.trim() : "";
   if (!sessionId || !tabId) {
     res.status(N_400).json({ error: "sessionId and tab id required" });
     return;
@@ -92,7 +95,11 @@ export async function handleTerminalTabDelete(
   }
   try {
     const { containerName } = await resolveSandbox(sessionId);
-    await killShellWindow(containerName, tabId);
+    await killShellWindow({
+      container: containerName,
+      sessionId,
+      windowName: tabId
+    });
     res.json({ ok: true });
   } catch (err) {
     res

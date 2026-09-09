@@ -10,7 +10,10 @@ import {
   loadSessionPortRegistry,
   type SessionPortAllocation
 } from "./sandboxRuntime/sessionPortRegistry.js";
-import { resolveSandboxRuntimeKind } from "./sandboxRuntime/resolve.js";
+import {
+  cloudSandboxKindFromEnv,
+  resolveSandboxRuntimeKindForSession
+} from "./sandboxRuntime/resolve.js";
 import type { SandboxRuntimeKind } from "./sandboxRuntime/types.js";
 
 export type RuntimeActivitySession = {
@@ -48,18 +51,20 @@ async function discoverSessionIds(): Promise<string[]> {
   for (const id of await listRunningSandboxSessionIds()) {
     ids.add(id);
   }
-  if (resolveSandboxRuntimeKind() === "host") {
+  try {
     const { listHostActiveSessionIds } =
       await import("./sandboxRuntime/hostAdapter.js");
     for (const id of listHostActiveSessionIds()) {
       ids.add(id);
     }
+  } catch {
+    void 0;
   }
   return [...ids].sort();
 }
 
 export async function collectRuntimeActivity(): Promise<RuntimeActivity> {
-  const runtimeKind = resolveSandboxRuntimeKind();
+  const runtimeKind = cloudSandboxKindFromEnv();
   const sessionIds = await discoverSessionIds();
   const chatRepo = new ChatFeatureRepository();
   const sessions: RuntimeActivitySession[] = [];
@@ -76,6 +81,9 @@ export async function collectRuntimeActivity(): Promise<RuntimeActivity> {
     } catch {
       void 0;
     }
+    const runtime = await resolveSandboxRuntimeKindForSession(sessionId).catch(
+      () => runtimeKind
+    );
     sessions.push({
       sessionId,
       chatId: chat?.id,
@@ -84,7 +92,7 @@ export async function collectRuntimeActivity(): Promise<RuntimeActivity> {
       title: chat?.title?.trim() || sessionId,
       status,
       running,
-      runtime: runtimeKind
+      runtime
     });
     try {
       const listed = await listAppStatuses(sessionId);

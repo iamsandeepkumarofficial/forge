@@ -31,10 +31,8 @@ export async function handleTerminalJobs(
   }
   try {
     const { containerName } = await resolveSandbox(sessionId);
-    const jobs = await listTerminalJobStatuses(containerName);
-    jobs.sort((a, b) =>
-      (b.startedAt ?? "").localeCompare(a.startedAt ?? "")
-    );
+    const jobs = await listTerminalJobStatuses(containerName, sessionId);
+    jobs.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? ""));
     res.json({ jobs });
   } catch (err) {
     res
@@ -55,7 +53,7 @@ export async function handleTerminalStop(
   }
   try {
     const { containerName } = await resolveSandbox(sessionId);
-    await stopTerminalJob({ containerName, name });
+    await stopTerminalJob({ containerName, name, sessionId });
     res.json({ ok: true });
   } catch (err) {
     res
@@ -68,7 +66,6 @@ export async function handleTerminalRun(
   req: Request,
   res: Response
 ): Promise<void> {
-  
   const sessionId = sessionIdFrom(req);
   const command =
     typeof req.body?.command === "string" ? req.body.command.trim() : "";

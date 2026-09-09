@@ -12,7 +12,7 @@ describe("sessionAppLog", { concurrency: false }, () => {
   before(async () => {
     mock.module("./sandboxRuntime/resolve.js", {
       exports: {
-        resolveSandboxRuntimeKind: () => "docker"
+        isHostSession: async () => false
       }
     });
     mock.module("./backgroundJob.js", {
@@ -53,6 +53,7 @@ describe("sessionAppLog", { concurrency: false }, () => {
     followClosed = false;
     const handle = await attachAppLogFollow({
       containerName: "c",
+      sessionId: "s1",
       appName: "web",
       onData: (chunk) => chunks.push(chunk),
       onExited: () => undefined
@@ -69,6 +70,7 @@ describe("sessionAppLog", { concurrency: false }, () => {
     followClosed = false;
     const handle = await attachJobLogFollow({
       containerName: "c",
+      sessionId: "s1",
       jobName: "install",
       onData: (chunk) => chunks.push(chunk),
       onExited: () => undefined

@@ -44,7 +44,9 @@ export async function provisionLocalProjectSandbox(options: {
     branchName: chat.branchName
   });
   const { getSandboxRuntime } = await import("../sandboxRuntime/resolve.js");
-  const handle = await getSandboxRuntime().createSession(
+  const handle = await (
+    await getSandboxRuntime(sessionId)
+  ).createSession(
     sessionId,
     await sandboxSessionCreateOpts({
       sessionId,

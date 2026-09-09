@@ -19,7 +19,18 @@ import {
 } from "../../services/project/projectsRoot.js";
 import { releaseSessionPorts } from "./sessionPortRegistry.js";
 import { resolveWrappedArgv } from "./osSandbox.js";
-import { scrubHostEnv } from "./hostEnv.js";
+import { hostProcessEnv } from "./hostEnv.js";
+import {
+  hostManagedSessionRoot,
+  isUnderHostManagedRoot,
+  sanitizeSessionFsName
+} from "./hostSessionPaths.js";
+import {
+  ensureHostWorkspaceRoot,
+  normalizeContainerPath,
+  workspaceMountsFromBinds,
+  type WorkspaceMount
+} from "./hostWorkspaceView.js";
 import type {
   CreateOpts,
   ExecOpts,
@@ -32,79 +43,111 @@ import type {
 } from "./types.js";
 import { SandboxRuntimeError } from "./types.js";
 
+export {
+  ensureHostWorkspaceRoot,
+  workspaceMountsFromBinds,
+  type WorkspaceMount
+} from "./hostWorkspaceView.js";
+
 const N_16 = 16;
-const N_48 = 48;
 const N_1024 = 1024;
 const DEFAULT_MAX_BUFFER = N_16 * N_1024 * N_1024;
 
-const sessionRoots = new Map<string, string>();
+type HostSessionState = {
+  root: string;
+  mounts: WorkspaceMount[];
+};
 
-function sanitizeSessionFsName(sessionId: string): string {
-  const cleaned = sessionId.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, N_48);
-  return cleaned.replace(/^[._-]+/, "") || "session";
-}
+const sessionStates = new Map<string, HostSessionState>();
 
 export function hostSessionRuntimeDir(sessionId: string): string {
-  return path.join(
-    resolveSessionsRoot(),
-    "_host",
-    sanitizeSessionFsName(sessionId),
-    ".forge-runtime"
-  );
+  return path.join(hostManagedSessionRoot(sessionId), ".forge-runtime");
 }
 
-function workspaceHostPath(opts?: CreateOpts): string | undefined {
-  return opts?.bindMounts?.find((m) => m.containerPath === WORKSPACE_MOUNT)
-    ?.hostPath;
+export function mapHostLogicalPath(
+  logical: string,
+  options: { root: string; mounts: WorkspaceMount[] }
+): string {
+  const raw = logical.replace(/\\/g, "/");
+  if (raw !== WORKSPACE_MOUNT && !raw.startsWith(`${WORKSPACE_MOUNT}/`)) {
+    return logical;
+  }
+  const normalized = normalizeContainerPath(raw);
+  for (const mount of options.mounts) {
+    if (
+      normalized === mount.containerPath ||
+      normalized.startsWith(`${mount.containerPath}/`)
+    ) {
+      const rest = normalized
+        .slice(mount.containerPath.length)
+        .replace(/^\//, "");
+      return rest ? path.join(mount.hostPath, rest) : mount.hostPath;
+    }
+  }
+  const rest = normalized.slice(WORKSPACE_MOUNT.length).replace(/^\//, "");
+  return rest ? path.join(options.root, rest) : options.root;
 }
 
-function mapEnvPaths(env: NodeJS.ProcessEnv, root: string): NodeJS.ProcessEnv {
+function mapEnvPaths(
+  env: NodeJS.ProcessEnv,
+  options: { root: string; mounts: WorkspaceMount[] }
+): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = { ...env };
   for (const key of Object.keys(out)) {
     const v = out[key];
     if (typeof v === "string") {
-      out[key] = mapWorkspaceArg(v, root);
+      out[key] = mapHostLogicalPath(v, options);
     }
   }
   return out;
 }
 
-function mapWorkspaceArg(arg: string, root: string): string {
-  if (arg === WORKSPACE_MOUNT || arg.startsWith(`${WORKSPACE_MOUNT}/`)) {
-    return path.join(
-      root,
-      arg.slice(WORKSPACE_MOUNT.length).replace(/^\//, "")
-    );
-  }
-  return arg;
+function mountHostPaths(mounts: WorkspaceMount[]): string[] {
+  return [...new Set(mounts.map((m) => m.hostPath))];
 }
 
-function mapWorkspacePath(cwd: string | undefined, root: string): string {
-  if (!cwd) return root;
-  if (cwd === WORKSPACE_MOUNT || cwd.startsWith(`${WORKSPACE_MOUNT}/`)) {
-    return path.join(
-      root,
-      cwd.slice(WORKSPACE_MOUNT.length).replace(/^\//, "")
-    );
+export function extraWritableRootsForHostRoot(root: string): string[] {
+  for (const state of sessionStates.values()) {
+    if (state.root === root) return mountHostPaths(state.mounts);
   }
-  return cwd;
+  return [];
 }
 
-async function hostExec(input: {
+function missingCwdResult(options: {
+  cwd: string;
+  logicalCwd?: string;
   root: string;
-  argv: string[];
+  mounts: WorkspaceMount[];
+}): ExecResult {
+  const logicalHint =
+    options.logicalCwd && options.logicalCwd !== options.cwd
+      ? ` (logical: ${options.logicalCwd})`
+      : "";
+  const members = options.mounts
+    .filter((m) => m.containerPath !== WORKSPACE_MOUNT)
+    .map((m) => m.containerPath.slice(WORKSPACE_MOUNT.length + 1))
+    .filter(Boolean);
+  const memberHint =
+    members.length > 0
+      ? ` Known member repos: ${members.sort().join(", ")}.`
+      : "";
+  return {
+    code: 1,
+    stdout: "",
+    stderr:
+      `Working directory does not exist: ${options.cwd}${logicalHint}. ` +
+      `Host session root: ${options.root}.${memberHint}`
+  };
+}
+
+async function spawnHostProcess(options: {
+  wrappedArgv: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
   opts: ExecOpts;
+  maxBuffer: number;
 }): Promise<ExecResult> {
-  const { root, opts } = input;
-  const argv = input.argv.map((a) => mapWorkspaceArg(a, root));
-  const cwd = mapWorkspacePath(opts.cwd, root);
-  const maxBuffer = opts.maxBuffer ?? DEFAULT_MAX_BUFFER;
-  const env = mapEnvPaths(scrubHostEnv(opts.env), root);
-  const wrappedArgv = await resolveWrappedArgv({
-    argv,
-    sessionRoot: root,
-    cwd
-  });
+  const { wrappedArgv, cwd, env, opts, maxBuffer } = options;
   return new Promise<ExecResult>((resolve, reject) => {
     const child = spawn(wrappedArgv[0]!, wrappedArgv.slice(1), {
       cwd,
@@ -149,6 +192,37 @@ async function hostExec(input: {
   });
 }
 
+async function hostExec(input: {
+  root: string;
+  mounts: WorkspaceMount[];
+  argv: string[];
+  opts: ExecOpts;
+}): Promise<ExecResult> {
+  const { root, mounts, opts } = input;
+  const mapOpts = { root, mounts };
+  const argv = input.argv.map((a) => mapHostLogicalPath(a, mapOpts));
+  const logicalCwd = opts.cwd;
+  const cwd = logicalCwd ? mapHostLogicalPath(logicalCwd, mapOpts) : root;
+  try {
+    await fs.access(cwd);
+  } catch {
+    return missingCwdResult({ cwd, logicalCwd, root, mounts });
+  }
+  const wrappedArgv = await resolveWrappedArgv({
+    argv,
+    sessionRoot: root,
+    cwd,
+    extraWritableRoots: mountHostPaths(mounts)
+  });
+  return spawnHostProcess({
+    wrappedArgv,
+    cwd,
+    env: mapEnvPaths(await hostProcessEnv(root, opts.env), mapOpts),
+    opts,
+    maxBuffer: opts.maxBuffer ?? DEFAULT_MAX_BUFFER
+  });
+}
+
 async function hostCreateSession(
   sessionId: string,
   opts?: CreateOpts
@@ -162,17 +236,20 @@ async function hostCreateSession(
       );
     }
     await ensureSessionsRoot();
-    const ws = workspaceHostPath(opts);
-    const root =
-      ws ??
-      path.join(
-        resolveSessionsRoot(),
-        "_host",
-        sanitizeSessionFsName(sessionId)
-      );
+    const bindMounts = workspaceMountsFromBinds(opts?.bindMounts);
+    const { root, mounts } = await ensureHostWorkspaceRoot({
+      sessionId,
+      mounts: bindMounts
+    });
     await fs.mkdir(root, { recursive: true });
     await fs.mkdir(path.join(root, ".forge-runtime"), { recursive: true });
-    sessionRoots.set(sessionId, root);
+    const managed = hostManagedSessionRoot(sessionId);
+    if (path.resolve(root) !== path.resolve(managed)) {
+      await fs.mkdir(path.join(managed, ".forge-runtime"), {
+        recursive: true
+      });
+    }
+    sessionStates.set(sessionId, { root, mounts });
     return { sessionId, runtime: "host", ref: root };
   } catch (err) {
     throw new SandboxRuntimeError({
@@ -185,8 +262,8 @@ async function hostCreateSession(
 }
 
 async function hostGetStatus(sessionId: string): Promise<SessionRuntimeStatus> {
-  const root = sessionRoots.get(sessionId);
-  if (!root) {
+  const state = sessionStates.get(sessionId);
+  if (!state) {
     const candidate = path.join(
       resolveSessionsRoot(),
       "_host",
@@ -208,7 +285,7 @@ async function hostGetStatus(sessionId: string): Promise<SessionRuntimeStatus> {
     status: "ready",
     running: true,
     workingDir: WORKSPACE_MOUNT,
-    ref: root
+    ref: state.root
   };
 }
 
@@ -266,8 +343,23 @@ async function killHostRuntimePids(root: string): Promise<void> {
   }
 }
 
+async function removeHostManagedSessionDir(
+  sessionId: string,
+  sessionRoot?: string
+): Promise<void> {
+  const managed = path.resolve(hostManagedSessionRoot(sessionId));
+  await fs.rm(managed, { recursive: true, force: true }).catch(() => {});
+  if (
+    sessionRoot &&
+    isUnderHostManagedRoot(sessionRoot) &&
+    path.resolve(sessionRoot) !== managed
+  ) {
+    await fs.rm(sessionRoot, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 export function listHostActiveSessionIds(): string[] {
-  return [...sessionRoots.keys()];
+  return [...sessionStates.keys()];
 }
 
 export function createHostSandboxRuntime(): SandboxRuntime {
@@ -275,24 +367,27 @@ export function createHostSandboxRuntime(): SandboxRuntime {
     createSession: hostCreateSession,
     async exec(input: RuntimeExecInput): Promise<ExecResult> {
       const { handle, cmd, ...opts } = input;
-      const root = sessionRoots.get(handle.sessionId) ?? handle.ref;
+      const state = sessionStates.get(handle.sessionId);
+      const root = state?.root ?? handle.ref;
+      const mounts = state?.mounts ?? [];
       if (cmd.length === 0) {
         return { code: 1, stdout: "", stderr: "empty command" };
       }
-      return hostExec({ root, argv: cmd, opts });
+      return hostExec({ root, mounts, argv: cmd, opts });
     },
     getStatus: hostGetStatus,
     publishPreviewPort: hostPublishPreviewPort,
     async destroySession(sessionId: string): Promise<void> {
       await revokePreviewSession(sessionId);
-      const root = sessionRoots.get(sessionId);
-      if (root) {
+      const state = sessionStates.get(sessionId);
+      if (state) {
         const { destroyHostShells } = await import("../hostSessionPty.js");
-        destroyHostShells(root);
-        await killHostRuntimePids(root);
+        destroyHostShells(state.root);
+        await killHostRuntimePids(state.root);
       }
       await releaseSessionPorts(sessionId);
-      sessionRoots.delete(sessionId);
+      sessionStates.delete(sessionId);
+      await removeHostManagedSessionDir(sessionId, state?.root);
     }
   };
 }

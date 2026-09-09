@@ -5,7 +5,7 @@ import {
   type BackgroundJobKind
 } from "./backgroundJob.js";
 import { dockerLogFollowAttach } from "./dockerExecHttp.js";
-import { resolveSandboxRuntimeKind } from "./sandboxRuntime/resolve.js";
+import { isHostSession } from "./sandboxRuntime/resolve.js";
 
 const INITIAL_TAIL = 500;
 const EXIT_POLL_MS = 2000;
@@ -16,12 +16,13 @@ export type LogFollowHandle = {
 
 export type AppLogFollowHandle = LogFollowHandle;
 
-function hostLogPath(options: {
+async function hostLogPath(options: {
   containerName: string;
   kind: BackgroundJobKind;
   name: string;
-}): string {
-  const host = resolveSandboxRuntimeKind() === "host";
+  sessionId: string;
+}): Promise<string> {
+  const host = await isHostSession(options.sessionId);
   return jobLogFile({
     kind: options.kind,
     name: options.name,
@@ -65,12 +66,13 @@ function hostLogFollowAttach(options: {
 
 export async function attachLogFollow(options: {
   containerName: string;
+  sessionId: string;
   kind: BackgroundJobKind;
   name: string;
   onData: (chunk: Buffer) => void;
   onExited: () => void;
 }): Promise<LogFollowHandle> {
-  const logPath = hostLogPath(options);
+  const logPath = await hostLogPath(options);
   let closed = false;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let followClose: (() => void) | undefined;
@@ -89,28 +91,28 @@ export async function attachLogFollow(options: {
     }
   };
 
-  const follow =
-    resolveSandboxRuntimeKind() === "host"
-      ? hostLogFollowAttach({
-          logPath,
-          tailLines: INITIAL_TAIL,
-          onData: options.onData,
-          onClose: () => finish(true)
-        })
-      : await dockerLogFollowAttach({
-          container: options.containerName,
-          logPath,
-          tailLines: INITIAL_TAIL,
-          onData: options.onData,
-          onClose: () => finish(true)
-        });
+  const follow = (await isHostSession(options.sessionId))
+    ? hostLogFollowAttach({
+        logPath,
+        tailLines: INITIAL_TAIL,
+        onData: options.onData,
+        onClose: () => finish(true)
+      })
+    : await dockerLogFollowAttach({
+        container: options.containerName,
+        logPath,
+        tailLines: INITIAL_TAIL,
+        onData: options.onData,
+        onClose: () => finish(true)
+      });
   followClose = follow.close;
 
   pollTimer = setInterval(() => {
     void isBackgroundJobRunning({
       containerName: options.containerName,
       kind: options.kind,
-      name: options.name
+      name: options.name,
+      sessionId: options.sessionId
     }).then((running) => {
       if (!running) {
         finish(true);
@@ -125,12 +127,14 @@ export async function attachLogFollow(options: {
 
 export async function attachAppLogFollow(options: {
   containerName: string;
+  sessionId: string;
   appName: string;
   onData: (chunk: Buffer) => void;
   onExited: () => void;
 }): Promise<AppLogFollowHandle> {
   return attachLogFollow({
     containerName: options.containerName,
+    sessionId: options.sessionId,
     kind: "app",
     name: options.appName,
     onData: options.onData,
@@ -140,12 +144,14 @@ export async function attachAppLogFollow(options: {
 
 export async function attachJobLogFollow(options: {
   containerName: string;
+  sessionId: string;
   jobName: string;
   onData: (chunk: Buffer) => void;
   onExited: () => void;
 }): Promise<LogFollowHandle> {
   return attachLogFollow({
     containerName: options.containerName,
+    sessionId: options.sessionId,
     kind: "term",
     name: options.jobName,
     onData: options.onData,

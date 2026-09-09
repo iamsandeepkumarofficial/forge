@@ -13,6 +13,7 @@ import { createAttachmentsRouter } from "./api/attachmentsRouter.js";
 import { createChatRouter } from "./api/chatRouter.js";
 import { createWorkspacesRouter } from "./api/workspacesRouter.js";
 import { startInProcessPreview } from "./preview/startInProcessPreview.js";
+import { cloudSandboxKindFromEnv } from "./projects/sandboxRuntime/resolve.js";
 
 const N_120 = 120;
 const N_1200 = 1200;
@@ -30,7 +31,12 @@ app.use(
   })
 );
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, mode: "tool-plane" });
+  res.json({
+    ok: true,
+    mode: "tool-plane",
+    cloudSandbox: cloudSandboxKindFromEnv(),
+    localSessions: "host"
+  });
 });
 try {
   await connectPostgres();
@@ -62,16 +68,24 @@ const bindHost =
     ? "127.0.0.1"
     : process.env.FORGE_BIND_HOST?.trim() || "127.0.0.1";
 
-
-
 startInProcessPreview(bindHost);
 
 const server = http.createServer(app);
 attachTerminalSessionWebSocket(server);
 
+server.on("error", (err: NodeJS.ErrnoException) => {
+  const detail =
+    err.code === "EADDRINUSE"
+      ? `Port ${port} is already in use — stop the other Forge server (often a non-desktop pnpm dev) so host mode can bind.`
+      : err.message;
+  process.stderr.write(`[forge-tool-plane] listen failed: ${detail}\n`);
+  process.exit(1);
+});
+
 server.listen(port, bindHost, () => {
+  const cloud = cloudSandboxKindFromEnv();
   process.stdout.write(
-    `Forge tool plane listening on http://${bindHost}:${port}\n`
+    `Forge tool plane listening on http://${bindHost}:${port} (cloudSandbox=${cloud}, localSessions=host)\n`
   );
   void import("./projects/sandboxIdle.js")
     .then(({ startSandboxIdleSweeper }) => {

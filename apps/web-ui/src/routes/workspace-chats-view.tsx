@@ -53,9 +53,18 @@ function WorkspaceChatsHeader(options: {
   name: string;
   busy: boolean;
   hasMembers: boolean;
+  executionTarget: "local" | "cloud";
+  setExecutionTarget: (v: "local" | "cloud") => void;
   onNewChat: () => void;
 }) {
-  const { name, busy, hasMembers, onNewChat } = options;
+  const {
+    name,
+    busy,
+    hasMembers,
+    executionTarget,
+    setExecutionTarget,
+    onNewChat
+  } = options;
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
@@ -68,20 +77,33 @@ function WorkspaceChatsHeader(options: {
           sandbox and preview, separate from single-project chats.
         </p>
       </div>
-      <button
-        type="button"
-        onClick={onNewChat}
-        disabled={busy || !hasMembers}
-        title={hasMembers ? undefined : "Add projects in Settings first"}
-        className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
-      >
-        {busy ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <MessageSquarePlus className="size-4 text-primary" />
-        )}
-        New workspace chat
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label="Agent runtime"
+          className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+          value={executionTarget}
+          onChange={(e) =>
+            setExecutionTarget(e.target.value === "cloud" ? "cloud" : "local")
+          }
+        >
+          <option value="local">Normal (local)</option>
+          <option value="cloud">Cloud (Docker)</option>
+        </select>
+        <button
+          type="button"
+          onClick={onNewChat}
+          disabled={busy || !hasMembers}
+          title={hasMembers ? undefined : "Add projects in Settings first"}
+          className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
+        >
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <MessageSquarePlus className="size-4 text-primary" />
+          )}
+          New workspace chat
+        </button>
+      </div>
     </div>
   );
 }
@@ -289,6 +311,8 @@ export function WorkspaceChatsView() {
         name={page.workspace.name}
         busy={page.busy}
         hasMembers={page.hasMembers}
+        executionTarget={page.executionTarget}
+        setExecutionTarget={page.setExecutionTarget}
         onNewChat={page.onNewChat}
       />
       {page.error && <p className="text-sm text-destructive">{page.error}</p>}

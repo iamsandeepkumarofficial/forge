@@ -18,10 +18,10 @@ function fakeChild(): ChildProcess {
 describe("materializeHostRuntimeEnv", () => {
   it("sets desktop host env", () => {
     const env = materializeHostRuntimeEnv();
-    assert.equal(env.FORGE_DESKTOP, "1");
-    assert.equal(env.SANDBOX_RUNTIME, "host");
     assert.equal(env.DATABASE_URL, NATIVE_DATABASE_URL);
     assert.match(env.TEMPORAL_ADDRESS ?? "", /7233/);
+    assert.equal(env.SANDBOX_RUNTIME, undefined);
+    assert.equal(env.FORGE_DESKTOP, undefined);
   });
 });
 

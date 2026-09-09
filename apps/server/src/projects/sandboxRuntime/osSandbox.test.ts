@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import {
+  assertProfileDeniesForgeProjects,
   assertProfileDeniesSsh,
   buildBwrapArgv,
   buildSeatbeltArgv,
@@ -48,6 +49,7 @@ describe("osSandbox", () => {
     const body = await fs.readFile(profilePath, "utf8");
     assert.ok(body.includes(sessionRoot));
     assert.ok(assertProfileDeniesSsh(body));
+    assert.ok(assertProfileDeniesForgeProjects(body));
     assert.match(body, /^\(allow signal\)$/m);
     assert.doesNotMatch(body, /signal\*/);
     const argv = buildSeatbeltArgv({
@@ -81,6 +83,14 @@ describe("osSandbox", () => {
     assert.match(stdout, /seatbelt-ok/);
   });
 
+  it("includes extra writable roots", () => {
+    const root = "/tmp/forge-session";
+    const extra = "/tmp/forge-member";
+    const roots = defaultWritableRoots(root, [extra]);
+    assert.ok(roots.includes(path.resolve(root)));
+    assert.ok(roots.includes(path.resolve(extra)));
+  });
+
   it("builds bwrap argv with bind-try for writable roots", () => {
     const root = "/tmp/forge-session";
     const argv = buildBwrapArgv({
@@ -92,6 +102,7 @@ describe("osSandbox", () => {
     assert.ok(argv.includes("--bind-try"));
     assert.ok(argv.includes(root));
     assert.ok(argv.includes("--chdir"));
+    assert.equal(argv.includes(os.homedir()), false);
   });
 
   it("wrapHostCommand enables darwin seatbelt when sandbox on", async () => {

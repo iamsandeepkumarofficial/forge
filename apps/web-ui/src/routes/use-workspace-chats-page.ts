@@ -23,6 +23,7 @@ function useWorkspaceChatActions(options: {
   hasMembers: boolean;
   busy: boolean;
   deletingId: string | null;
+  executionTarget: "local" | "cloud";
   setBusy: (v: boolean) => void;
   setDeletingId: (v: string | null) => void;
   setError: (v: string | null) => void;
@@ -34,6 +35,7 @@ function useWorkspaceChatActions(options: {
     hasMembers,
     busy,
     deletingId,
+    executionTarget,
     setBusy,
     setDeletingId,
     setError,
@@ -46,7 +48,10 @@ function useWorkspaceChatActions(options: {
       setBusy(true);
       setError(null);
       try {
-        const chat = await createWorkspaceChat(workspaceId);
+        const chat = await createWorkspaceChat({
+          workspaceId,
+          executionTarget
+        });
         setChats(await listWorkspaceChats(workspaceId));
         openChat(chat.id);
       } catch (err) {
@@ -84,6 +89,9 @@ export function useWorkspaceChatsPage(workspaceId: string) {
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [executionTarget, setExecutionTarget] = useState<"local" | "cloud">(
+    "local"
+  );
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -129,6 +137,7 @@ export function useWorkspaceChatsPage(workspaceId: string) {
     hasMembers,
     busy,
     deletingId,
+    executionTarget,
     setBusy,
     setDeletingId,
     setError,
@@ -144,6 +153,8 @@ export function useWorkspaceChatsPage(workspaceId: string) {
     deletingId,
     query,
     setQuery,
+    executionTarget,
+    setExecutionTarget,
     filtered,
     mostRecent,
     hasMembers,

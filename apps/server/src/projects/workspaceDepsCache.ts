@@ -17,11 +17,10 @@ export function workspaceDepsVolumeName(workspaceId: string): string {
 }
 
 export async function ensureWorkspaceDepsVolume(
-  workspaceId: string
+  workspaceId: string,
+  options?: { hostMode?: boolean }
 ): Promise<string> {
-  const { resolveSandboxRuntimeKind } =
-    await import("./sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  if (options?.hostMode) {
     return workspaceDepsVolumeName(workspaceId);
   }
   const name = workspaceDepsVolumeName(workspaceId);
@@ -57,17 +56,18 @@ lockhash() {
 }
 `;
 
-async function isHostRuntime(): Promise<boolean> {
-  const { resolveSandboxRuntimeKind } =
-    await import("./sandboxRuntime/resolve.js");
-  return resolveSandboxRuntimeKind() === "host";
+async function isHostRuntime(sessionId?: string): Promise<boolean> {
+  if (!sessionId) return false;
+  const { isHostSession } = await import("./sandboxRuntime/resolve.js");
+  return isHostSession(sessionId);
 }
 
 export async function restoreCachedDeps(options: {
   containerName: string;
   repoName: string;
+  sessionId?: string;
 }): Promise<boolean> {
-  if (await isHostRuntime()) return false;
+  if (await isHostRuntime(options.sessionId)) return false;
   const abs = repoAbs(options.repoName);
   const cache = cacheDir(options.repoName);
   const script = `
@@ -136,8 +136,9 @@ cp -a "${cache}/node_modules" "${abs}/node_modules" && echo restored-copy
 export async function captureCachedDeps(options: {
   containerName: string;
   repoName: string;
+  sessionId?: string;
 }): Promise<boolean> {
-  if (await isHostRuntime()) return false;
+  if (await isHostRuntime(options.sessionId)) return false;
   const abs = repoAbs(options.repoName);
   const cache = cacheDir(options.repoName);
   const script = `
@@ -192,9 +193,10 @@ echo captured
 }
 
 export async function clearWorkspaceDepsCache(
-  workspaceId: string
+  workspaceId: string,
+  options?: { hostMode?: boolean }
 ): Promise<void> {
-  if (await isHostRuntime()) return;
+  if (options?.hostMode) return;
   const name = await ensureWorkspaceDepsVolume(workspaceId);
   try {
     await execFileAsync("docker", [

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
-import { isHttpOk, waitForHttp } from "./httpWait.js";
+import { expectHostToolPlane, isHttpOk, waitForHttp } from "./httpWait.js";
 
 describe("httpWait", () => {
   it("isHttpOk is true for a live 200 and false when down", async () => {
@@ -41,6 +41,26 @@ describe("httpWait", () => {
         }),
       /timed out/
     );
+  });
+
+  it("waitForHttp expectJson rejects wrong sandboxRuntime", async () => {
+    const server = http.createServer((_req, res) => {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ ok: true, sandboxRuntime: "docker" }));
+    });
+    await listen(server);
+    const { port } = server.address() as AddressInfo;
+    await assert.rejects(
+      () =>
+        waitForHttp({
+          url: `http://127.0.0.1:${port}/`,
+          attempts: 2,
+          intervalMs: 10,
+          expectJson: expectHostToolPlane
+        }),
+      /sandboxRuntime=host/
+    );
+    await close(server);
   });
 });
 

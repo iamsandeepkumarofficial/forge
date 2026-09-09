@@ -27,8 +27,9 @@ export const WORKSPACE_SETUP_ANALYZE_PROMPT = [
   "1) Emit a numbered task list of blockers (stack/skill, install, env params, infra, launch/preview).",
   "2) Execute those tasks one by one in order: invoke_skill, run_terminal for installs",
   "(ask_user before toolchain install), ask_user (mcq/form with value defaults) for env/infra,",
-  "then upsert_workspace_parameter / provision_app_engine with userApproved after consent,",
+  "then upsert_workspace_parameter / setup_project_infra with userApproved after consent,",
   "upsert_launch_app, preview_start backends before frontends when dependsOn says so.",
+  "If setup_project_infra fails (e.g. missing local mongod), explain briefly, ask_user, then install_project_infra (not run_terminal) and retry setup.",
   "Do not stop after the task list — start fixing immediately."
 ].join(" ");
 
@@ -39,7 +40,8 @@ export const WORKSPACE_SETUP_FIX_PROMPT = [
   "Follow ## Workspace setup SOP: identify each member stack from shadows/inventory,",
   "invoke_skill for that stack, install via run_terminal (ask_user before toolchain install if missing),",
   "ask_user (mcq/form widget with value defaults) for missing env and infra consent — then upsert_workspace_parameter",
-  "and provision_app_engine with userApproved only after that answer.",
+  "and setup_project_infra with userApproved only after that answer.",
+  "If setup fails (missing local DB binary), explain, ask_user, install_project_infra, then retry setup_project_infra — do not end on the error alone.",
   "Then upsert_launch_app and preview_start backends before frontends when dependsOn says so."
 ].join(" ");
 
@@ -104,7 +106,11 @@ async function ensureSetupChat(workspaceId: string): Promise<{
     (c) => (c.title ?? "").trim().toLowerCase() === "workspace setup"
   );
   const chat =
-    existing ?? (await createWorkspaceChat(workspaceId, SETUP_CHAT_TITLE));
+    existing ??
+    (await createWorkspaceChat({
+      workspaceId,
+      title: SETUP_CHAT_TITLE
+    }));
   const detail = await fetchWorkspaceChat(workspaceId, chat.id);
   if (!detail.sessionId) {
     throw new Error("Setup chat has no session yet.");

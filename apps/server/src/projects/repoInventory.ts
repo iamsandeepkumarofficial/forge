@@ -153,19 +153,25 @@ export function loadRepoInventoryFromHost(options: {
   });
 }
 
-async function readSandboxFile(
-  containerName: string,
-  absPath: string
-): Promise<string | null> {
-  return readFileFromSandbox(containerName, absPath);
+async function readSandboxFile(options: {
+  containerName: string;
+  absPath: string;
+  sessionId: string;
+}): Promise<string | null> {
+  return readFileFromSandbox(
+    options.containerName,
+    options.absPath,
+    options.sessionId
+  );
 }
 
 export async function loadRepoInventoryFromSandbox(options: {
   containerName: string;
+  sessionId: string;
   worktrees: Record<string, string>;
   dependsOnGraph?: Array<{ repo: string; dependsOn: string[] }>;
 }): Promise<RepoInventory> {
-  const { containerName, worktrees } = options;
+  const { containerName, sessionId, worktrees } = options;
   const names = Object.keys(worktrees).sort();
   const members: RepoInventoryMember[] = [];
 
@@ -177,17 +183,19 @@ export async function loadRepoInventoryFromSandbox(options: {
     );
     try {
       fs.mkdirSync(tmpDir, { recursive: true });
-      const pkgRaw = await readSandboxFile(
+      const pkgRaw = await readSandboxFile({
         containerName,
-        `${mount}/package.json`
-      );
+        absPath: `${mount}/package.json`,
+        sessionId
+      });
       if (pkgRaw) {
         fs.writeFileSync(path.join(tmpDir, "package.json"), pkgRaw);
       }
-      const launchRaw = await readSandboxFile(
+      const launchRaw = await readSandboxFile({
         containerName,
-        `${mount}/.forge/launch.json`
-      );
+        absPath: `${mount}/.forge/launch.json`,
+        sessionId
+      });
       if (launchRaw) {
         fs.mkdirSync(path.join(tmpDir, ".forge"), { recursive: true });
         fs.writeFileSync(path.join(tmpDir, ".forge", "launch.json"), launchRaw);
@@ -198,7 +206,11 @@ export async function loadRepoInventoryFromSandbox(options: {
         "package-lock.json",
         "bun.lockb"
       ]) {
-        const raw = await readSandboxFile(containerName, `${mount}/${lock}`);
+        const raw = await readSandboxFile({
+          containerName,
+          absPath: `${mount}/${lock}`,
+          sessionId
+        });
         if (raw) fs.writeFileSync(path.join(tmpDir, lock), raw);
       }
       members.push({

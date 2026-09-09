@@ -43,13 +43,18 @@ function guessType(deps: Record<string, string>): AppType {
   return "worker";
 }
 
-async function detectPm(containerName: string, dir: string): Promise<string> {
+async function detectPm(options: {
+  containerName: string;
+  dir: string;
+  sessionId: string;
+}): Promise<string> {
   const lock = await dockerExec({
-    container: containerName,
+    container: options.containerName,
+    sessionId: options.sessionId,
     argv: [
       "sh",
       "-c",
-      `cd "${dir}"; if [ -f pnpm-lock.yaml ]; then echo pnpm; elif [ -f yarn.lock ]; then echo yarn; elif [ -f bun.lockb ]; then echo bun; else echo npm; fi`
+      `cd "${options.dir}"; if [ -f pnpm-lock.yaml ]; then echo pnpm; elif [ -f yarn.lock ]; then echo yarn; elif [ -f bun.lockb ]; then echo bun; else echo npm; fi`
     ]
   });
   return lock.stdout.trim() || "npm";
@@ -111,18 +116,21 @@ function appFromPackageJson(options: {
 
 async function detectAppsInDir(options: {
   containerName: string;
+  sessionId: string;
   baseDir: string;
   repo?: string;
   sessionRelativeCwd?: boolean;
   pm: string;
   nextPort: { value: number };
 }): Promise<ForgeApp[]> {
-  const { containerName, baseDir, repo, pm, sessionRelativeCwd } = options;
+  const { containerName, sessionId, baseDir, repo, pm, sessionRelativeCwd } =
+    options;
   const devCmd = devCommand(pm);
   const apps: ForgeApp[] = [];
   const rootPkg = await readFileFromSandbox(
     containerName,
-    `${baseDir}/package.json`
+    `${baseDir}/package.json`,
+    sessionId
   );
   if (rootPkg) {
     try {
@@ -141,6 +149,7 @@ async function detectAppsInDir(options: {
   }
   const lsr = await dockerExec({
     container: containerName,
+    sessionId,
     argv: ["sh", "-c", `ls -1 "${baseDir}/apps" 2>/dev/null`]
   });
   const dirs = lsr.stdout
@@ -150,7 +159,8 @@ async function detectAppsInDir(options: {
   for (const dir of dirs) {
     const pkgRaw = await readFileFromSandbox(
       containerName,
-      `${baseDir}/apps/${dir}/package.json`
+      `${baseDir}/apps/${dir}/package.json`,
+      sessionId
     );
     if (pkgRaw === null) continue;
     try {
@@ -182,9 +192,14 @@ export async function detectApps(sessionId: string): Promise<ForgeConfig> {
     for (const [repo, mount] of Object.entries(worktrees).sort(([a], [b]) =>
       a.localeCompare(b)
     )) {
-      const pm = await detectPm(containerName, mount);
+      const pm = await detectPm({
+        containerName,
+        dir: mount,
+        sessionId
+      });
       const memberApps = await detectAppsInDir({
         containerName,
+        sessionId,
         baseDir: mount,
         repo,
         sessionRelativeCwd: true,
@@ -196,9 +211,14 @@ export async function detectApps(sessionId: string): Promise<ForgeConfig> {
     return { apps };
   }
 
-  const pm = await detectPm(containerName, workingDir);
+  const pm = await detectPm({
+    containerName,
+    dir: workingDir,
+    sessionId
+  });
   const rootApps = await detectAppsInDir({
     containerName,
+    sessionId,
     baseDir: workingDir,
     pm,
     nextPort

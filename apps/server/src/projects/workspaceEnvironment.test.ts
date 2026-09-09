@@ -27,8 +27,16 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
         ChatFeatureRepository: class {
           async getBySessionId() {
             return chatWorkspaceId
-              ? { workspaceId: chatWorkspaceId, sessionId: "sess-1" }
-              : { workspaceId: null, sessionId: "sess-1" };
+              ? {
+                  workspaceId: chatWorkspaceId,
+                  sessionId: "sess-1",
+                  executionTarget: "cloud"
+                }
+              : {
+                  workspaceId: null,
+                  sessionId: "sess-1",
+                  executionTarget: "cloud"
+                };
           }
         }
       }
@@ -91,6 +99,23 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
         clearWorkspaceDepsCache: async () => undefined,
         workspaceDepsVolumeName: (id: string) =>
           `forge-ws-deps-${id.slice(0, 8)}`
+      }
+    });
+
+    mock.module("./sandboxRuntime/resolve.js", {
+      exports: {
+        isHostSession: async () => false,
+        rememberSessionExecutionTarget: () => undefined,
+        forgetSessionRuntimeKind: () => undefined,
+        getSandboxRuntime: async () => ({ kind: "docker" }),
+        resolveSandboxRuntimeKindForSession: async () => "docker",
+        executionTargetToKind: (t: string) =>
+          t === "cloud" ? "docker" : "host",
+        cloudSandboxKindFromEnv: () => "docker",
+        parseExecutionTarget: (raw: unknown) =>
+          raw === "local" || raw === "cloud" ? raw : undefined,
+        resetSandboxRuntimeCache: () => undefined,
+        getSandboxRuntimeByKind: () => ({ kind: "docker" })
       }
     });
 

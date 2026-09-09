@@ -40,13 +40,16 @@ export function appDirForCwd(options: {
 
 export async function resolveLaunchAppDir(options: {
   containerName: string;
+  sessionId: string;
   workingDir: string;
   repoDir: string;
   cwd: string;
 }): Promise<{ appDir: string; relCwd: string; error?: string }> {
   const rel = safeRelDir(options.cwd || ".") || ".";
   const primary = appDirForCwd({ workingDir: options.workingDir, relCwd: rel });
-  if (await pathExistsInSandbox(options.containerName, primary)) {
+  if (
+    await pathExistsInSandbox(options.containerName, primary, options.sessionId)
+  ) {
     return { appDir: primary, relCwd: rel === "." ? "." : rel };
   }
   const repo = String(options.repoDir || "")
@@ -55,7 +58,11 @@ export async function resolveLaunchAppDir(options: {
   if (
     repo &&
     rel === repo &&
-    (await pathExistsInSandbox(options.containerName, options.workingDir))
+    (await pathExistsInSandbox(
+      options.containerName,
+      options.workingDir,
+      options.sessionId
+    ))
   ) {
     return { appDir: options.workingDir, relCwd: "." };
   }

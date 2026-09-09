@@ -14,11 +14,20 @@ function formatActivity(iso: string): string {
 
 export function WorkbenchCreateForm(options: {
   title: string;
+  executionTarget: "local" | "cloud";
   creating: boolean;
   onTitleChange: (value: string) => void;
+  onExecutionTargetChange: (value: "local" | "cloud") => void;
   onSubmit: (e: React.FormEvent) => void;
 }) {
-  const { title, creating, onTitleChange, onSubmit } = options;
+  const {
+    title,
+    executionTarget,
+    creating,
+    onTitleChange,
+    onExecutionTargetChange,
+    onSubmit
+  } = options;
   return (
     <form onSubmit={onSubmit} className="space-y-3 border-b px-4 py-3">
       <div className="space-y-1.5">
@@ -29,6 +38,22 @@ export function WorkbenchCreateForm(options: {
           onChange={(e) => onTitleChange(e.target.value)}
           placeholder="Session title"
         />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="workbench-execution-target">Agent runtime</Label>
+        <select
+          id="workbench-execution-target"
+          className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+          value={executionTarget}
+          onChange={(e) =>
+            onExecutionTargetChange(
+              e.target.value === "cloud" ? "cloud" : "local"
+            )
+          }
+        >
+          <option value="local">Normal (local host)</option>
+          <option value="cloud">Cloud (Docker)</option>
+        </select>
       </div>
       <Button type="submit" disabled={creating} className="w-full">
         {creating ? (

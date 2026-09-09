@@ -6,6 +6,10 @@ import {
 } from "../../projects/sessionSandbox.js";
 import { finalizeSessionProvision } from "../../projects/sessionProvision.js";
 import {
+  assertCloudSandboxAvailable,
+  readExecutionTarget
+} from "../executionTarget.js";
+import {
   chatFeatureService,
   chatRepo,
   errorMessage,
@@ -51,10 +55,13 @@ export async function handleCreateChat(req: Request, res: Response) {
     await workspaceService.getWorkspaceDetail(workspaceId, userId);
     const title =
       typeof req.body?.title === "string" ? req.body.title : undefined;
+    const executionTarget = readExecutionTarget(req.body);
+    await assertCloudSandboxAvailable(executionTarget);
     const chat = await chatFeatureService.createWorkbench({
       workspaceId,
       userId,
-      title
+      title,
+      executionTarget
     });
     void provisionSessionSandbox(chat.sessionId)
       .then(() => finalizeSessionProvision(chat.sessionId))

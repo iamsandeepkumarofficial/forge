@@ -1,5 +1,3 @@
-
-
 import {
   pgTable,
   text,
@@ -40,6 +38,10 @@ export const chatFeaturePriorityEnum = pgEnum("chat_feature_priority", [
 export const chatFeatureKindEnum = pgEnum("chat_feature_kind", [
   "ticket",
   "workbench"
+]);
+export const executionTargetEnum = pgEnum("execution_target", [
+  "local",
+  "cloud"
 ]);
 export const users = pgTable(
   "users",
@@ -133,12 +135,11 @@ export const projects = pgTable(
   })
 );
 
-
 export type WorkspaceRoute = {
   pathPrefix: string;
-  
+
   target: string;
-  
+
   stripPrefix?: boolean;
 };
 
@@ -150,7 +151,7 @@ export const workspaces = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
-    
+
     routes: jsonb("routes").$type<WorkspaceRoute[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -174,16 +175,13 @@ export const workspaceProjects = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    
+
     repoName: varchar("repo_name", { length: 255 }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
-    
+
     dependsOn: jsonb("depends_on").$type<string[]>().notNull().default([]),
-    
-    env: jsonb("env")
-      .$type<Record<string, string>>()
-      .notNull()
-      .default({}),
+
+    env: jsonb("env").$type<Record<string, string>>().notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull()
@@ -226,7 +224,9 @@ export const projectParameters = pgTable(
       table.projectId,
       table.key
     ),
-    projectIdIndex: index("project_parameters_project_id_idx").on(table.projectId)
+    projectIdIndex: index("project_parameters_project_id_idx").on(
+      table.projectId
+    )
   })
 );
 
@@ -248,10 +248,9 @@ export const workspaceParameters = pgTable(
       .notNull()
   },
   (table) => ({
-    workspaceKeyUnique: unique("workspace_parameters_workspace_id_key_unique").on(
-      table.workspaceId,
-      table.key
-    ),
+    workspaceKeyUnique: unique(
+      "workspace_parameters_workspace_id_key_unique"
+    ).on(table.workspaceId, table.key),
     workspaceIdIndex: index("workspace_parameters_workspace_id_idx").on(
       table.workspaceId
     )
@@ -259,10 +258,7 @@ export const workspaceParameters = pgTable(
 );
 
 export type WorkspaceHealthStatus =
-  | "ready"
-  | "blocked"
-  | "warnings"
-  | "computing";
+  "ready" | "blocked" | "warnings" | "computing";
 
 export const workspaceHealth = pgTable("workspace_health", {
   workspaceId: uuid("workspace_id")
@@ -272,12 +268,14 @@ export const workspaceHealth = pgTable("workspace_health", {
     .notNull()
     .default("computing")
     .$type<WorkspaceHealthStatus>(),
-  report: jsonb("report").$type<Record<string, unknown>>().notNull().default({}),
+  report: jsonb("report")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
   computedAt: timestamp("computed_at", { withTimezone: true })
     .defaultNow()
     .notNull()
 });
-
 
 export const workspaceDatabases = pgTable(
   "workspace_databases",
@@ -302,7 +300,6 @@ export const workspaceDatabases = pgTable(
   })
 );
 
-
 export const workspaceEnvironments = pgTable("workspace_environments", {
   workspaceId: uuid("workspace_id")
     .primaryKey()
@@ -321,11 +318,11 @@ export const chatFeatures = pgTable(
   "chat_features",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    
+
     projectId: uuid("project_id").references(() => projects.id, {
       onDelete: "cascade"
     }),
-    
+
     workspaceId: uuid("workspace_id").references(() => workspaces.id, {
       onDelete: "cascade"
     }),
@@ -343,6 +340,9 @@ export const chatFeatures = pgTable(
     order: integer("order").notNull().default(0),
     branchName: varchar("branch_name", { length: 255 }).notNull(),
     sessionId: text("session_id").notNull(),
+    executionTarget: executionTargetEnum("execution_target")
+      .notNull()
+      .default("local"),
     workflowId: varchar("workflow_id", { length: 128 })
       .notNull()
       .default("sdlc"),
@@ -612,6 +612,7 @@ export type WorkspaceEnvironmentInsert =
 export type ChatFeature = typeof chatFeatures.$inferSelect;
 export type ChatFeatureInsert = typeof chatFeatures.$inferInsert;
 export type ChatFeatureKind = (typeof chatFeatureKindEnum.enumValues)[number];
+export type ExecutionTarget = (typeof executionTargetEnum.enumValues)[number];
 export type ChatComment = typeof chatComments.$inferSelect;
 export type ChatCommentInsert = typeof chatComments.$inferInsert;
 export type ChatAttachment = typeof chatAttachments.$inferSelect;

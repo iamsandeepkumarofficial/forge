@@ -18,6 +18,7 @@ export interface CreateChatFeatureInput {
   dueDate?: Date | null;
   description?: DescriptionDocument | null;
   workflowId?: string;
+  executionTarget?: "local" | "cloud";
 }
 const VALID_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 type PriorityValue = (typeof VALID_PRIORITIES)[number];
@@ -91,7 +92,10 @@ export class ChatFeatureService {
         ? input.workflowId.trim()
         : DEFAULT_WORKFLOW_ID;
     const stamp = Date.now();
-    return this.chatRepo.createChatFeature({
+    const sessionId = `session-${stamp}`;
+    const executionTarget =
+      input.executionTarget === "cloud" ? "cloud" : "local";
+    const chat = await this.chatRepo.createChatFeature({
       projectId,
       workspaceId,
       userId: input.userId,
@@ -108,15 +112,21 @@ export class ChatFeatureService {
       > | null,
       order: 0,
       branchName: `chat-${stamp}`,
-      sessionId: `session-${stamp}`,
+      sessionId,
+      executionTarget,
       workflowId
     });
+    const { rememberSessionExecutionTarget } =
+      await import("./sandboxRuntime/resolve.js");
+    rememberSessionExecutionTarget(sessionId, executionTarget);
+    return chat;
   }
   async createWorkbench(input: {
     projectId?: string | null;
     workspaceId?: string | null;
     userId: string;
     title?: string;
+    executionTarget?: "local" | "cloud";
   }): Promise<ChatFeature> {
     const projectId = input.projectId?.trim() || null;
     const workspaceId = input.workspaceId?.trim() || null;
@@ -126,7 +136,10 @@ export class ChatFeatureService {
       );
     }
     const stamp = Date.now();
-    return this.chatRepo.createChatFeature({
+    const sessionId = `workbench-${stamp}`;
+    const executionTarget =
+      input.executionTarget === "cloud" ? "cloud" : "local";
+    const chat = await this.chatRepo.createChatFeature({
       projectId,
       workspaceId,
       userId: input.userId,
@@ -140,8 +153,13 @@ export class ChatFeatureService {
       description: null,
       order: 0,
       branchName: `workbench-${stamp}`,
-      sessionId: `workbench-${stamp}`,
+      sessionId,
+      executionTarget,
       workflowId: DEFAULT_WORKFLOW_ID
     });
+    const { rememberSessionExecutionTarget } =
+      await import("./sandboxRuntime/resolve.js");
+    rememberSessionExecutionTarget(sessionId, executionTarget);
+    return chat;
   }
 }

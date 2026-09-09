@@ -35,8 +35,10 @@ export function WorkbenchSessionsDialog({
         </div>
         <WorkbenchCreateForm
           title={state.title}
+          executionTarget={state.executionTarget}
           creating={state.creating}
           onTitleChange={state.setTitle}
+          onExecutionTargetChange={state.setExecutionTarget}
           onSubmit={(e) => void state.handleCreate(e)}
         />
         <WorkbenchSessionList

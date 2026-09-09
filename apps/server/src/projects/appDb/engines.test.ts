@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   appDbInjectionHint,
@@ -9,16 +9,6 @@ import {
 } from "./engines.js";
 
 describe("appDb engines", () => {
-  const prevRuntime = process.env.SANDBOX_RUNTIME;
-  const prevDesktop = process.env.FORGE_DESKTOP;
-
-  afterEach(() => {
-    if (prevRuntime === undefined) delete process.env.SANDBOX_RUNTIME;
-    else process.env.SANDBOX_RUNTIME = prevRuntime;
-    if (prevDesktop === undefined) delete process.env.FORGE_DESKTOP;
-    else process.env.FORGE_DESKTOP = prevDesktop;
-  });
-
   it("names a workspace database from the workspace id", () => {
     const id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
     assert.equal(
@@ -28,9 +18,12 @@ describe("appDb engines", () => {
   });
 
   it("builds sandbox connection URLs without leaking extra engines", () => {
-    process.env.SANDBOX_RUNTIME = "docker";
     const pg = getAppDbEngine("postgres")!;
-    const url = connectionUrlFor(pg, "forge_ws_demo");
+    const url = connectionUrlFor({
+      engine: pg,
+      database: "forge_ws_demo",
+      hostMode: false
+    });
     assert.match(
       url,
       /^postgresql:\/\/forge:forge@postgres-apps:5432\/forge_ws_demo$/
@@ -38,18 +31,25 @@ describe("appDb engines", () => {
   });
 
   it("builds localhost connection URLs in host mode", () => {
-    process.env.SANDBOX_RUNTIME = "host";
     const pg = getAppDbEngine("postgres")!;
     const mongo = getAppDbEngine("mongo")!;
     assert.equal(
-      connectionUrlFor(pg, "forge_ws_demo"),
+      connectionUrlFor({
+        engine: pg,
+        database: "forge_ws_demo",
+        hostMode: true
+      }),
       "postgresql://forge:forge@127.0.0.1:5434/forge_ws_demo"
     );
     assert.equal(
-      connectionUrlFor(mongo, "forge_ws_demo"),
+      connectionUrlFor({
+        engine: mongo,
+        database: "forge_ws_demo",
+        hostMode: true
+      }),
       "mongodb://127.0.0.1:27017/forge_ws_demo"
     );
-    assert.match(appDbInjectionHint(), /localhost/);
+    assert.match(appDbInjectionHint(true), /localhost/);
   });
 
   it("detects postgres and mongo from facts", () => {

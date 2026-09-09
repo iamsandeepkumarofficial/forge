@@ -54,7 +54,7 @@ describe("resolveSessionEnv", () => {
     });
     mock.module("../../projects/sessionAppDb.js", {
       exports: {
-        sessionAppDbEnvFor: (sessionId: string) => ({
+        sessionAppDbEnvFor: async (sessionId: string) => ({
           SESSION_DB: `db-for-${sessionId}`
         }),
         workspaceAppDbEnv: async () => ({

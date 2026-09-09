@@ -144,16 +144,8 @@ function HomeWorkspacesSection(options: {
         {workspaces.map((ws) => (
           <WorkspaceCard
             key={ws.id}
-            id={ws.id}
             name={ws.name}
-            projectCount={ws.projectCount}
-            lastActivityAt={
-              ws.lastActivityAt == null
-                ? undefined
-                : typeof ws.lastActivityAt === "number"
-                  ? ws.lastActivityAt
-                  : Date.parse(ws.lastActivityAt)
-            }
+            routeCount={ws.routes?.length ?? 0}
             onOpen={() => onOpenWorkspace(ws.id)}
             onDelete={() => onDeleteWorkspace(ws.id)}
           />
@@ -188,7 +180,7 @@ function HomeProjectsSection(options: {
         {projects.map((project) => (
           <ProjectCard
             key={project.id}
-            id={project.id}
+            projectId={project.id}
             name={project.name}
             source={project.source}
             status={project.status}

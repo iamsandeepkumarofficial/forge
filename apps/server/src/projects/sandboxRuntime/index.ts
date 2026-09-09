@@ -23,7 +23,10 @@ export {
 export { createDockerSandboxRuntime } from "./dockerAdapter.js";
 export {
   createHostSandboxRuntime,
-  listHostActiveSessionIds
+  listHostActiveSessionIds,
+  mapHostLogicalPath,
+  workspaceMountsFromBinds,
+  extraWritableRootsForHostRoot
 } from "./hostAdapter.js";
 export { createK8sSandboxRuntime, sandboxResourceName } from "./k8sAdapter.js";
 export {
@@ -42,7 +45,14 @@ export {
   resetSessionPortRegistryForTests
 } from "./sessionPortRegistry.js";
 export {
+  cloudSandboxKindFromEnv,
+  executionTargetToKind,
+  forgetSessionRuntimeKind,
   getSandboxRuntime,
+  getSandboxRuntimeByKind,
+  isHostSession,
+  parseExecutionTarget,
+  rememberSessionExecutionTarget,
   resetSandboxRuntimeCache,
-  resolveSandboxRuntimeKind
+  resolveSandboxRuntimeKindForSession
 } from "./resolve.js";

@@ -23,7 +23,7 @@ export async function finalizeHostWorkspace(options: {
 }): Promise<{ status: "ready"; workingDir: string; containerId: string }> {
   if (options.githubMemberCount > 0) {
     throw new Error(
-      "Host mode does not yet materialize GitHub workspace members; use local folders or SANDBOX_RUNTIME=docker"
+      "Host mode does not yet materialize GitHub workspace members; use local folders or a Cloud (Docker) session"
     );
   }
   for (const mount of options.bindMounts) {

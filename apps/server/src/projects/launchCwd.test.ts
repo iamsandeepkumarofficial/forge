@@ -34,6 +34,7 @@ describe("launchCwd", { concurrency: false }, () => {
     existing = new Set(["/workspace"]);
     const r = await resolveLaunchAppDir({
       containerName: "c",
+      sessionId: "s1",
       workingDir: "/workspace",
       repoDir: "portfolio",
       cwd: "."
@@ -47,6 +48,7 @@ describe("launchCwd", { concurrency: false }, () => {
     existing = new Set(["/workspace"]);
     const r = await resolveLaunchAppDir({
       containerName: "c",
+      sessionId: "s1",
       workingDir: "/workspace",
       repoDir: "portfolio",
       cwd: "portfolio"
@@ -60,6 +62,7 @@ describe("launchCwd", { concurrency: false }, () => {
     existing = new Set(["/workspace", "/workspace/portfolio"]);
     const r = await resolveLaunchAppDir({
       containerName: "c",
+      sessionId: "s1",
       workingDir: "/workspace",
       repoDir: "portfolio",
       cwd: "portfolio"
@@ -72,6 +75,7 @@ describe("launchCwd", { concurrency: false }, () => {
     existing = new Set(["/workspace"]);
     const r = await resolveLaunchAppDir({
       containerName: "c",
+      sessionId: "s1",
       workingDir: "/workspace",
       repoDir: "portfolio",
       cwd: "apps/missing"

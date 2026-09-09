@@ -50,28 +50,39 @@ export function isPastIdleTtl(options: {
 }
 
 export async function listRunningSandboxSessionIds(): Promise<string[]> {
-  const { resolveSandboxRuntimeKind } =
-    await import("./sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
-    const { listSessionPortAllocations } =
-      await import("./sandboxRuntime/sessionPortRegistry.js");
-    const fromPorts = listSessionPortAllocations().map((r) => r.sessionId);
-    if (fromPorts.length > 0) return fromPorts;
-    return [];
+  const ids = new Set<string>();
+  const { listSessionPortAllocations } =
+    await import("./sandboxRuntime/sessionPortRegistry.js");
+  for (const row of listSessionPortAllocations()) {
+    ids.add(row.sessionId);
   }
-  const { stdout } = await docker([
-    "ps",
-    "--filter",
-    "label=forge.sandbox=1",
-    "--filter",
-    "status=running",
-    "--format",
-    '{{.Label "forge.session"}}'
-  ]);
-  return stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+  try {
+    const { listHostActiveSessionIds } =
+      await import("./sandboxRuntime/hostAdapter.js");
+    for (const id of listHostActiveSessionIds()) {
+      ids.add(id);
+    }
+  } catch {
+    void 0;
+  }
+  try {
+    const { stdout } = await docker([
+      "ps",
+      "--filter",
+      "label=forge.sandbox=1",
+      "--filter",
+      "status=running",
+      "--format",
+      '{{.Label "forge.session"}}'
+    ]);
+    for (const line of stdout.split("\n")) {
+      const id = line.trim();
+      if (id) ids.add(id);
+    }
+  } catch {
+    void 0;
+  }
+  return [...ids];
 }
 
 export async function suspendSessionSandbox(sessionId: string): Promise<void> {
@@ -84,11 +95,12 @@ export async function suspendSessionSandbox(sessionId: string): Promise<void> {
       `[sandboxIdle] revoke preview ${sessionId}: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  const { resolveSandboxRuntimeKind } =
+  const { getSandboxRuntime, isHostSession } =
     await import("./sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
-    const { getSandboxRuntime } = await import("./sandboxRuntime/resolve.js");
-    await getSandboxRuntime()
+  if (await isHostSession(sessionId)) {
+    await (
+      await getSandboxRuntime(sessionId)
+    )
       .destroySession(sessionId)
       .catch(() => undefined);
     return;
@@ -111,9 +123,8 @@ export type IdleSweepDeps = {
 export async function sandboxStartedAt(
   sessionId: string
 ): Promise<Date | null> {
-  const { resolveSandboxRuntimeKind } =
-    await import("./sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  const { isHostSession } = await import("./sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) {
     return null;
   }
   try {

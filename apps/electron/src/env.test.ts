@@ -106,9 +106,10 @@ describe("env", () => {
   it("materializeHostRuntimeEnv sets host catalog env", async () => {
     const { materializeHostRuntimeEnv } = await import("./env.js");
     const env = materializeHostRuntimeEnv();
-    assert.equal(env.SANDBOX_RUNTIME, "host");
-    assert.equal(env.FORGE_DESKTOP, "1");
     assert.match(env.DATABASE_URL ?? "", /5433/);
+    assert.match(env.TEMPORAL_ADDRESS ?? "", /7233/);
+    assert.equal(env.SANDBOX_RUNTIME, undefined);
+    assert.equal(env.FORGE_DESKTOP, undefined);
   });
 
   it("mergeEnvExtras lets later parts win", () => {

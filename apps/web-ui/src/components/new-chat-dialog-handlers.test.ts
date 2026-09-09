@@ -17,6 +17,7 @@ describe("buildNewChatSubmitHandler", () => {
       parentId: "",
       description: "",
       workflowId: "sdlc",
+      executionTarget: "local",
       files: [],
       links: [],
       onCreated: vi.fn(),

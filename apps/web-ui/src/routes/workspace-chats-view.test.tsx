@@ -28,6 +28,8 @@ const page = {
   setQuery: vi.fn(),
   deletingId: null,
   mostRecent: null,
+  executionTarget: "local" as const,
+  setExecutionTarget: vi.fn(),
   onNewChat: vi.fn(),
   onDelete: vi.fn(),
   openChat: vi.fn()

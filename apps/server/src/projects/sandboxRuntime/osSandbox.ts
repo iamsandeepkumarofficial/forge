@@ -25,11 +25,15 @@ export function seatbeltProfileTemplatePath(): string {
   return path.join(resourcesDir(), "seatbelt-default.sb");
 }
 
-export function defaultWritableRoots(sessionRoot: string): string[] {
+export function defaultWritableRoots(
+  sessionRoot: string,
+  extraRoots: string[] = []
+): string[] {
   const home = os.homedir();
   const roots = [
     sessionRoot,
     path.join(sessionRoot, ".forge-runtime"),
+    ...extraRoots,
     path.join(home, ".npm"),
     path.join(home, ".cache"),
     path.join(home, "Library", "Caches"),
@@ -44,13 +48,13 @@ export async function materializeSeatbeltProfile(options: {
 }): Promise<string> {
   const template = await fs.readFile(seatbeltProfileTemplatePath(), "utf8");
   const home = os.homedir();
-  const rootsExpr = options.writableRoots
+  const writableExpr = options.writableRoots
     .map((r) => `(subpath "${r}")`)
     .join(" ");
   const body = template
     .replace(
       '(allow file-write* (subpath "{{WRITABLE_ROOTS}}"))',
-      `(allow file-write* ${rootsExpr})`
+      `(allow file-write* ${writableExpr})`
     )
     .replaceAll("{{HOME}}", home);
   await fs.mkdir(path.dirname(options.profilePath), { recursive: true });
@@ -62,6 +66,7 @@ export function buildBwrapArgv(options: {
   argv: string[];
   writableRoots: string[];
   cwd: string;
+  readableRoots?: string[];
 }): string[] {
   const prefix: string[] = [
     "bwrap",
@@ -85,7 +90,27 @@ export function buildBwrapArgv(options: {
     prefix.push("--ro-bind-try", dir, dir);
   }
   const home = os.homedir();
-  prefix.push("--ro-bind-try", home, home);
+  for (const dir of [
+    path.join(home, ".forge", "runtime"),
+    path.join(home, ".npm"),
+    path.join(home, ".cache"),
+    path.join(home, ".local", "share", "pnpm")
+  ]) {
+    prefix.push("--ro-bind-try", dir, dir);
+  }
+  const readable = [
+    ...new Set(
+      [...(options.readableRoots ?? []), ...options.writableRoots].map((r) =>
+        path.resolve(r)
+      )
+    )
+  ];
+  for (const root of readable) {
+    if (options.writableRoots.map((r) => path.resolve(r)).includes(root)) {
+      continue;
+    }
+    prefix.push("--ro-bind-try", root, root);
+  }
   for (const root of options.writableRoots) {
     prefix.push("--bind-try", root, root);
   }
@@ -105,6 +130,7 @@ export async function wrapHostCommand(options: {
   sessionRoot: string;
   cwd: string;
   platform?: NodeJS.Platform;
+  extraWritableRoots?: string[];
 }): Promise<HostSandboxWrapResult> {
   const platform = options.platform ?? process.platform;
   if (!hostSandboxEnabled()) {
@@ -124,7 +150,10 @@ export async function wrapHostCommand(options: {
     };
   }
 
-  const writableRoots = defaultWritableRoots(options.sessionRoot);
+  const writableRoots = defaultWritableRoots(
+    options.sessionRoot,
+    options.extraWritableRoots ?? []
+  );
 
   if (platform === "darwin") {
     const profilePath = path.join(
@@ -200,6 +229,7 @@ export async function resolveWrappedArgv(options: {
   sessionRoot: string;
   cwd: string;
   platform?: NodeJS.Platform;
+  extraWritableRoots?: string[];
 }): Promise<string[]> {
   const wrapped = await wrapHostCommand(options);
   if (!wrapped.enabled) return wrapped.argv;
@@ -214,5 +244,14 @@ export function assertProfileDeniesSsh(profileBody: string): boolean {
     profileBody
       .split("\n")
       .filter((l) => l.includes("deny") && l.includes(".ssh")).length >= N_2
+  );
+}
+
+export function assertProfileDeniesForgeProjects(profileBody: string): boolean {
+  return (
+    profileBody.includes(".forge/projects") &&
+    profileBody
+      .split("\n")
+      .some((l) => l.includes("deny") && l.includes(".forge/projects"))
   );
 }

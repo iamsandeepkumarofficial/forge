@@ -42,10 +42,10 @@ export async function startWorkbenchChat(options: {
   options.setCreating(true);
   options.setError(null);
   try {
-    const session = await createWorkbenchSession(
-      options.projectId,
-      titleFromPrompt(trimmed)
-    );
+    const session = await createWorkbenchSession({
+      projectId: options.projectId,
+      title: titleFromPrompt(trimmed)
+    });
     void options.navigate(
       `/projects/${options.projectId}/chats/${session.id}`,
       { state: { initialPrompt: trimmed } }

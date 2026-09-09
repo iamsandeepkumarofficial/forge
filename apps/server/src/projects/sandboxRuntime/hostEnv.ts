@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
 const ENV_ALLOWLIST = new Set([
   "PATH",
   "HOME",
@@ -38,4 +41,22 @@ export function scrubHostEnv(
   }
   if (!out.TERM) out.TERM = "xterm-256color";
   return out;
+}
+
+export function hostSessionTempDir(sessionRoot: string): string {
+  return path.join(sessionRoot, ".forge-runtime", "tmp");
+}
+
+export async function hostProcessEnv(
+  sessionRoot: string,
+  extra?: Record<string, string>
+): Promise<NodeJS.ProcessEnv> {
+  const tmp = hostSessionTempDir(sessionRoot);
+  await fs.mkdir(tmp, { recursive: true });
+  return scrubHostEnv({
+    ...extra,
+    TMPDIR: tmp,
+    TEMP: tmp,
+    TMP: tmp
+  });
 }

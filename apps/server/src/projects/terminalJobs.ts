@@ -11,7 +11,7 @@ import {
   readFileFromSandbox,
   writeFileToSandbox
 } from "./sandboxExec.js";
-import { resolveSandboxRuntimeKind } from "./sandboxRuntime/resolve.js";
+import { isHostSession } from "./sandboxRuntime/resolve.js";
 
 export type TerminalJobMeta = {
   command: string;
@@ -27,20 +27,20 @@ export type TerminalJobStatus = {
   startedAt?: string;
 };
 
-function isHostRuntime(): boolean {
-  return resolveSandboxRuntimeKind() === "host";
-}
-
 function metaPath(options: { name: string; workspaceRoot?: string }): string {
   const base = `forge-term-${sanitizeJobName(options.name)}.meta`;
-  if (options.workspaceRoot && isHostRuntime()) {
+  if (options.workspaceRoot) {
     return path.join(options.workspaceRoot, ".forge-runtime", base);
   }
   return `/tmp/${base}`;
 }
 
-function hostWorkspaceRoot(containerName: string): string | undefined {
-  return isHostRuntime() ? containerName : undefined;
+async function hostWorkspaceRoot(
+  containerName: string,
+  sessionId?: string
+): Promise<string | undefined> {
+  if (sessionId && (await isHostSession(sessionId))) return containerName;
+  return undefined;
 }
 
 export async function writeTerminalJobMeta(options: {
@@ -49,7 +49,10 @@ export async function writeTerminalJobMeta(options: {
   meta: TerminalJobMeta;
   sessionId?: string;
 }): Promise<void> {
-  const workspaceRoot = hostWorkspaceRoot(options.containerName);
+  const workspaceRoot = await hostWorkspaceRoot(
+    options.containerName,
+    options.sessionId
+  );
   const absPath = metaPath({ name: options.name, workspaceRoot });
   const content = `${JSON.stringify(options.meta)}\n`;
   if (workspaceRoot) {
@@ -59,7 +62,7 @@ export async function writeTerminalJobMeta(options: {
   }
   await writeFileToSandbox({
     container: options.containerName,
-    sessionId: options.sessionId,
+    sessionId: options.sessionId ?? "",
     absPath,
     content
   });
@@ -68,8 +71,12 @@ export async function writeTerminalJobMeta(options: {
 export async function readTerminalJobMeta(options: {
   containerName: string;
   name: string;
+  sessionId?: string;
 }): Promise<TerminalJobMeta | null> {
-  const workspaceRoot = hostWorkspaceRoot(options.containerName);
+  const workspaceRoot = await hostWorkspaceRoot(
+    options.containerName,
+    options.sessionId
+  );
   const absPath = metaPath({ name: options.name, workspaceRoot });
   let raw: string | null;
   if (workspaceRoot) {
@@ -79,7 +86,11 @@ export async function readTerminalJobMeta(options: {
       raw = null;
     }
   } else {
-    raw = await readFileFromSandbox(options.containerName, absPath);
+    raw = await readFileFromSandbox(
+      options.containerName,
+      absPath,
+      options.sessionId ?? ""
+    );
   }
   if (!raw) {
     return null;
@@ -96,9 +107,10 @@ export async function readTerminalJobMeta(options: {
 }
 
 export async function listTerminalJobNames(
-  containerName: string
+  containerName: string,
+  sessionId?: string
 ): Promise<string[]> {
-  const workspaceRoot = hostWorkspaceRoot(containerName);
+  const workspaceRoot = await hostWorkspaceRoot(containerName, sessionId);
   const names = new Set<string>();
   if (workspaceRoot) {
     const dir = path.join(workspaceRoot, ".forge-runtime");
@@ -116,6 +128,7 @@ export async function listTerminalJobNames(
   }
   const r = await dockerExec({
     container: containerName,
+    sessionId,
     argv: [
       "sh",
       "-c",
@@ -132,14 +145,20 @@ export async function listTerminalJobNames(
 }
 
 export async function listTerminalJobStatuses(
-  containerName: string
+  containerName: string,
+  sessionId?: string
 ): Promise<TerminalJobStatus[]> {
-  const names = await listTerminalJobNames(containerName);
+  const names = await listTerminalJobNames(containerName, sessionId);
   return Promise.all(
     names.map(async (name) => {
       const [running, meta] = await Promise.all([
-        isBackgroundJobRunning({ containerName, kind: "term", name }),
-        readTerminalJobMeta({ containerName, name })
+        isBackgroundJobRunning({
+          containerName,
+          kind: "term",
+          name,
+          sessionId
+        }),
+        readTerminalJobMeta({ containerName, name, sessionId })
       ]);
       return {
         name,
@@ -156,22 +175,26 @@ export async function terminalJobLogs(options: {
   containerName: string;
   name: string;
   tail?: number;
+  sessionId?: string;
 }): Promise<string> {
   return readBackgroundJobLogs({
     containerName: options.containerName,
     kind: "term",
     name: options.name,
-    tail: options.tail
+    tail: options.tail,
+    sessionId: options.sessionId
   });
 }
 
 export async function stopTerminalJob(options: {
   containerName: string;
   name: string;
+  sessionId?: string;
 }): Promise<void> {
   await stopBackgroundJob({
     containerName: options.containerName,
     kind: "term",
-    name: options.name
+    name: options.name,
+    sessionId: options.sessionId
   });
 }

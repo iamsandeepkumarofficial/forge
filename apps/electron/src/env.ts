@@ -32,8 +32,6 @@ export function materializePreviewEnv(): Record<string, string> {
 
 export function materializeHostRuntimeEnv(): Record<string, string> {
   return {
-    FORGE_DESKTOP: "1",
-    SANDBOX_RUNTIME: "host",
     DATABASE_URL: NATIVE_DATABASE_URL,
     TEMPORAL_ADDRESS: `127.0.0.1:${NATIVE_TEMPORAL_PORT}`,
     TEMPORAL_NAMESPACE: "default",

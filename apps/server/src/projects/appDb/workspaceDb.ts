@@ -35,11 +35,10 @@ async function createPostgresDatabase(options: {
   engine: AppDbEngine;
   containerName: string;
   database: string;
+  hostMode?: boolean;
 }): Promise<void> {
   const { engine, containerName, database } = options;
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  if (options.hostMode) {
     const { createHostPostgresDatabase } = await import("./hostAppDb.js");
     await createHostPostgresDatabase({ engine, database });
     return;
@@ -73,11 +72,10 @@ async function postgresDatabaseExists(options: {
   engine: AppDbEngine;
   containerName: string;
   database: string;
+  hostMode?: boolean;
 }): Promise<boolean> {
   const { engine, containerName, database } = options;
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  if (options.hostMode) {
     const { hostPostgresDatabaseExists } = await import("./hostAppDb.js");
     return hostPostgresDatabaseExists({ engine, database });
   }
@@ -103,11 +101,10 @@ async function dropPostgresDatabase(options: {
   engine: AppDbEngine;
   containerName: string;
   database: string;
+  hostMode?: boolean;
 }): Promise<void> {
   const { engine, containerName, database } = options;
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+  if (options.hostMode) {
     const { dropHostPostgresDatabase } = await import("./hostAppDb.js");
     await dropHostPostgresDatabase({ engine, database });
     return;
@@ -127,13 +124,14 @@ async function dropPostgresDatabase(options: {
   ]).catch(() => undefined);
 }
 
-async function ensureMongoReady(
-  engine: AppDbEngine,
-  containerName: string
-): Promise<void> {
-  const { resolveSandboxRuntimeKind } =
-    await import("../sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
+async function ensureMongoReady(options: {
+  engine: AppDbEngine;
+  containerName: string;
+  hostMode?: boolean;
+}): Promise<void> {
+  const { engine, containerName } = options;
+  const hostMode = options.hostMode ?? false;
+  if (hostMode) {
     const { ensureHostMongoReady } = await import("./hostAppDb.js");
     await ensureHostMongoReady(engine);
     return;
@@ -176,25 +174,42 @@ export type ProvisionedWorkspaceEngine = {
   pulled: boolean;
 };
 
-export async function provisionWorkspaceEngine(
-  workspaceId: string,
-  engineId: AppDbEngineId
-): Promise<ProvisionedWorkspaceEngine> {
+export async function provisionWorkspaceEngine(options: {
+  workspaceId: string;
+  engineId: AppDbEngineId;
+  hostMode?: boolean;
+  sessionId?: string;
+}): Promise<ProvisionedWorkspaceEngine> {
   if (!appDbEnabled()) {
     throw new Error("App databases are disabled (FORGE_APP_DB_ENABLED=0)");
   }
-  const engine = getAppDbEngine(engineId);
-  if (!engine) throw new Error(`Unknown engine: ${engineId}`);
-  const ensured = await ensureEngineRunning(engine);
-  const database = workspaceDbName(workspaceId);
+  const engine = getAppDbEngine(options.engineId);
+  if (!engine) throw new Error(`Unknown engine: ${options.engineId}`);
+  const hostMode =
+    options.hostMode ??
+    (options.sessionId
+      ? await (
+          await import("../sandboxRuntime/resolve.js")
+        ).isHostSession(options.sessionId)
+      : false);
+  const ensured = await ensureEngineRunning(engine, {
+    hostMode,
+    sessionId: options.sessionId
+  });
+  const database = workspaceDbName(options.workspaceId);
   if (engine.id === "postgres") {
     await createPostgresDatabase({
       engine,
       containerName: ensured.containerName,
-      database
+      database,
+      hostMode
     });
   } else {
-    await ensureMongoReady(engine, ensured.containerName);
+    await ensureMongoReady({
+      engine,
+      containerName: ensured.containerName,
+      hostMode
+    });
   }
   return {
     engineId: engine.id,
@@ -202,7 +217,7 @@ export async function provisionWorkspaceEngine(
     image: engine.image,
     database,
     envKey: engine.envKey,
-    connectionUrl: connectionUrlFor(engine, database),
+    connectionUrl: connectionUrlFor({ engine, database, hostMode }),
     containerName: ensured.containerName,
     networkAlias: engine.networkAlias,
     hostPort: engine.hostPort,
@@ -212,14 +227,21 @@ export async function provisionWorkspaceEngine(
   };
 }
 
-export async function ensureAttachedWorkspaceEngines(
-  workspaceId: string,
-  engineIds: AppDbEngineId[]
-): Promise<Record<string, string>> {
+export async function ensureAttachedWorkspaceEngines(options: {
+  workspaceId: string;
+  engineIds: AppDbEngineId[];
+  hostMode?: boolean;
+  sessionId?: string;
+}): Promise<Record<string, string>> {
   const env: Record<string, string> = {};
   if (!appDbEnabled()) return env;
-  for (const id of engineIds) {
-    const provisioned = await provisionWorkspaceEngine(workspaceId, id);
+  for (const id of options.engineIds) {
+    const provisioned = await provisionWorkspaceEngine({
+      workspaceId: options.workspaceId,
+      engineId: id,
+      hostMode: options.hostMode,
+      sessionId: options.sessionId
+    });
     env[provisioned.envKey] = provisioned.connectionUrl;
   }
   return env;
@@ -240,20 +262,23 @@ export type EngineStatusRow = {
 export async function listEngineStatuses(options: {
   workspaceId: string;
   attachedEngineIds: AppDbEngineId[];
+  hostMode?: boolean;
 }): Promise<EngineStatusRow[]> {
   const attached = new Set(options.attachedEngineIds);
   const database = workspaceDbName(options.workspaceId);
+  const hostMode = options.hostMode ?? false;
   const rows: EngineStatusRow[] = [];
   for (const engine of APP_DB_ENGINES) {
-    const running = await isEngineRunning(engine);
+    const running = await isEngineRunning(engine, { hostMode });
     let dbExists = false;
     if (running && attached.has(engine.id) && engine.id === "postgres") {
-      const container = await resolveEngineContainer(engine);
+      const container = await resolveEngineContainer(engine, { hostMode });
       if (container) {
         dbExists = await postgresDatabaseExists({
           engine,
           containerName: container,
-          database
+          database,
+          hostMode
         });
       }
     } else if (attached.has(engine.id) && engine.id === "mongo") {
@@ -275,20 +300,23 @@ export async function listEngineStatuses(options: {
   return rows;
 }
 
-export async function detachWorkspaceEngine(
-  workspaceId: string,
-  engineId: AppDbEngineId
-): Promise<void> {
-  const engine = getAppDbEngine(engineId);
+export async function detachWorkspaceEngine(options: {
+  workspaceId: string;
+  engineId: AppDbEngineId;
+  hostMode?: boolean;
+}): Promise<void> {
+  const engine = getAppDbEngine(options.engineId);
   if (!engine) return;
-  const container = await resolveEngineContainer(engine);
+  const hostMode = options.hostMode ?? false;
+  const container = await resolveEngineContainer(engine, { hostMode });
   if (!container) return;
-  const database = workspaceDbName(workspaceId);
+  const database = workspaceDbName(options.workspaceId);
   if (engine.id === "postgres") {
     await dropPostgresDatabase({
       engine,
       containerName: container,
-      database
+      database,
+      hostMode
     });
   }
 }

@@ -112,7 +112,11 @@ describe("workspaceDb", () => {
   it("provisionWorkspaceEngine rejects when app db disabled", async () => {
     process.env.FORGE_APP_DB_ENABLED = "0";
     await assert.rejects(
-      () => provisionWorkspaceEngine("ws1", "postgres"),
+      () =>
+        provisionWorkspaceEngine({
+          workspaceId: "ws1",
+          engineId: "postgres"
+        }),
       /disabled/
     );
   });
@@ -120,7 +124,10 @@ describe("workspaceDb", () => {
   it("provisions postgres with connection url", async () => {
     delete process.env.FORGE_APP_DB_ENABLED;
     const wsId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-    const result = await provisionWorkspaceEngine(wsId, "postgres");
+    const result = await provisionWorkspaceEngine({
+      workspaceId: wsId,
+      engineId: "postgres"
+    });
     assert.equal(result.engineId, "postgres");
     assert.equal(result.database, workspaceDbName(wsId));
     assert.equal(result.envKey, "DATABASE_URL");
@@ -130,13 +137,19 @@ describe("workspaceDb", () => {
 
   it("ensureAttachedWorkspaceEngines builds env map", async () => {
     delete process.env.FORGE_APP_DB_ENABLED;
-    const env = await ensureAttachedWorkspaceEngines("ws1", ["postgres"]);
+    const env = await ensureAttachedWorkspaceEngines({
+      workspaceId: "ws1",
+      engineIds: ["postgres"]
+    });
     assert.ok(env.DATABASE_URL);
   });
 
   it("ensureAttachedWorkspaceEngines returns empty when disabled", async () => {
     process.env.FORGE_APP_DB_ENABLED = "0";
-    const env = await ensureAttachedWorkspaceEngines("ws1", ["postgres"]);
+    const env = await ensureAttachedWorkspaceEngines({
+      workspaceId: "ws1",
+      engineIds: ["postgres"]
+    });
     assert.deepEqual(env, {});
   });
 
@@ -157,7 +170,10 @@ describe("workspaceDb", () => {
 
   it("detachWorkspaceEngine drops postgres database", async () => {
     dockerArgs.length = 0;
-    await detachWorkspaceEngine("ws1", "postgres");
+    await detachWorkspaceEngine({
+      workspaceId: "ws1",
+      engineId: "postgres"
+    });
     assert.ok(dockerArgs.some((a) => a.join(" ").includes("DROP DATABASE")));
   });
 });

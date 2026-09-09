@@ -22,7 +22,10 @@ describe("workbench API", () => {
         createdAt: "2026-01-01T00:00:00Z"
       })
     } as Response);
-    const session = await createWorkbenchSession("p1", "Scratch");
+    const session = await createWorkbenchSession({
+      projectId: "p1",
+      title: "Scratch"
+    });
     expect(fetch).toHaveBeenCalledWith(
       "http://127.0.0.1:4000/api/projects/p1/workbench-sessions",
       expect.objectContaining({

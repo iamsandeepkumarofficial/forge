@@ -58,15 +58,16 @@ export async function sandboxSessionCreateOpts(options: {
   let image: string | undefined;
   let namedVolumes: NamedVolumeMount[] | undefined;
   if (workspaceId) {
-    const { resolveSandboxRuntimeKind } =
-      await import("../sandboxRuntime/resolve.js");
+    const { isHostSession } = await import("../sandboxRuntime/resolve.js");
     const { selectSandboxImageForWorkspace } =
       await import("../sandboxImageSelect.js");
     image = await selectSandboxImageForWorkspace(workspaceId);
-    if (resolveSandboxRuntimeKind() !== "host") {
+    if (!(await isHostSession(sessionId))) {
       const { ensureWorkspaceDepsVolume, DEPS_CACHE_MOUNT } =
         await import("../workspaceDepsCache.js");
-      const volumeName = await ensureWorkspaceDepsVolume(workspaceId);
+      const volumeName = await ensureWorkspaceDepsVolume(workspaceId, {
+        hostMode: false
+      });
       namedVolumes = [{ volumeName, containerPath: DEPS_CACHE_MOUNT }];
     }
   }
@@ -111,6 +112,10 @@ async function provisionSessionSandboxOnce(
   if (!chat) {
     throw new Error(`No chat/feature found for session: ${sessionId}`);
   }
+
+  const { rememberSessionExecutionTarget } =
+    await import("../sandboxRuntime/resolve.js");
+  rememberSessionExecutionTarget(sessionId, chat.executionTarget ?? "local");
 
   const result = chat.workspaceId
     ? await provisionWorkspaceScopedSandbox({
@@ -204,10 +209,9 @@ export async function provisionProjectScopedSandbox(options: {
 
   const { getSandboxRuntime } = await import("../sandboxRuntime/resolve.js");
   const githubOAuth = new GithubOAuthService();
-  const handle = await getSandboxRuntime().createSession(
-    sessionId,
-    await sandboxSessionCreateOpts({ sessionId })
-  );
+  const handle = await (
+    await getSandboxRuntime(sessionId)
+  ).createSession(sessionId, await sandboxSessionCreateOpts({ sessionId }));
   const containerName = handle.ref;
   const repoInitialized = await isRepoInitialized(containerName);
   if (!repoInitialized) {
@@ -357,7 +361,9 @@ export async function provisionWorkspaceScopedSandbox(options: {
     memberProjects
   });
   const { getSandboxRuntime } = await import("../sandboxRuntime/resolve.js");
-  const handle = await getSandboxRuntime().createSession(
+  const handle = await (
+    await getSandboxRuntime(sessionId)
+  ).createSession(
     sessionId,
     await sandboxSessionCreateOpts({
       sessionId,

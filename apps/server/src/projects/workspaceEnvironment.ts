@@ -146,9 +146,8 @@ async function memberRepoNames(sessionId: string): Promise<string[]> {
 export async function restoreWorkspaceDepsForSession(
   sessionId: string
 ): Promise<void> {
-  const { resolveSandboxRuntimeKind } =
-    await import("./sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") return;
+  const { isHostSession } = await import("./sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) return;
   const { containerName } = await resolveSandbox(sessionId);
   const repos = await memberRepoNames(sessionId);
   for (const repoName of repos) {
@@ -164,9 +163,8 @@ export async function restoreWorkspaceDepsForSession(
 export async function captureWorkspaceDepsForSession(
   sessionId: string
 ): Promise<void> {
-  const { resolveSandboxRuntimeKind } =
-    await import("./sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") return;
+  const { isHostSession } = await import("./sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) return;
   const { containerName } = await resolveSandbox(sessionId);
   const repos = await memberRepoNames(sessionId);
   for (const repoName of repos) {

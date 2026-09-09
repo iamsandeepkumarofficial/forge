@@ -1,42 +1,85 @@
+import type { ExecutionTarget } from "@forge/db";
+import { ChatFeatureRepository } from "../../catalog/chatFeatureRepository.js";
 import { createDockerSandboxRuntime } from "./dockerAdapter.js";
 import { createHostSandboxRuntime } from "./hostAdapter.js";
 import { createK8sSandboxRuntime } from "./k8sAdapter.js";
 import type { SandboxRuntime, SandboxRuntimeKind } from "./types.js";
 
-let cached: SandboxRuntime | undefined;
+const adapters = new Map<SandboxRuntimeKind, SandboxRuntime>();
+const sessionKindCache = new Map<string, SandboxRuntimeKind>();
 
-export function resolveSandboxRuntimeKind(): SandboxRuntimeKind {
-  const raw = process.env.SANDBOX_RUNTIME?.trim().toLowerCase();
-  if (raw === "host") {
-    return "host";
-  }
-  if (raw === "kubernetes" || raw === "k8s") {
-    return "kubernetes";
-  }
-  if (raw === "docker") {
-    return "docker";
-  }
-  if (process.env.FORGE_DESKTOP?.trim() === "1") {
-    return "host";
-  }
+export function parseExecutionTarget(
+  raw: unknown
+): ExecutionTarget | undefined {
+  if (raw === "local" || raw === "cloud") return raw;
+  return undefined;
+}
+
+export function cloudSandboxKindFromEnv(
+  env: NodeJS.ProcessEnv = process.env
+): SandboxRuntimeKind {
+  const raw = env.FORGE_CLOUD_SANDBOX?.trim().toLowerCase();
+  if (raw === "kubernetes" || raw === "k8s") return "kubernetes";
   return "docker";
 }
 
-export function getSandboxRuntime(): SandboxRuntime {
-  if (cached) {
-    return cached;
-  }
-  const kind = resolveSandboxRuntimeKind();
+export function executionTargetToKind(
+  target: ExecutionTarget
+): SandboxRuntimeKind {
+  if (target === "cloud") return cloudSandboxKindFromEnv();
+  return "host";
+}
+
+export function rememberSessionExecutionTarget(
+  sessionId: string,
+  target: ExecutionTarget
+): void {
+  sessionKindCache.set(sessionId, executionTargetToKind(target));
+}
+
+export function forgetSessionRuntimeKind(sessionId: string): void {
+  sessionKindCache.delete(sessionId);
+}
+
+export function getSandboxRuntimeByKind(
+  kind: SandboxRuntimeKind
+): SandboxRuntime {
+  let adapter = adapters.get(kind);
+  if (adapter) return adapter;
   if (kind === "kubernetes") {
-    cached = createK8sSandboxRuntime();
+    adapter = createK8sSandboxRuntime();
   } else if (kind === "host") {
-    cached = createHostSandboxRuntime();
+    adapter = createHostSandboxRuntime();
   } else {
-    cached = createDockerSandboxRuntime();
+    adapter = createDockerSandboxRuntime();
   }
-  return cached;
+  adapters.set(kind, adapter);
+  return adapter;
+}
+
+export async function resolveSandboxRuntimeKindForSession(
+  sessionId: string
+): Promise<SandboxRuntimeKind> {
+  const cached = sessionKindCache.get(sessionId);
+  if (cached) return cached;
+  const chat = await new ChatFeatureRepository().getBySessionId(sessionId);
+  const kind = executionTargetToKind(chat?.executionTarget ?? "local");
+  sessionKindCache.set(sessionId, kind);
+  return kind;
+}
+
+export async function getSandboxRuntime(
+  sessionId: string
+): Promise<SandboxRuntime> {
+  const kind = await resolveSandboxRuntimeKindForSession(sessionId);
+  return getSandboxRuntimeByKind(kind);
+}
+
+export async function isHostSession(sessionId: string): Promise<boolean> {
+  return (await resolveSandboxRuntimeKindForSession(sessionId)) === "host";
 }
 
 export function resetSandboxRuntimeCache(): void {
-  cached = undefined;
+  adapters.clear();
+  sessionKindCache.clear();
 }

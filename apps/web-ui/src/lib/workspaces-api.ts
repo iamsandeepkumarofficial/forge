@@ -182,15 +182,23 @@ function normalizeWorkspaceChat(raw: Record<string, unknown>): WorkspaceChat {
   };
 }
 
-export async function createWorkspaceChat(
-  workspaceId: string,
-  title?: string
-): Promise<WorkspaceChat> {
-  const res = await fetch(`${BASE_URL}/api/workspaces/${workspaceId}/chats`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(title ? { title } : {})
-  });
+export async function createWorkspaceChat(options: {
+  workspaceId: string;
+  title?: string;
+  executionTarget?: "local" | "cloud";
+}): Promise<WorkspaceChat> {
+  const executionTarget = options.executionTarget ?? "local";
+  const res = await fetch(
+    `${BASE_URL}/api/workspaces/${options.workspaceId}/chats`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(options.title ? { title: options.title } : {}),
+        executionTarget
+      })
+    }
+  );
   if (!res.ok) throw new Error(await readError(res));
   return normalizeWorkspaceChat((await res.json()) as Record<string, unknown>);
 }
@@ -389,52 +397,4 @@ export async function detachWorkspaceDatabase(
   if (!res.ok && res.status !== HTTP_NO_CONTENT)
     throw new Error(await readError(res));
 }
-
-export type WorkspaceEnvironmentLaunchApp = {
-  name?: string;
-  cwd?: string;
-  command?: string;
-  port?: number;
-  type?: string;
-  repo?: string;
-  [key: string]: unknown;
-};
-
-export type WorkspaceEnvironmentStatus = {
-  launch: { apps: WorkspaceEnvironmentLaunchApp[] };
-  updatedAt: string | null;
-  sourceSessionId: string | null;
-  depsVolumeName: string;
-};
-
-export async function getWorkspaceEnvironment(
-  workspaceId: string
-): Promise<WorkspaceEnvironmentStatus> {
-  const res = await fetch(
-    `${BASE_URL}/api/workspaces/${workspaceId}/environment`
-  );
-  if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as WorkspaceEnvironmentStatus;
-}
-
-export async function clearWorkspaceEnvironmentLaunch(
-  workspaceId: string
-): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/workspaces/${workspaceId}/environment/launch`,
-    { method: "DELETE" }
-  );
-  if (!res.ok && res.status !== HTTP_NO_CONTENT)
-    throw new Error(await readError(res));
-}
-
-export async function clearWorkspaceEnvironmentDepsCache(
-  workspaceId: string
-): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/workspaces/${workspaceId}/environment/deps-cache`,
-    { method: "DELETE" }
-  );
-  if (!res.ok && res.status !== HTTP_NO_CONTENT)
-    throw new Error(await readError(res));
-}
+export * from "./workspaces-environment-api.js";

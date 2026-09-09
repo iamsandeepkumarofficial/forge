@@ -14,6 +14,7 @@ export function buildNewChatSubmitHandler(options: {
   parentId: string;
   description: string;
   workflowId: string;
+  executionTarget: "local" | "cloud";
   files: File[];
   links: PendingLink[];
   onCreated: () => void | Promise<void>;
