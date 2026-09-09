@@ -250,7 +250,7 @@ async function pushEnvFindings(options: {
         key === "DATABASE_URL" || key === "MONGODB_URI" || key === "MONGODB_URL"
           ? `Propose ${
               key.startsWith("MONGO") ? "MongoDB" : "PostgreSQL"
-            } via provision_app_engine (user-approved), or ask_user then upsert_workspace_parameter.`
+            } via setup_project_infra (user-approved), or ask_user then upsert_workspace_parameter.`
           : `Use ask_user then upsert_workspace_parameter for \`${key}\`.`
     });
   }

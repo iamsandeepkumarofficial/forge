@@ -154,7 +154,7 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
     }
     if (shadows.infraEvidence.length > 0) {
       lines.push(
-        `- Infra evidence (propose then provision_app_engine with userApproved): ${shadows.infraEvidence.join(", ")}`
+        `- Infra evidence (propose then setup_project_infra with userApproved): ${shadows.infraEvidence.join(", ")}`
       );
     }
   }
@@ -175,7 +175,8 @@ export function formatSetupAgentSopBlock(options?: {
     "3. If image mismatches stack (e.g. generic but need Node/Playwright), propose switching images to the user.",
     "4. `invoke_skill` for that stack (`nodejs-app`, `python-app`, …).",
     "5. Follow the skill: toolchain if needed (`ask_user` → user OK) → install via `run_terminal`.",
-    "6. Params/secrets/infra: call `ask_user` (mcq or form widget) — never ask only in prose. Form fields must set `value` to a sensible default (example URL, generated secret, etc.). After the user answers, `upsert_workspace_parameter` and/or `provision_app_engine` with `userApproved: true`. The widget is honor-system consent, not a cryptographic gate.",
+    "6. Params/secrets/infra: call `ask_user` (mcq or form widget) — never ask only in prose. Form fields must set `value` to a sensible default (example URL, generated secret, etc.). After the user answers, `upsert_workspace_parameter` and/or `setup_project_infra` with `userApproved: true`. The widget is honor-system consent, not a cryptographic gate.",
+    "6b. If `setup_project_infra` fails (e.g. local session missing `mongod`/`postgres`): explain briefly, then `ask_user` (mcq). On approve, `install_project_infra` (downloads into ~/.forge/runtime) then retry `setup_project_infra`. Do not install host infra via `run_terminal`. Do not end the turn on the raw error alone.",
     "7. Launch / migrations / preview per skills. Never invent a platform install matrix."
   ].join("\n");
 }

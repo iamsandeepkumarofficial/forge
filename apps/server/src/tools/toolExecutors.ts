@@ -10,9 +10,6 @@ import { SANDBOX_TOOL_NAMES, executeSandboxTool } from "./sandbox.tool.js";
 import type { ToolExecuteOutcome } from "./types.js";
 
 const N_200 = 200;
-const N_400 = 400;
-const N_404 = 404;
-const N_500 = 500;
 
 export async function executeWebToolCall(options: {
   sessionId: string;
@@ -27,7 +24,7 @@ export async function executeWebToolCall(options: {
     if (!query) {
       return {
         kind: "result",
-        status: N_400,
+        status: N_200,
         body: {
           success: false,
           output: "web_search failed: query is required",
@@ -71,7 +68,7 @@ export async function executeCreateSubtask(options: {
     if (!owner) {
       return {
         kind: "result",
-        status: N_404,
+        status: N_200,
         body: {
           success: false,
           output: `No chat/feature found for session: ${sessionId}`,
@@ -105,14 +102,14 @@ export async function executeCreateSubtask(options: {
     if (err instanceof ChatFeatureValidationError) {
       return {
         kind: "result",
-        status: N_400,
+        status: N_200,
         body: { success: false, output: err.message, metadata: {} }
       };
     }
     const message = err instanceof Error ? err.message : String(err);
     return {
       kind: "result",
-      status: N_500,
+      status: N_200,
       body: { success: false, output: message, metadata: {} }
     };
   }
@@ -137,7 +134,7 @@ export async function executePreviewToolCall(options: {
     }
     if (toolName === "preview_stop") {
       const body = await previewTools.stop(sessionId, args);
-      return { kind: "result", status: body.success ? N_200 : N_400, body };
+      return { kind: "result", status: N_200, body };
     }
     if (toolName === "preview_status") {
       const body = await previewTools.status(sessionId, args);
@@ -145,15 +142,15 @@ export async function executePreviewToolCall(options: {
     }
     if (toolName === "upsert_launch_app") {
       const body = await previewTools.upsert(sessionId, args);
-      return { kind: "result", status: body.success ? N_200 : N_400, body };
+      return { kind: "result", status: N_200, body };
     }
     const body = await previewTools.logs(sessionId, args);
-    return { kind: "result", status: body.success ? N_200 : N_400, body };
+    return { kind: "result", status: N_200, body };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
       kind: "result",
-      status: N_500,
+      status: N_200,
       body: { success: false, output: message, metadata: {} }
     };
   }
@@ -179,7 +176,7 @@ export async function executeSandboxToolCall(options: {
     const message = err instanceof Error ? err.message : String(err);
     return {
       kind: "result",
-      status: N_500,
+      status: N_200,
       body: { success: false, output: message, metadata: {} }
     };
   }

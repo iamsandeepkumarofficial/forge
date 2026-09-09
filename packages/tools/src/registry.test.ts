@@ -16,6 +16,9 @@ describe("registry", () => {
     });
     assert.ok(base.read_file);
     assert.ok(base.run_terminal);
+    assert.ok(base.setup_project_infra);
+    assert.ok(base.install_project_infra);
+    assert.equal("provision_app_engine" in base, false);
     assert.equal("web_search" in base, false);
     assert.equal("docker_image_lookup" in base, false);
 

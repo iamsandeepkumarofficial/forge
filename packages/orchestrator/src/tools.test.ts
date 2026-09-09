@@ -13,17 +13,11 @@ import {
 
 const originalFetch = globalThis.fetch;
 const originalWeb = process.env.WEB_TOOLS_ENABLED;
-const originalRuntime = process.env.SANDBOX_RUNTIME;
-const originalDesktop = process.env.FORGE_DESKTOP;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
   if (originalWeb === undefined) delete process.env.WEB_TOOLS_ENABLED;
   else process.env.WEB_TOOLS_ENABLED = originalWeb;
-  if (originalRuntime === undefined) delete process.env.SANDBOX_RUNTIME;
-  else process.env.SANDBOX_RUNTIME = originalRuntime;
-  if (originalDesktop === undefined) delete process.env.FORGE_DESKTOP;
-  else process.env.FORGE_DESKTOP = originalDesktop;
 });
 
 describe("tools", () => {
@@ -56,7 +50,6 @@ describe("tools", () => {
 
   it("availableToolNames has chat tools and omits ghost tools", () => {
     process.env.WEB_TOOLS_ENABLED = "false";
-    process.env.SANDBOX_RUNTIME = "docker";
     const names = availableToolNames();
     assert.ok(names.includes("read_file"));
     assert.ok(names.includes("write_file"));
@@ -66,7 +59,9 @@ describe("tools", () => {
     assert.ok(names.includes("switch_mode"));
     assert.ok(names.includes("ask_user"));
     assert.ok(names.includes("docker_image_lookup"));
-    assert.equal(names.includes("web_search"), false);
+    assert.ok(names.includes("setup_project_infra"));
+    assert.ok(names.includes("install_project_infra"));
+    assert.equal(names.includes("provision_app_engine"), false);
     assert.equal(names.includes("git_clone"), false);
     assert.equal(names.includes("jira_get_ticket"), false);
     assert.equal(names.includes("github_create_pr"), false);
@@ -76,13 +71,12 @@ describe("tools", () => {
     assert.ok(withWeb.includes("web_fetch"));
   });
 
-  it("hides docker_image_lookup in host mode", () => {
+  it("includes docker_image_lookup in agent tools (server denies for local)", () => {
     process.env.WEB_TOOLS_ENABLED = "false";
-    process.env.SANDBOX_RUNTIME = "host";
     const names = availableToolNames();
-    assert.equal(names.includes("docker_image_lookup"), false);
+    assert.equal(names.includes("docker_image_lookup"), true);
     const agent = buildChatTools({ sessionId: "s1", mode: "agent" });
-    assert.equal("docker_image_lookup" in agent, false);
+    assert.equal("docker_image_lookup" in agent, true);
   });
 
   it("buildTools filters to allowed names and skips unknown", () => {
@@ -211,6 +205,26 @@ describe("tools", () => {
     assert.equal(body.toolName, "read_file");
     assert.equal(body.turnId, "t1");
     assert.equal(body.agentMode, "agent");
+  });
+
+  it("executeNamedTool accepts ToolResult JSON on 4xx", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          output: "Provision failed: mongod missing",
+          metadata: { recoverable: true }
+        }),
+        { status: 400 }
+      )) as typeof fetch;
+    const result = await executeNamedTool({
+      sessionId: "s",
+      toolName: "setup_project_infra",
+      args: { engineId: "mongo", userApproved: true },
+      agentMode: "agent"
+    });
+    assert.equal(result.success, false);
+    assert.match(result.output, /mongod missing/);
   });
 
   it("executeNamedTool throws on non-ok and non-json", async () => {

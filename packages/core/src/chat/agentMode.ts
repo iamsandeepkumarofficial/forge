@@ -22,7 +22,8 @@ const SUBTASK_TOOLS = ["create_subtask"] as const;
 const SETUP_TOOLS = [
   "upsert_workspace_parameter",
   "docker_image_lookup",
-  "provision_app_engine"
+  "setup_project_infra",
+  "install_project_infra"
 ] as const;
 
 function unionTools(...groups: readonly (readonly string[])[]): Set<string> {

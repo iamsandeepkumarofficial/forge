@@ -5,28 +5,30 @@ import {
   DEFAULT_SANDBOX_IMAGE,
   GENERIC_SANDBOX_IMAGE
 } from "../projects/sessionSandbox/constants.js";
+import {
+  rememberSessionExecutionTarget,
+  resetSandboxRuntimeCache
+} from "../projects/sandboxRuntime/resolve.js";
 
 describe("executeDockerImageLookup", () => {
-  const prevRuntime = process.env.SANDBOX_RUNTIME;
-  const prevDesktop = process.env.FORGE_DESKTOP;
-
   afterEach(() => {
-    if (prevRuntime === undefined) delete process.env.SANDBOX_RUNTIME;
-    else process.env.SANDBOX_RUNTIME = prevRuntime;
-    if (prevDesktop === undefined) delete process.env.FORGE_DESKTOP;
-    else process.env.FORGE_DESKTOP = prevDesktop;
+    resetSandboxRuntimeCache();
   });
 
   it("returns unavailable in host mode", async () => {
-    process.env.SANDBOX_RUNTIME = "host";
-    const r = await executeDockerImageLookup({ args: {} });
+    rememberSessionExecutionTarget("sess-host", "local");
+    const r = await executeDockerImageLookup({
+      sessionId: "sess-host",
+      args: {}
+    });
     assert.equal(r.success, false);
     assert.match(r.output, /unavailable in host mode/);
   });
 
   it("returns known engine details by engineId", async () => {
-    process.env.SANDBOX_RUNTIME = "docker";
+    rememberSessionExecutionTarget("sess-cloud", "cloud");
     const r = await executeDockerImageLookup({
+      sessionId: "sess-cloud",
       args: { engineId: "postgres" }
     });
     assert.equal(r.success, true);
@@ -36,7 +38,6 @@ describe("executeDockerImageLookup", () => {
   });
 
   it("rejects unknown engineId", async () => {
-    process.env.SANDBOX_RUNTIME = "docker";
     const r = await executeDockerImageLookup({
       args: { engineId: "redis" }
     });
@@ -45,7 +46,6 @@ describe("executeDockerImageLookup", () => {
   });
 
   it("lists sandbox and app-db images without a query", async () => {
-    process.env.SANDBOX_RUNTIME = "docker";
     const r = await executeDockerImageLookup({ args: {} });
     assert.equal(r.success, true);
     assert.match(r.output, new RegExp(DEFAULT_SANDBOX_IMAGE));
@@ -56,7 +56,6 @@ describe("executeDockerImageLookup", () => {
   });
 
   it("filters by query and fails when nothing matches", async () => {
-    process.env.SANDBOX_RUNTIME = "docker";
     const hit = await executeDockerImageLookup({
       args: { query: "mongo" }
     });

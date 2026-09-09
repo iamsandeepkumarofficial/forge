@@ -3,7 +3,8 @@ import { formatToolDescription } from "@forge/core";
 import type { ToolRun } from "../types.js";
 import {
   dockerImageLookupInputSchema,
-  provisionAppEngineInputSchema,
+  installProjectInfraInputSchema,
+  setupProjectInfraInputSchema,
   upsertWorkspaceParameterInputSchema
 } from "../schemas.js";
 
@@ -17,10 +18,15 @@ export function setupTools(
       inputSchema: upsertWorkspaceParameterInputSchema,
       execute: async (input) => run("upsert_workspace_parameter", input)
     }),
-    provision_app_engine: tool({
-      description: formatToolDescription("provision_app_engine"),
-      inputSchema: provisionAppEngineInputSchema,
-      execute: async (input) => run("provision_app_engine", input)
+    setup_project_infra: tool({
+      description: formatToolDescription("setup_project_infra"),
+      inputSchema: setupProjectInfraInputSchema,
+      execute: async (input) => run("setup_project_infra", input)
+    }),
+    install_project_infra: tool({
+      description: formatToolDescription("install_project_infra"),
+      inputSchema: installProjectInfraInputSchema,
+      execute: async (input) => run("install_project_infra", input)
     })
   };
   if (options?.includeDockerImageLookup !== false) {

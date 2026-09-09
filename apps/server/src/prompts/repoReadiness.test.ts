@@ -133,8 +133,11 @@ describe("repoReadiness", () => {
       assert.match(block, /\/workspace\/\.forge\/launch\.json/);
       assert.match(block, /invoke_skill/);
       assert.match(block, /network plane/);
-      assert.match(block, /provision_app_engine/);
-      assert.doesNotMatch(block, /Never write launch config at the session root/);
+      assert.match(block, /setup_project_infra/);
+      assert.doesNotMatch(
+        block,
+        /Never write launch config at the session root/
+      );
       assert.doesNotMatch(block, /Each has its own/);
     } finally {
       await fs.rm(root, { recursive: true, force: true });

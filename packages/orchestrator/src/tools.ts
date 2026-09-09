@@ -38,10 +38,7 @@ export function webToolsEnabled(): boolean {
 }
 
 export function hostModeHidesDockerImageLookup(): boolean {
-  const raw = process.env.SANDBOX_RUNTIME?.trim().toLowerCase();
-  if (raw === "host") return true;
-  if (raw === "docker" || raw === "kubernetes" || raw === "k8s") return false;
-  return process.env.FORGE_DESKTOP?.trim() === "1";
+  return false;
 }
 
 export function withWebToolsIfEnabled(allowed: string[]): string[] {
@@ -75,13 +72,26 @@ async function forward(opts: {
     body: JSON.stringify(body)
   });
   const text = await res.text();
+  const parsed = parseToolResultJson(text);
   if (!res.ok) {
+    if (parsed) return parsed;
     throw new Error(`tool-runner ${res.status}: ${text}`);
   }
+  if (parsed) return parsed;
+  throw new Error(`tool-runner returned non-JSON: ${text.slice(0, N_500)}`);
+}
+
+function parseToolResultJson(text: string): ToolResult | null {
   try {
-    return JSON.parse(text) as ToolResult;
+    const value = JSON.parse(text) as unknown;
+    if (!value || typeof value !== "object") return null;
+    const r = value as Record<string, unknown>;
+    if (typeof r.success !== "boolean" || typeof r.output !== "string") {
+      return null;
+    }
+    return value as ToolResult;
   } catch {
-    throw new Error(`tool-runner returned non-JSON: ${text.slice(0, N_500)}`);
+    return null;
   }
 }
 

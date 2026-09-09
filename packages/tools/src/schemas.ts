@@ -100,14 +100,29 @@ export type UpsertWorkspaceParameterInput = z.infer<
   typeof upsertWorkspaceParameterInputSchema
 >;
 
-export const provisionAppEngineInputSchema = z.object({
+export const setupProjectInfraInputSchema = z.object({
   engineId: z.enum(["postgres", "mongo"]),
   userApproved: z
     .boolean()
     .describe("Must be true only after the user explicitly approved.")
 });
-export type ProvisionAppEngineInput = z.infer<
-  typeof provisionAppEngineInputSchema
+export type SetupProjectInfraInput = z.infer<
+  typeof setupProjectInfraInputSchema
+>;
+
+export const installProjectInfraInputSchema = z.object({
+  dependencyId: z
+    .string()
+    .describe(
+      "Extensible infra dependency id (e.g. mongo, postgres). Registry can grow beyond DBs."
+    ),
+  userApproved: z
+    .boolean()
+    .describe("Must be true only after the user explicitly approved."),
+  version: z.string().optional()
+});
+export type InstallProjectInfraInput = z.infer<
+  typeof installProjectInfraInputSchema
 >;
 
 export const dockerImageLookupInputSchema = z.object({

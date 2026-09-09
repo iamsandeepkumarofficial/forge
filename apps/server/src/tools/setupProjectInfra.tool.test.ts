@@ -1,8 +1,8 @@
 import { describe, it, mock, before } from "node:test";
 import assert from "node:assert/strict";
 
-describe("executeProvisionAppEngine", () => {
-  let executeProvisionAppEngine: typeof import("./provisionAppEngine.tool.js").executeProvisionAppEngine;
+describe("executeSetupProjectInfra", () => {
+  let executeSetupProjectInfra: typeof import("./setupProjectInfra.tool.js").executeSetupProjectInfra;
   let attachShouldFail = false;
 
   before(async () => {
@@ -20,13 +20,22 @@ describe("executeProvisionAppEngine", () => {
       exports: {
         getAppDbEngine: (id: string) =>
           id === "postgres" || id === "mongo" ? { id, label: id } : null,
-        attachWorkspaceDatabase: async (_ws: string, engineId: string) => {
+        attachWorkspaceDatabase: async (options: {
+          workspaceId: string;
+          engineId: string;
+        }) => {
           if (attachShouldFail) throw new Error("docker down");
+          const { engineId } = options;
           return {
             label: engineId,
+            engineId,
             image: `${engineId}:latest`,
             database: "forge_ws_demo",
-            envKey: engineId === "mongo" ? "MONGODB_URI" : "DATABASE_URL"
+            envKey: engineId === "mongo" ? "MONGODB_URI" : "DATABASE_URL",
+            containerName: `c-${engineId}`,
+            reused: false,
+            pulled: false,
+            hostPort: 27017
           };
         }
       }
@@ -36,12 +45,12 @@ describe("executeProvisionAppEngine", () => {
         emitSetupAgentEval: async () => undefined
       }
     });
-    ({ executeProvisionAppEngine } =
-      await import("./provisionAppEngine.tool.js"));
+    ({ executeSetupProjectInfra } =
+      await import("./setupProjectInfra.tool.js"));
   });
 
   it("requires userApproved", async () => {
-    const r = await executeProvisionAppEngine({
+    const r = await executeSetupProjectInfra({
       sessionId: "s-ws",
       args: { engineId: "postgres" }
     });
@@ -50,7 +59,7 @@ describe("executeProvisionAppEngine", () => {
   });
 
   it("rejects invalid engineId", async () => {
-    const r = await executeProvisionAppEngine({
+    const r = await executeSetupProjectInfra({
       sessionId: "s-ws",
       args: { engineId: "redis", userApproved: true }
     });
@@ -59,7 +68,7 @@ describe("executeProvisionAppEngine", () => {
   });
 
   it("requires workspace session", async () => {
-    const r = await executeProvisionAppEngine({
+    const r = await executeSetupProjectInfra({
       sessionId: "s-other",
       args: { engineId: "postgres", userApproved: true }
     });
@@ -67,22 +76,23 @@ describe("executeProvisionAppEngine", () => {
     assert.match(r.output, /workspace sessions/);
   });
 
-  it("provisions on success and surfaces attach failures", async () => {
+  it("sets up on success and surfaces attach failures", async () => {
     attachShouldFail = false;
-    const ok = await executeProvisionAppEngine({
+    const ok = await executeSetupProjectInfra({
       sessionId: "s-ws",
       args: { engineId: "Postgres", userApproved: true }
     });
     assert.equal(ok.success, true);
     assert.equal(ok.metadata?.engineId, "postgres");
-    assert.match(ok.output, /Provisioned/);
+    assert.match(ok.output, /Set up/);
 
     attachShouldFail = true;
-    const fail = await executeProvisionAppEngine({
+    const fail = await executeSetupProjectInfra({
       sessionId: "s-ws",
       args: { engineId: "mongo", userApproved: true }
     });
     assert.equal(fail.success, false);
     assert.match(fail.output, /docker down/);
+    assert.match(fail.output, /install_project_infra/);
   });
 });

@@ -87,17 +87,20 @@ function lookupByQuery(query: string): LookupResult {
 }
 
 export async function executeDockerImageLookup(options: {
+  sessionId?: string;
   args: Record<string, unknown>;
 }): Promise<LookupResult> {
-  const { resolveSandboxRuntimeKind } =
-    await import("../projects/sandboxRuntime/resolve.js");
-  if (resolveSandboxRuntimeKind() === "host") {
-    return {
-      success: false,
-      output:
-        "docker_image_lookup is unavailable in host mode (no session container image). Use cloud mode or install toolchains on the host.",
-      metadata: { code: "unavailable_host_mode" }
-    };
+  if (options.sessionId) {
+    const { isHostSession } =
+      await import("../projects/sandboxRuntime/resolve.js");
+    if (await isHostSession(options.sessionId)) {
+      return {
+        success: false,
+        output:
+          "docker_image_lookup is unavailable in host mode (no session container image). Use cloud mode or install toolchains on the host.",
+        metadata: { code: "unavailable_host_mode" }
+      };
+    }
   }
   const query =
     typeof options.args.query === "string"
