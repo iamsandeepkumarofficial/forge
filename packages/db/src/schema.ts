@@ -182,6 +182,8 @@ export const workspaceProjects = pgTable(
     dependsOn: jsonb("depends_on").$type<string[]>().notNull().default([]),
 
     env: jsonb("env").$type<Record<string, string>>().notNull().default({}),
+
+    sourceRef: varchar("source_ref", { length: 255 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull()

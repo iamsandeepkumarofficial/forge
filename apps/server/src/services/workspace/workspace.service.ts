@@ -42,6 +42,29 @@ function httpError(
   return err;
 }
 
+function memberPatchFromUpdate(options: {
+  nextRepoName: string;
+  nextDependsOn: string[];
+  patch: {
+    env?: Record<string, string>;
+    sortOrder?: number;
+    sourceRef?: string | null;
+  };
+}) {
+  const { nextRepoName, nextDependsOn, patch } = options;
+  return {
+    repoName: nextRepoName,
+    dependsOn: nextDependsOn,
+    ...(patch.env != null ? { env: patch.env } : {}),
+    ...(typeof patch.sortOrder === "number"
+      ? { sortOrder: patch.sortOrder }
+      : {}),
+    ...(patch.sourceRef !== undefined
+      ? { sourceRef: patch.sourceRef?.trim() || null }
+      : {})
+  };
+}
+
 function defaultRepoNameFromProject(project: Project): string {
   if (project.source === "github") {
     const repo = project.dedupeKey.split("/").pop() || project.name;
@@ -96,6 +119,9 @@ export class WorkspaceService {
   async deleteWorkspace(workspaceId: string, userId: string): Promise<void> {
     await this.requireOwnedWorkspace(workspaceId, userId);
     await this.workspaceRepo.delete(workspaceId);
+    const { removeEntireWorkspaceCopies } =
+      await import("../../projects/workspaceMaterialize.js");
+    await removeEntireWorkspaceCopies(workspaceId);
   }
 
   async renameWorkspace(options: {
@@ -202,6 +228,12 @@ export class WorkspaceService {
       throw httpError(N_404, "Project is not a member of this workspace");
     }
     await this.workspaceRepo.removeMember(workspaceId, projectId);
+    const { removeWorkspaceMemberCopy } =
+      await import("../../projects/workspaceMaterialize.js");
+    await removeWorkspaceMemberCopy({
+      workspaceId,
+      repoName: member.repoName
+    });
     const remaining = await this.workspaceRepo.listMembers(workspaceId);
     for (const m of remaining) {
       if (m.dependsOn.includes(member.repoName)) {
@@ -238,6 +270,7 @@ export class WorkspaceService {
       dependsOn?: string[];
       env?: Record<string, string>;
       sortOrder?: number;
+      sourceRef?: string | null;
     };
   }): Promise<WorkspaceDetail> {
     const { workspaceId, userId, projectId, patch } = options;
@@ -287,14 +320,11 @@ export class WorkspaceService {
     await this.workspaceRepo.updateMember({
       workspaceId,
       projectId,
-      patch: {
-        repoName: nextRepoName,
-        dependsOn: nextDependsOn,
-        ...(patch.env != null ? { env: patch.env } : {}),
-        ...(typeof patch.sortOrder === "number"
-          ? { sortOrder: patch.sortOrder }
-          : {})
-      }
+      patch: memberPatchFromUpdate({
+        nextRepoName,
+        nextDependsOn,
+        patch
+      })
     });
     await rewriteRoutesForRename({
       workspaceRepo: this.workspaceRepo,

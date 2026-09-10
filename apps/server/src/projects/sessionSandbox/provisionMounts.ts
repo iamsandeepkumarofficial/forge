@@ -49,11 +49,11 @@ export async function partitionMemberMounts(options: {
         projectId: project.id,
         sessionId: options.sessionId,
         branchName: options.branchName,
-        workDir: workspaceSessionMemberDir(
-          options.workspaceId,
-          options.sessionId,
-          member.repoName
-        ),
+        workDir: workspaceSessionMemberDir({
+          workspaceId: options.workspaceId,
+          sessionId: options.sessionId,
+          repoName: member.repoName
+        }),
         rewriteContainerGitdir: !options.hostMode
       });
       bindMounts.push({

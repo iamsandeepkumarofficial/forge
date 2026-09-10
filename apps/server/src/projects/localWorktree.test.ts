@@ -9,7 +9,6 @@ import {
   canonicalGitContainerPath,
   ensureCanonicalGitRepo,
   ensureSessionWorktree,
-  mergeSessionBranchIntoCanonical,
   removeSessionWorktree,
   worktreeWorkDir
 } from "./localWorktree.js";
@@ -101,14 +100,15 @@ describe("localWorktree", () => {
     const pointer = await fs.readFile(path.join(wt.workDir, ".git"), "utf8");
     assert.match(
       pointer,
-      new RegExp(
-        `^gitdir: ${canonicalGitContainerPath(projectId)}/worktrees/`
-      )
+      new RegExp(`^gitdir: ${canonicalGitContainerPath(projectId)}/worktrees/`)
     );
     assert.ok(pointer.includes("/worktrees/"));
 
-    
-    const branches = await git(canonical, ["branch", "--list", "chat-session-1"]);
+    const branches = await git(canonical, [
+      "branch",
+      "--list",
+      "chat-session-1"
+    ]);
     assert.match(branches, /chat-session-1/);
 
     await removeSessionWorktree({
@@ -117,31 +117,5 @@ describe("localWorktree", () => {
       sessionId
     });
     await assert.rejects(() => fs.access(wt.workDir));
-  });
-
-  it("mergeSessionBranchIntoCanonical fast-forwards default branch", async () => {
-    const canonical = path.join(tmpRoot, "proj-merge");
-    await fs.mkdir(canonical, { recursive: true });
-    await fs.writeFile(path.join(canonical, "base.txt"), "base\n");
-    await ensureCanonicalGitRepo(canonical);
-
-    const defaultBranch = await git(canonical, [
-      "rev-parse",
-      "--abbrev-ref",
-      "HEAD"
-    ]);
-
-    await git(canonical, ["checkout", "-B", "chat-promote"]);
-    await fs.writeFile(path.join(canonical, "base.txt"), "promoted\n");
-    await git(canonical, ["add", "-A"]);
-    await git(canonical, ["commit", "-m", "session change"]);
-    await git(canonical, ["checkout", defaultBranch]);
-
-    await mergeSessionBranchIntoCanonical({
-      canonicalKey: canonical,
-      branchName: "chat-promote"
-    });
-    const content = await fs.readFile(path.join(canonical, "base.txt"), "utf8");
-    assert.equal(content, "promoted\n");
   });
 });

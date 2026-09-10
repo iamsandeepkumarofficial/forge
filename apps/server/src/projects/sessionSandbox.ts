@@ -155,11 +155,11 @@ async function workspaceSessionRepoInfo(options: {
     worktrees[m.repoName] = `${WORKSPACE_MOUNT}/${m.repoName}`;
     const project = await projectRepo.getById(m.projectId);
     if (project?.source === "local" && project.canonicalKey) {
-      const sessionMember = workspaceSessionMemberDir(
+      const sessionMember = workspaceSessionMemberDir({
         workspaceId,
         sessionId,
-        m.repoName
-      );
+        repoName: m.repoName
+      });
       const durable = workspaceMemberDir(workspaceId, m.repoName);
       if (fs.existsSync(sessionMember)) {
         hostWorktrees[m.repoName] = sessionMember;

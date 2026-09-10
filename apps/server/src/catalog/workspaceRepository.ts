@@ -167,7 +167,10 @@ export class WorkspaceRepository {
     workspaceId: string;
     projectId: string;
     patch: Partial<
-      Pick<WorkspaceProject, "repoName" | "sortOrder" | "dependsOn" | "env">
+      Pick<
+        WorkspaceProject,
+        "repoName" | "sortOrder" | "dependsOn" | "env" | "sourceRef"
+      >
     >;
   }): Promise<WorkspaceProject | null> {
     const { workspaceId, projectId, patch } = options;

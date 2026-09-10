@@ -59,11 +59,17 @@ export async function handleUpdateProject(req: Request, res: Response) {
         : undefined;
     const sortOrder =
       typeof req.body?.sortOrder === "number" ? req.body.sortOrder : undefined;
+    const sourceRef =
+      typeof req.body?.sourceRef === "string"
+        ? req.body.sourceRef
+        : req.body?.sourceRef === null
+          ? null
+          : undefined;
     const ws = await workspaceService.updateMember({
       workspaceId: String(req.params.workspaceId),
       userId,
       projectId: String(req.params.projectId),
-      patch: { repoName, dependsOn, env, sortOrder }
+      patch: { repoName, dependsOn, env, sortOrder, sourceRef }
     });
     res.json(ws);
   } catch (error: unknown) {

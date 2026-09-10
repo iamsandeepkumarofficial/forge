@@ -31,9 +31,6 @@ describe("launchScaffold", { concurrency: false }, () => {
           if (opts.absPath.endsWith(".forge/launch.json")) {
             return launchRaw;
           }
-          if (opts.absPath.endsWith("pulse.json")) {
-            return null;
-          }
           if (packageByPath.has(opts.absPath)) {
             return packageByPath.get(opts.absPath) ?? null;
           }

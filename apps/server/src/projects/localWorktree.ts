@@ -208,12 +208,17 @@ export async function ensureSessionWorktree(options: {
   projectId: string;
   sessionId: string;
   branchName: string;
+
+  workDir?: string;
+
+  rewriteContainerGitdir?: boolean;
 }): Promise<SessionWorktree> {
   const { canonicalKey, projectId, sessionId, branchName } = options;
   await ensureCanonicalGitRepo(canonicalKey);
   await ensureSessionsRoot();
 
-  const workDir = worktreeWorkDir(projectId, sessionId);
+  const workDir = options.workDir ?? worktreeWorkDir(projectId, sessionId);
+  const rewriteContainer = options.rewriteContainerGitdir !== false;
   const gitCanonicalHostPath = path.join(canonicalKey, ".git");
   const parent = path.dirname(workDir);
   await fs.mkdir(parent, { recursive: true });
@@ -232,10 +237,12 @@ export async function ensureSessionWorktree(options: {
     }
     if (await pathExists(workDir)) {
       await configureForgeIdentity(workDir).catch(() => {});
-      const adminName = await resolveWorktreeAdminName(workDir);
-      await rewriteWorktreeGitdir({ workDir, projectId, adminName });
+      if (rewriteContainer) {
+        const adminName = await resolveWorktreeAdminName(workDir);
+        await rewriteWorktreeGitdir({ workDir, projectId, adminName });
+      }
     }
-  } else {
+  } else if (rewriteContainer) {
     const pointer = path.join(workDir, ".git");
     try {
       const contents = await fs.readFile(pointer, "utf8");
@@ -266,51 +273,5 @@ export async function removeSessionWorktree(options: {
   await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   if (await isGitRepo(options.canonicalKey)) {
     await git(options.canonicalKey, ["worktree", "prune"]).catch(() => {});
-  }
-}
-
-export async function mergeSessionBranchIntoCanonical(options: {
-  canonicalKey: string;
-  branchName: string;
-}): Promise<void> {
-  const { canonicalKey, branchName } = options;
-  await ensureCanonicalGitRepo(canonicalKey);
-
-  let defaultBranch = "main";
-  try {
-    const { stdout } = await git(canonicalKey, [
-      "symbolic-ref",
-      "--short",
-      "refs/remotes/origin/HEAD"
-    ]);
-    const m = stdout.trim().match(/origin\/(.+)/);
-    if (m?.[1]) defaultBranch = m[1];
-  } catch {
-    try {
-      const { stdout } = await git(canonicalKey, [
-        "rev-parse",
-        "--abbrev-ref",
-        "HEAD"
-      ]);
-      if (stdout.trim()) defaultBranch = stdout.trim();
-    } catch {
-      void 0;
-    }
-  }
-
-  await git(canonicalKey, ["checkout", defaultBranch]).catch(async () => {
-    await git(canonicalKey, ["checkout", "-B", defaultBranch]);
-  });
-
-  try {
-    await git(canonicalKey, ["merge", "--ff-only", branchName]);
-  } catch {
-    await git(canonicalKey, [
-      "merge",
-      "--no-ff",
-      "-m",
-      `forge: promote ${branchName}`,
-      branchName
-    ]);
   }
 }
