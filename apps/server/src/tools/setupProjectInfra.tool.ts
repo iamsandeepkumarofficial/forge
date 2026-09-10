@@ -4,8 +4,10 @@ import {
   type AppDbEngineId,
   getAppDbEngine
 } from "../projects/sessionAppDb.js";
+import { listDbSetupEngineIds } from "../projects/appDb/registry.js";
 import type { ProvisionedWorkspaceEngine } from "../projects/appDb/workspaceDb.js";
 import { emitSetupAgentEval } from "../services/eval/phoenix.js";
+import { listProjectInfraDependencyIds } from "../projects/hostInfra/registry.js";
 
 const SETUP_RECOVERY_HINT =
   "Next: briefly explain this failure to the user (do not end on this error alone). " +
@@ -87,9 +89,19 @@ export async function executeSetupProjectInfra(options: {
   }
 
   if (engineIdRaw !== "postgres" && engineIdRaw !== "mongo") {
+    const setupIds = listDbSetupEngineIds();
+    const installIds = listProjectInfraDependencyIds();
+    if (installIds.includes(engineIdRaw) && !setupIds.includes(engineIdRaw)) {
+      return {
+        success: false,
+        output:
+          `\`${engineIdRaw}\` is an installable runtime (use install_project_infra), not a service engine. ` +
+          `setup_project_infra is only for: ${setupIds.join(", ")}.`
+      };
+    }
     return {
       success: false,
-      output: "engineId must be `postgres` or `mongo`."
+      output: `engineId must be one of: ${setupIds.join(", ")}.`
     };
   }
   const engineId = engineIdRaw as AppDbEngineId;

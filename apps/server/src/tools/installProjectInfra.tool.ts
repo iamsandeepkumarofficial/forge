@@ -1,7 +1,9 @@
 import { isHostSession } from "../projects/sandboxRuntime/resolve.js";
 import { installProjectInfraDependency } from "../projects/hostInfra/install.js";
 import {
+  dependencyIdAliasHint,
   getProjectInfraDependency,
+  hasSetupFacet,
   listProjectInfraDependencyIds
 } from "../projects/hostInfra/registry.js";
 
@@ -25,15 +27,18 @@ async function installApprovedDependency(options: {
       .map(([name, path]) => `${name} → ${path}`)
       .join("\n");
     const how = installed.reused
-      ? `Reused existing binaries in ${installed.binDir}.`
-      : `Downloaded ${options.label} ${installed.version} into ~/.forge/runtime and linked binaries.`;
+      ? `Reused existing install at ${installed.installRoot}.`
+      : `Downloaded ${options.label} ${installed.version} into ${installed.installRoot} (folder kept intact; current → this version).`;
+    const next = hasSetupFacet(installed.dependencyId)
+      ? `Next: call setup_project_infra with engineId matching this dependency (mongo→mongo, postgres→postgres) and userApproved: true.`
+      : `Next: re-check with get_workspace_health / \`${installed.dependencyId === "node" ? "node -v" : installed.dependencyId}\` — session PATH prefers ~/.forge/runtime/<dep>/current/bin. Do not call setup_project_infra for language runtimes.`;
     return {
       success: true,
       output: [
-        `Installed project infra dependency \`${installed.dependencyId}\` (${options.label}).`,
+        `Installed project dependency \`${installed.dependencyId}\` (${options.label} ${installed.version}).`,
         how,
-        `Next: call setup_project_infra with engineId matching this dependency (mongo→mongo, postgres→postgres) and userApproved: true.`,
-        "Do not use run_terminal to install host infra — the OS sandbox cannot write ~/.forge/runtime.",
+        next,
+        "Do not use run_terminal to install host deps — the OS sandbox cannot write ~/.forge/runtime.",
         binList
       ].join("\n"),
       metadata: {
@@ -41,7 +46,9 @@ async function installApprovedDependency(options: {
         version: installed.version,
         reused: installed.reused,
         binDir: installed.binDir,
-        binaries: installed.binaries
+        installRoot: installed.installRoot,
+        binaries: installed.binaries,
+        needsSetup: hasSetupFacet(installed.dependencyId)
       }
     };
   } catch (err) {
@@ -94,11 +101,19 @@ export async function executeInstallProjectInfra(options: {
     };
   }
 
+  const aliasHint = dependencyIdAliasHint(dependencyIdRaw);
+  if (aliasHint) {
+    return {
+      success: false,
+      output: aliasHint
+    };
+  }
+
   const dep = getProjectInfraDependency(dependencyIdRaw);
   if (!dep) {
     return {
       success: false,
-      output: `Unknown dependencyId \`${dependencyIdRaw}\`. Known: ${listProjectInfraDependencyIds().join(", ")}. Add a registry entry to extend installers.`
+      output: `Unknown dependencyId \`${dependencyIdRaw}\`. Known: ${listProjectInfraDependencyIds().join(", ")}. Add an adapter install facet to extend installers.`
     };
   }
 
@@ -107,7 +122,9 @@ export async function executeInstallProjectInfra(options: {
       success: false,
       output:
         `${dep.label} install is for local (host) sessions only. ` +
-        `Cloud sessions use Docker via setup_project_infra — do not install host binaries here.`
+        (hasSetupFacet(dep.id)
+          ? `Cloud sessions use Docker via setup_project_infra — do not install host binaries here.`
+          : `Cloud sessions need a matching sandbox image (not host install).`)
     };
   }
 

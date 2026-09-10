@@ -67,6 +67,16 @@ describe("executeSetupProjectInfra", () => {
     assert.match(r.output, /postgres.*mongo/i);
   });
 
+  it("rejects node as a service engine", async () => {
+    const r = await executeSetupProjectInfra({
+      sessionId: "s-ws",
+      args: { engineId: "node", userApproved: true }
+    });
+    assert.equal(r.success, false);
+    assert.match(r.output, /install_project_infra/);
+    assert.match(r.output, /not a service engine/);
+  });
+
   it("requires workspace session", async () => {
     const r = await executeSetupProjectInfra({
       sessionId: "s-other",

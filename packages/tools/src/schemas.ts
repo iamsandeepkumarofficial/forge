@@ -100,6 +100,11 @@ export type UpsertWorkspaceParameterInput = z.infer<
   typeof upsertWorkspaceParameterInputSchema
 >;
 
+export const getWorkspaceHealthInputSchema = z.object({});
+export type GetWorkspaceHealthInput = z.infer<
+  typeof getWorkspaceHealthInputSchema
+>;
+
 export const setupProjectInfraInputSchema = z.object({
   engineId: z.enum(["postgres", "mongo"]),
   userApproved: z
@@ -114,12 +119,17 @@ export const installProjectInfraInputSchema = z.object({
   dependencyId: z
     .string()
     .describe(
-      "Extensible infra dependency id (e.g. mongo, postgres). Registry can grow beyond DBs."
+      "Installable dependency id from the adapter registry (e.g. node, mongo, postgres). Use node + version for Node — never node-20."
     ),
   userApproved: z
     .boolean()
     .describe("Must be true only after the user explicitly approved."),
-  version: z.string().optional()
+  version: z
+    .string()
+    .optional()
+    .describe(
+      "Optional version or major (e.g. 20, 20.20.2, or an engines range). Required for toolchain pins."
+    )
 });
 export type InstallProjectInfraInput = z.infer<
   typeof installProjectInfraInputSchema

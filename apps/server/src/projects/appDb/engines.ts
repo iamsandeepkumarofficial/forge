@@ -1,3 +1,6 @@
+import { DB_ADAPTERS, getSetupFacet } from "./registry.js";
+import type { InfraSetupFacet } from "../infra/types.js";
+
 const N_48 = 48;
 
 export type AppDbEngineId = "postgres" | "mongo";
@@ -6,9 +9,7 @@ export type AppDbEngine = {
   id: AppDbEngineId;
   label: string;
   image: string;
-
   containerName: string;
-
   networkAlias: string;
   containerPort: number;
   hostPort: number;
@@ -16,43 +17,33 @@ export type AppDbEngine = {
   envKey: "DATABASE_URL" | "MONGODB_URI";
   user: string;
   password: string;
-
   legacyContainerNames: string[];
 };
 
-export const APP_DB_ENGINES: readonly AppDbEngine[] = [
-  {
-    id: "postgres",
-    label: "PostgreSQL 16",
-    image: "postgres:16",
-    containerName: "forge-appdb-postgres-16",
-    networkAlias: "postgres-apps",
-    containerPort: 5432,
-    hostPort: 5434,
-    volumeName: "forge-appdb-postgres-16-data",
-    envKey: "DATABASE_URL",
-    user: "forge",
-    password: "forge",
-    legacyContainerNames: ["forge-postgres-apps"]
-  },
-  {
-    id: "mongo",
-    label: "MongoDB 7",
-    image: "mongo:7",
-    containerName: "forge-appdb-mongo-7",
-    networkAlias: "mongo-apps",
-    containerPort: 27017,
-    hostPort: 27017,
-    volumeName: "forge-appdb-mongo-7-data",
-    envKey: "MONGODB_URI",
-    user: "forge",
-    password: "forge",
-    legacyContainerNames: ["forge-mongo-apps"]
-  }
-] as const;
+function setupToEngine(setup: InfraSetupFacet): AppDbEngine {
+  return {
+    id: setup.engineId as AppDbEngineId,
+    label: setup.label,
+    image: setup.image,
+    containerName: setup.containerName,
+    networkAlias: setup.networkAlias,
+    containerPort: setup.containerPort,
+    hostPort: setup.hostPort,
+    volumeName: setup.volumeName,
+    envKey: setup.envKey,
+    user: setup.user,
+    password: setup.password,
+    legacyContainerNames: [...setup.legacyContainerNames]
+  };
+}
+
+export const APP_DB_ENGINES: readonly AppDbEngine[] = DB_ADAPTERS.map((a) =>
+  setupToEngine(a.setup)
+);
 
 export function getAppDbEngine(id: string): AppDbEngine | undefined {
-  return APP_DB_ENGINES.find((e) => e.id === id);
+  const setup = getSetupFacet(id);
+  return setup ? setupToEngine(setup) : undefined;
 }
 
 export function appDbEnabled(): boolean {
@@ -97,7 +88,7 @@ export function appDbInjectionHint(hostMode = false): string {
     return (
       "Forge injects `DATABASE_URL` / `MONGODB_URI` at localhost (`127.0.0.1:5434` / `127.0.0.1:27017`). " +
       "Local sessions never start Docker for app DBs — if setup fails, call `install_project_infra` after ask_user " +
-      "(or place binaries in ~/.forge/runtime/bin/), then retry `setup_project_infra`."
+      "(or place binaries in ~/.forge/runtime/<dep>/current/bin/), then retry `setup_project_infra`."
     );
   }
   return "Forge reuses one shared container per image on docker network `forge` (`postgres-apps` / `mongo-apps`) and injects `DATABASE_URL` / `MONGODB_URI`. Do not install database servers.";
@@ -107,18 +98,11 @@ export function detectEnginesFromFacts(facts: {
   envKeysReferenced?: string[];
   detectedStack?: string[];
 }): AppDbEngineId[] {
-  const ids = new Set<AppDbEngineId>();
-  const keys = facts.envKeysReferenced ?? [];
-  const stack = facts.detectedStack ?? [];
-  if (
-    keys.includes("DATABASE_URL") ||
-    stack.includes("prisma") ||
-    stack.some((s) => ["django", "fastapi", "flask"].includes(s))
-  ) {
-    ids.add("postgres");
+  const ids: AppDbEngineId[] = [];
+  for (const adapter of DB_ADAPTERS) {
+    if (adapter.setup.detectFromFacts(facts)) {
+      ids.push(adapter.setup.engineId as AppDbEngineId);
+    }
   }
-  if (keys.includes("MONGODB_URI") || stack.includes("mongoose")) {
-    ids.add("mongo");
-  }
-  return [...ids];
+  return ids;
 }

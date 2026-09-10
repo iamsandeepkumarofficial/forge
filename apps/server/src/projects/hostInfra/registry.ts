@@ -1,4 +1,7 @@
 import { arch as osArch } from "node:os";
+import { DB_ADAPTERS } from "../appDb/registry.js";
+import type { InfraInstallFacet } from "../infra/types.js";
+import { STACK_ADAPTERS } from "../stacks/registry.js";
 
 export type ProjectInfraDependencyId = string;
 
@@ -8,110 +11,59 @@ export type ProjectInfraArchive = {
   fileName: string;
 };
 
-export type ProjectInfraDependency = {
-  id: ProjectInfraDependencyId;
-  label: string;
+export type ProjectInfraDependency = InfraInstallFacet & {
+  id: string;
   binaries: readonly string[];
-  hostSessionOnly: boolean;
-  resolveArchive: (options: {
-    platform: NodeJS.Platform;
-    arch: string;
-    version?: string;
-  }) => ProjectInfraArchive | null;
 };
 
-const MONGO_DEFAULT = "7.0.14";
-const POSTGRES_DEFAULT = "16.6.0";
-
-function mongoArchive(options: {
-  platform: NodeJS.Platform;
-  arch: string;
-  version: string;
-}): ProjectInfraArchive | null {
-  const a =
-    options.arch === "arm64" || options.arch === "aarch64" ? "arm64" : "x86_64";
-  if (options.platform === "darwin") {
-    const slug = a === "arm64" ? "arm64" : "x86_64";
-    const fileName = `mongodb-macos-${slug}-${options.version}.tgz`;
-    return {
-      version: options.version,
-      fileName,
-      url: `https://fastdl.mongodb.org/osx/${fileName}`
-    };
-  }
-  if (options.platform === "linux") {
-    const slug = a === "arm64" ? "aarch64" : "x86_64";
-    const fileName = `mongodb-linux-${slug}-ubuntu2204-${options.version}.tgz`;
-    return {
-      version: options.version,
-      fileName,
-      url: `https://fastdl.mongodb.org/linux/${fileName}`
-    };
-  }
-  return null;
-}
-
-function postgresTriple(
-  platform: NodeJS.Platform,
-  arch: string
-): string | null {
-  const a = arch === "arm64" || arch === "aarch64" ? "aarch64" : "x86_64";
-  if (platform === "darwin") return `${a}-apple-darwin`;
-  if (platform === "linux") return `${a}-unknown-linux-gnu`;
-  return null;
-}
-
-function postgresArchive(options: {
-  platform: NodeJS.Platform;
-  arch: string;
-  version: string;
-}): ProjectInfraArchive | null {
-  const triple = postgresTriple(options.platform, options.arch);
-  if (!triple) return null;
-  const fileName = `postgresql-${options.version}-${triple}.tar.gz`;
+function facetToDep(facet: InfraInstallFacet): ProjectInfraDependency {
+  const binaries = facet.requiredBinaries?.length
+    ? facet.requiredBinaries
+    : [facet.probeBinary];
   return {
-    version: options.version,
-    fileName,
-    url: `https://github.com/theseus-rs/postgresql-binaries/releases/download/${options.version}/${fileName}`
+    ...facet,
+    id: facet.dependencyId,
+    binaries
   };
 }
 
-export const PROJECT_INFRA_DEPENDENCIES: readonly ProjectInfraDependency[] = [
-  {
-    id: "mongo",
-    label: "MongoDB",
-    binaries: ["mongod"],
-    hostSessionOnly: true,
-    resolveArchive: ({ platform, arch, version }) =>
-      mongoArchive({
-        platform,
-        arch,
-        version: version?.trim() || MONGO_DEFAULT
-      })
-  },
-  {
-    id: "postgres",
-    label: "PostgreSQL",
-    binaries: ["postgres", "initdb", "psql", "pg_isready"],
-    hostSessionOnly: true,
-    resolveArchive: ({ platform, arch, version }) =>
-      postgresArchive({
-        platform,
-        arch,
-        version: version?.trim() || POSTGRES_DEFAULT
-      })
+function collectInstallFacets(): InfraInstallFacet[] {
+  const out: InfraInstallFacet[] = [];
+  for (const adapter of STACK_ADAPTERS) {
+    if (adapter.install) out.push(adapter.install);
   }
-];
+  for (const adapter of DB_ADAPTERS) {
+    out.push(adapter.install);
+  }
+  return out;
+}
 
 export function listProjectInfraDependencyIds(): string[] {
-  return PROJECT_INFRA_DEPENDENCIES.map((d) => d.id);
+  return collectInstallFacets().map((f) => f.dependencyId);
 }
 
 export function getProjectInfraDependency(
   id: string
 ): ProjectInfraDependency | null {
   const key = id.trim().toLowerCase();
-  return PROJECT_INFRA_DEPENDENCIES.find((d) => d.id === key) ?? null;
+
+  const aliased = key.match(/^(node|python|go)-(\d+(?:\.\d+)*)$/);
+  if (aliased) {
+    return null;
+  }
+  const facet = collectInstallFacets().find((f) => f.dependencyId === key);
+  return facet ? facetToDep(facet) : null;
+}
+
+export function dependencyIdAliasHint(rawId: string): string | null {
+  const key = rawId.trim().toLowerCase();
+  const m = key.match(/^(node|python|go)-(\d+(?:\.\d+)*)$/);
+  if (!m) return null;
+  return `Use dependencyId=\`${m[1]}\` with version=\`${m[2]}\` (not \`${key}\`).`;
+}
+
+export function hasSetupFacet(dependencyId: string): boolean {
+  return DB_ADAPTERS.some((a) => a.install.dependencyId === dependencyId);
 }
 
 export function currentHostArch(): string {

@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   currentHostArch,
+  dependencyIdAliasHint,
   getProjectInfraDependency,
   listProjectInfraDependencyIds
 } from "./registry.js";
 
 describe("hostInfra registry", () => {
-  it("lists known dependency ids", () => {
+  it("lists known dependency ids including node", () => {
     const ids = listProjectInfraDependencyIds();
-    assert.deepEqual(ids, ["mongo", "postgres"]);
+    assert.ok(ids.includes("node"));
+    assert.ok(ids.includes("mongo"));
+    assert.ok(ids.includes("postgres"));
+    assert.ok(!ids.includes("python"));
   });
 
   it("looks up dependencies case-insensitively", () => {
@@ -18,6 +22,28 @@ describe("hostInfra registry", () => {
     assert.ok(mongo);
     assert.equal(mongo!.id, "mongo");
     assert.equal(missing, null);
+  });
+
+  it("rejects node-20 style ids with a hint", () => {
+    assert.equal(getProjectInfraDependency("node-20"), null);
+    assert.match(
+      dependencyIdAliasHint("node-20") ?? "",
+      /dependencyId=`node`.*version=`20`/
+    );
+  });
+
+  it("resolves node archive for darwin arm64 with major pin", () => {
+    const node = getProjectInfraDependency("node");
+    assert.ok(node);
+    const a = node!.resolveArchive({
+      platform: "darwin",
+      arch: "arm64",
+      version: "20"
+    });
+    assert.ok(a);
+    assert.equal(a!.version, "20.20.2");
+    assert.match(a!.url, /nodejs\.org\/dist\/v20\.20\.2/);
+    assert.match(a!.fileName, /darwin-arm64/);
   });
 
   it("resolves mongo and postgres archives for darwin arm64", () => {

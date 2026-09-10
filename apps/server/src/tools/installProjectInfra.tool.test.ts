@@ -12,6 +12,7 @@ describe("executeInstallProjectInfra", () => {
     version: string;
     reused: boolean;
     binDir: string;
+    installRoot: string;
     binaries: Record<string, string>;
   }>;
 
@@ -20,8 +21,9 @@ describe("executeInstallProjectInfra", () => {
       dependencyId: id,
       version: "7.0.14",
       reused: false,
-      binDir: "/tmp/forge-runtime/bin",
-      binaries: { mongod: "/tmp/forge-runtime/bin/mongod" }
+      binDir: "/tmp/forge-runtime/mongo/7.0.14/bin",
+      installRoot: "/tmp/forge-runtime/mongo/7.0.14",
+      binaries: { mongod: "/tmp/forge-runtime/mongo/7.0.14/bin/mongod" }
     });
     mock.module("../projects/sandboxRuntime/resolve.js", {
       exports: {
@@ -78,5 +80,38 @@ describe("executeInstallProjectInfra", () => {
     assert.equal(r.success, true);
     assert.match(r.output, /setup_project_infra/);
     assert.equal(r.metadata?.dependencyId, "mongo");
+  });
+
+  it("rejects node-20 with alias hint", async () => {
+    const r = await executeInstallProjectInfra({
+      sessionId: "s1",
+      args: { dependencyId: "node-20", userApproved: true, version: "20" }
+    });
+    assert.equal(r.success, false);
+    assert.match(r.output, /dependencyId=`node`/);
+  });
+
+  it("installs node without pointing at setup_project_infra", async () => {
+    host = true;
+    installFn = async (id) => ({
+      dependencyId: id,
+      version: "20.20.2",
+      reused: false,
+      binDir: "/tmp/forge-runtime/node/20.20.2/bin",
+      installRoot: "/tmp/forge-runtime/node/20.20.2",
+      binaries: {
+        node: "/tmp/forge-runtime/node/20.20.2/bin/node",
+        npm: "/tmp/forge-runtime/node/20.20.2/bin/npm",
+        npx: "/tmp/forge-runtime/node/20.20.2/bin/npx"
+      }
+    });
+    const r = await executeInstallProjectInfra({
+      sessionId: "s1",
+      args: { dependencyId: "node", userApproved: true, version: "20" }
+    });
+    assert.equal(r.success, true);
+    assert.match(r.output, /get_workspace_health|node -v/);
+    assert.ok(!/Next: call setup_project_infra/.test(r.output));
+    assert.equal(r.metadata?.needsSetup, false);
   });
 });

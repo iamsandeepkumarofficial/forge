@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createConnection } from "node:net";
 import type { AppDbEngine } from "./engines.js";
+import { forgeRuntimeBinDirs } from "../hostInfra/paths.js";
 
 const execFileAsync = promisify(execFile);
 const N_30 = 30;
@@ -45,8 +46,10 @@ function which(cmd: string): string | null {
 }
 
 function resolveBin(name: string): string {
-  const runtime = join(homedir(), ".forge", "runtime", "bin", name);
-  if (existsSync(runtime)) return runtime;
+  for (const dir of forgeRuntimeBinDirs()) {
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
   const brew = [
     `/opt/homebrew/opt/postgresql@16/bin/${name}`,
     `/usr/local/opt/postgresql@16/bin/${name}`,
@@ -59,7 +62,7 @@ function resolveBin(name: string): string {
   const fromPath = which(name);
   if (fromPath) return fromPath;
   throw new Error(
-    `Missing \`${name}\` for host-mode app DB. Call install_project_infra after user approval, or place binaries in ~/.forge/runtime/bin/. Use a Cloud (Docker) session for compose app DBs.`
+    `Missing \`${name}\` for host-mode app DB. Call install_project_infra after user approval, or place binaries under ~/.forge/runtime/<dep>/current/bin/. Use a Cloud (Docker) session for compose app DBs.`
   );
 }
 

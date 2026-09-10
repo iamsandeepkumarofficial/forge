@@ -3,6 +3,7 @@ import { formatToolDescription } from "@forge/core";
 import type { ToolRun } from "../types.js";
 import {
   dockerImageLookupInputSchema,
+  getWorkspaceHealthInputSchema,
   installProjectInfraInputSchema,
   setupProjectInfraInputSchema,
   upsertWorkspaceParameterInputSchema
@@ -13,6 +14,11 @@ export function setupTools(
   options?: { includeDockerImageLookup?: boolean }
 ): Record<string, Tool> {
   const tools: Record<string, Tool> = {
+    get_workspace_health: tool({
+      description: formatToolDescription("get_workspace_health"),
+      inputSchema: getWorkspaceHealthInputSchema,
+      execute: async (input) => run("get_workspace_health", input)
+    }),
     upsert_workspace_parameter: tool({
       description: formatToolDescription("upsert_workspace_parameter"),
       inputSchema: upsertWorkspaceParameterInputSchema,

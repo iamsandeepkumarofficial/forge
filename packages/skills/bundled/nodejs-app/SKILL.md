@@ -41,4 +41,11 @@ Use for any repo with `package.json`. See also: `frontend-app`, `backend-app`, f
 
 ## Node version
 
-- Check `engines.node` and `.nvmrc`. If mismatch, note it for the user; do not install nvm in sandbox unless asked.
+1. Prefer health checklist (`get_workspace_health` → External dependencies runtime-version items). Also read `engines.node`, `.nvmrc`, `.node-version`, `.tool-versions`, or `volta.node`.
+2. Compare to the **session runtime** (`node -v`), not your laptop alone.
+3. On mismatch:
+   - Tell the user the required vs available versions.
+   - `ask_user` before installing anything.
+   - **Local/host sessions:** after approval, call `install_project_infra` with `dependencyId=node` and `version` set to the needed major or pin (e.g. `20`, `20.20.2`, or the engines range). Never use `dependencyId=node-20`. Never use `run_terminal` to install Node. Do **not** call `setup_project_infra` for Node.
+   - **Cloud/Docker sandbox:** default image is Node **20**. If the app needs another major, explain the mismatch; after `ask_user`, ask ops to pin `FORGE_SANDBOX_IMAGE` / a custom image. Do not silently upgrade the whole sandbox; do not call host `install_project_infra` on cloud sessions.
+4. Re-check with `node -v` and `get_workspace_health` after provisioning (session PATH prefers `~/.forge/runtime/node/current/bin`).
