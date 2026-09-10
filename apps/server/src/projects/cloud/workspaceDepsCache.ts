@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { docker } from "./sessionSandbox/container.js";
-import { WORKSPACE_MOUNT } from "./sessionSandbox/constants.js";
+import { docker } from "../sessionSandbox/container.js";
+import { WORKSPACE_MOUNT } from "../sessionSandbox/constants.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -58,7 +58,7 @@ lockhash() {
 
 async function isHostRuntime(sessionId?: string): Promise<boolean> {
   if (!sessionId) return false;
-  const { isHostSession } = await import("./sandboxRuntime/resolve.js");
+  const { isHostSession } = await import("../sandboxRuntime/resolve.js");
   return isHostSession(sessionId);
 }
 

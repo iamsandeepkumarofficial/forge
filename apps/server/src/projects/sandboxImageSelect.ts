@@ -1,10 +1,8 @@
 import { ProjectRepository } from "../catalog/projectRepository.js";
 import { WorkspaceRepository } from "../catalog/workspaceRepository.js";
-import {
-  factsHaveNodeEvidence,
-  readRepoFactsFromHost
-} from "./repoFacts.js";
+import { readRepoFactsFromHost } from "./repoFacts.js";
 import { selectSandboxImageName } from "./sessionSandbox/constants.js";
+import { getStackAdapter } from "./stacks/registry.js";
 
 function factsRootForProject(project: {
   source: string;
@@ -16,13 +14,13 @@ function factsRootForProject(project: {
   return { path: "", analyzable: false };
 }
 
-
 export async function selectSandboxImageForWorkspace(
   workspaceId: string
 ): Promise<string> {
   const workspaceRepo = new WorkspaceRepository();
   const projectRepo = new ProjectRepository();
   const members = await workspaceRepo.listMembers(workspaceId);
+  const nodeAdapter = getStackAdapter("node");
   let hasNode = false;
   for (const member of members) {
     const project = await projectRepo.getById(member.projectId);
@@ -33,7 +31,7 @@ export async function selectSandboxImageForWorkspace(
       rootPath,
       repoName: member.repoName
     });
-    if (factsHaveNodeEvidence(facts)) {
+    if (nodeAdapter?.matchesFacts(facts)) {
       hasNode = true;
       break;
     }

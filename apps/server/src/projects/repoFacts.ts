@@ -1,5 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  collectEcosystemEvidence,
+  detectPackageManager,
+  detectRuntimeRequirements,
+  detectStack,
+  factsHaveNodeEvidence,
+  factsHavePythonEvidence,
+  suggestSkillsForFacts,
+  type RuntimeRequirement,
+  type StackEvidence
+} from "./stacks/registry.js";
 
 export type PackageManager = "pnpm" | "yarn" | "npm" | "bun";
 
@@ -9,7 +20,6 @@ export type EcosystemEvidence = {
   ecosystem: EcosystemId;
   manifests: string[];
   lockfiles: string[];
-
   packageManagerGuess?: string;
 };
 
@@ -33,15 +43,15 @@ export type RepoFacts = {
   launchReady: boolean;
   detectedStack: string[];
   suggestedSkills: string[];
-
   envKeysFromSource: string[];
-
   envKeysReferenced: string[];
   envExampleValues: Record<string, string>;
   ecosystemEvidence: EcosystemEvidence[];
+
+  runtimeRequirements: RuntimeRequirement[];
 };
 
-const LAUNCH_PATHS = [".forge/launch.json", "forge.json"];
+const LAUNCH_PATHS = [".forge/launch.json"];
 
 function readText(filePath: string): string | null {
   try {
@@ -51,28 +61,7 @@ function readText(filePath: string): string | null {
   }
 }
 
-export function detectPackageManager(
-  rootPath: string
-): PackageManager | undefined {
-  const pkgRaw = readText(path.join(rootPath, "package.json"));
-  if (pkgRaw) {
-    try {
-      const pkg = JSON.parse(pkgRaw) as { packageManager?: string };
-      const pm = pkg.packageManager?.split("@")[0]?.trim();
-      if (pm === "pnpm" || pm === "yarn" || pm === "npm" || pm === "bun") {
-        return pm;
-      }
-    } catch {
-      void 0;
-    }
-  }
-  if (fs.existsSync(path.join(rootPath, "pnpm-lock.yaml"))) return "pnpm";
-  if (fs.existsSync(path.join(rootPath, "yarn.lock"))) return "yarn";
-  if (fs.existsSync(path.join(rootPath, "bun.lockb"))) return "bun";
-  if (fs.existsSync(path.join(rootPath, "package-lock.json"))) return "npm";
-  if (pkgRaw) return "npm";
-  return undefined;
-}
+export { detectPackageManager };
 
 function peekLaunchApps(rootPath: string): LaunchAppFact[] {
   for (const rel of LAUNCH_PATHS) {
@@ -132,46 +121,6 @@ function readScripts(rootPath: string): string[] {
   } catch {
     return [];
   }
-}
-
-function detectStackFromDeps(deps: Record<string, string>): string[] {
-  const has = (n: string) => Object.prototype.hasOwnProperty.call(deps, n);
-  const stacks: string[] = [];
-  if (has("next")) stacks.push("next");
-  else if (has("react") || has("react-dom")) stacks.push("react");
-  if (has("vue") || has("nuxt")) stacks.push(has("nuxt") ? "nuxt" : "vue");
-  if (has("@nestjs/core")) stacks.push("nestjs");
-  else if (has("express")) stacks.push("express");
-  else if (has("fastify")) stacks.push("fastify");
-  if (has("prisma") || has("@prisma/client")) stacks.push("prisma");
-  if (has("mongoose")) stacks.push("mongoose");
-  return stacks;
-}
-
-function detectStack(rootPath: string): string[] {
-  const raw = readText(path.join(rootPath, "package.json"));
-  if (raw) {
-    try {
-      const pkg = JSON.parse(raw) as {
-        dependencies?: Record<string, string>;
-        devDependencies?: Record<string, string>;
-      };
-      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-      const fromNode = detectStackFromDeps(deps);
-      if (fromNode.length > 0) return fromNode;
-    } catch {
-      void 0;
-    }
-  }
-  if (fs.existsSync(path.join(rootPath, "manage.py"))) return ["django"];
-  if (fs.existsSync(path.join(rootPath, "pyproject.toml"))) {
-    const py = readText(path.join(rootPath, "pyproject.toml")) ?? "";
-    if (/fastapi/i.test(py)) return ["fastapi"];
-    if (/flask/i.test(py)) return ["flask"];
-    return ["python"];
-  }
-  if (fs.existsSync(path.join(rootPath, "requirements.txt"))) return ["python"];
-  return [];
 }
 
 const ENV_EXAMPLE_FILES = [".env.example", ".env.sample", ".env.template"];
@@ -259,17 +208,21 @@ function sniffEnvKeys(rootPath: string, maxFiles = 40): string[] {
   return [...keys].sort();
 }
 
-import {
-  collectEcosystemEvidence,
-  suggestSkillsForFacts
-} from "./repoFactsEcosystem.js";
+function toEcosystemEvidence(rows: StackEvidence[]): EcosystemEvidence[] {
+  return rows.map((e) => ({
+    ecosystem: e.ecosystem,
+    manifests: e.manifests,
+    lockfiles: e.lockfiles,
+    packageManagerGuess: e.packageManagerGuess
+  }));
+}
 
 export {
   collectEcosystemEvidence,
   factsHaveNodeEvidence,
   factsHavePythonEvidence,
   suggestSkillsForFacts
-} from "./repoFactsEcosystem.js";
+};
 
 export function readRepoFactsFromHost(options: {
   rootPath: string;
@@ -293,7 +246,8 @@ export function readRepoFactsFromHost(options: {
       envKeysFromSource: [],
       envKeysReferenced: [],
       envExampleValues: {},
-      ecosystemEvidence: []
+      ecosystemEvidence: [],
+      runtimeRequirements: []
     };
   }
   const packageJsonPaths = collectPackageJsonPaths(rootPath, repoName);
@@ -306,10 +260,9 @@ export function readRepoFactsFromHost(options: {
     ...new Set([...envKeysFromSource, ...Object.keys(envExampleValues)])
   ].sort();
   const packageManager = detectPackageManager(rootPath);
-  const ecosystemEvidence = collectEcosystemEvidence(rootPath, {
-    packageManager,
-    packageJsonPaths
-  });
+  const ecosystemEvidence = toEcosystemEvidence(
+    collectEcosystemEvidence(rootPath)
+  );
   const facts: RepoFacts = {
     repoName,
     rootPath,
@@ -325,7 +278,8 @@ export function readRepoFactsFromHost(options: {
     envKeysFromSource,
     envKeysReferenced,
     envExampleValues,
-    ecosystemEvidence
+    ecosystemEvidence,
+    runtimeRequirements: detectRuntimeRequirements(rootPath)
   };
   facts.suggestedSkills = suggestSkillsForFacts(facts);
   return facts;

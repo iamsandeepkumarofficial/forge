@@ -35,8 +35,20 @@ describe("selectSandboxImageForWorkspace", () => {
     });
     mock.module("./repoFacts.js", {
       exports: {
-        readRepoFactsFromHost: () => ({ analyzable: true }),
-        factsHaveNodeEvidence: () => hasNode
+        readRepoFactsFromHost: () => ({
+          analyzable: true,
+          hasPackageJson: hasNode,
+          ecosystemEvidence: hasNode
+            ? [
+                {
+                  ecosystem: "node",
+                  manifests: ["package.json"],
+                  lockfiles: []
+                }
+              ]
+            : [],
+          detectedStack: []
+        })
       }
     });
     ({ selectSandboxImageForWorkspace } =

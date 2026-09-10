@@ -3,14 +3,18 @@ import { describe, it } from "node:test";
 import { checkHostToolchain } from "./hostToolchain.js";
 
 describe("hostToolchain", () => {
-  it("reports git and node presence without throwing", async () => {
+  it("checks git only (not language runtimes)", async () => {
     const report = await checkHostToolchain();
     assert.equal(typeof report.ok, "boolean");
     assert.ok(Array.isArray(report.missing));
     assert.ok(Array.isArray(report.guidance));
+    assert.ok(!report.missing.includes("node"));
+    assert.ok(
+      report.guidance.every((g) => !/Node\.js/i.test(g)),
+      "bootstrap must not require Node"
+    );
     if (!report.ok) {
-      assert.ok(report.missing.length > 0);
-      assert.ok(report.guidance.length > 0);
+      assert.deepEqual(report.missing, ["git"]);
     }
   });
 });

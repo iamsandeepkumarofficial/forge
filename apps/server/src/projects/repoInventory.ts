@@ -107,8 +107,12 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
     }
   }
   if (inventory.isWorkspace) {
+    const first = inventory.members[0]?.repo ?? "repo";
     lines.push(
-      "- Launch config: **only** `/workspace/.forge/launch.json` (session-root). Apps use `repo` + session-relative `cwd` (e.g. `bp-frontend`). Do not create per-member `.forge/launch.json`."
+      "- Launch config: **only** `/workspace/.forge/launch.json` (session-root). Apps use `repo` + session-relative `cwd` (e.g. `bp-frontend`). Do not create per-member `.forge/launch.json`.",
+      `- Session root \`/workspace\` is **not** a git repo; member folders are the git roots.`,
+      `- File tools: paths are relative to \`/workspace\` and **must start with a member repo name** (example: \`${first}/package.json\`). Never use host paths.`,
+      `- \`run_terminal\` default cwd is \`/workspace\`. Always pass \`workingDirectory\` as a member repo (e.g. \`${first}\`) or a subdirectory under it.`
     );
   }
   if (inventory.dependsOnGraph.length > 0) {

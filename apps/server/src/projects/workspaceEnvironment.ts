@@ -13,7 +13,7 @@ import {
   clearWorkspaceDepsCache,
   restoreCachedDeps,
   workspaceDepsVolumeName
-} from "./workspaceDepsCache.js";
+} from "./cloud/workspaceDepsCache.js";
 import { resolveSandbox } from "./sandboxExec.js";
 import {
   formatLaunchAppNames,

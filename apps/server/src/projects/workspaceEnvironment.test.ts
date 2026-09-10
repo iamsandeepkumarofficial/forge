@@ -86,7 +86,7 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
         resolveSandbox: async () => ({ containerName: "c1" })
       }
     });
-    mock.module("./workspaceDepsCache.js", {
+    mock.module("./cloud/workspaceDepsCache.js", {
       exports: {
         restoreCachedDeps: async (opts: { repoName: string }) => {
           restored.push(opts.repoName);
