@@ -9,6 +9,7 @@ import {
 } from "../../lib/tool-display.js";
 import { cn } from "../../lib/utils.js";
 import { chatTurnActivity, liveToolName } from "./chat-turn-activity.js";
+import { HealthIssuesBanner } from "./health-panel.js";
 
 const N_80 = 80;
 
@@ -128,6 +129,7 @@ export function ChatMessageList(options: {
   sessionKind: "ticket" | "workbench";
   projectId: string;
   chatId: string;
+  sessionId?: string;
   messages: UiChatMessage[];
   isStreaming: boolean;
   streamingText: string;
@@ -139,6 +141,7 @@ export function ChatMessageList(options: {
   clearError: () => void;
   onPickStarter?: (prompt: string) => void;
   onOpenFile?: (path: string) => void;
+  onOpenHelp?: () => void;
 }) {
   const {
     scrollerRef,
@@ -153,7 +156,9 @@ export function ChatMessageList(options: {
     error,
     clearError,
     onPickStarter,
-    onOpenFile
+    onOpenFile,
+    sessionId,
+    onOpenHelp
   } = options;
   return (
     <div
@@ -178,6 +183,8 @@ export function ChatMessageList(options: {
           clearError={clearError}
           onPickStarter={onPickStarter}
           onOpenFile={onOpenFile}
+          sessionId={sessionId}
+          onOpenHelp={onOpenHelp}
         />
       </div>
     </div>
@@ -196,29 +203,24 @@ function TranscriptBody(options: {
   clearError: () => void;
   onPickStarter?: (prompt: string) => void;
   onOpenFile?: (path: string) => void;
+  sessionId?: string;
+  onOpenHelp?: () => void;
 }) {
-  const {
-    messages,
-    isStreaming,
-    streamingText,
-    streamingReasoning,
-    liveToolParts,
-    status,
-    waiting,
-    error,
-    clearError,
-    onPickStarter,
-    onOpenFile
-  } = options;
   const showLive =
-    isStreaming &&
-    (streamingText || streamingReasoning || liveToolParts.length > 0);
+    options.isStreaming ||
+    Boolean(options.streamingText) ||
+    Boolean(options.streamingReasoning) ||
+    options.liveToolParts.length > 0;
   return (
     <>
-      {messages.length === 0 && !isStreaming ? (
-        <EmptyChat onPickStarter={onPickStarter} />
+      {options.messages.length === 0 && !options.isStreaming ? (
+        <EmptyChat
+          onPickStarter={options.onPickStarter}
+          sessionId={options.sessionId}
+          onOpenHelp={options.onOpenHelp}
+        />
       ) : null}
-      {messages.map((m) =>
+      {options.messages.map((m) =>
         m.role === "user" ? (
           <UserTurn key={m.id} text={extractMessageText(m)} />
         ) : (
@@ -227,30 +229,30 @@ function TranscriptBody(options: {
             text={extractMessageText(m)}
             reasoning={extractMessageReasoning(m)}
             tools={toolPartsOf(m)}
-            onOpenFile={onOpenFile}
+            onOpenFile={options.onOpenFile}
           />
         )
       )}
       {showLive ? (
         <AssistantTurn
-          text={streamingText}
-          reasoning={streamingReasoning}
-          tools={liveToolParts}
+          text={options.streamingText}
+          reasoning={options.streamingReasoning}
+          tools={options.liveToolParts}
           streaming
-          onOpenFile={onOpenFile}
+          onOpenFile={options.onOpenFile}
         />
       ) : null}
       <TurnActivity
         label={chatTurnActivity({
-          status,
-          waiting,
-          toolName: liveToolName(liveToolParts)
+          status: options.status,
+          waiting: options.waiting,
+          toolName: liveToolName(options.liveToolParts)
         })}
       />
-      {error ? (
+      {options.error ? (
         <div className="flex items-center gap-2 text-xs text-destructive">
-          <span>{error.message}</span>
-          <button onClick={() => clearError()} className="underline">
+          <span>{options.error.message}</span>
+          <button onClick={() => options.clearError()} className="underline">
             dismiss
           </button>
         </div>
@@ -273,8 +275,12 @@ function TurnActivity({ label }: { label: string | null }) {
   );
 }
 
-function EmptyChat(options: { onPickStarter?: (prompt: string) => void }) {
-  const { onPickStarter } = options;
+function EmptyChat(options: {
+  onPickStarter?: (prompt: string) => void;
+  sessionId?: string;
+  onOpenHelp?: () => void;
+}) {
+  const { onPickStarter, sessionId, onOpenHelp } = options;
   return (
     <div className="flex flex-col items-center gap-4 px-2 pt-8 text-center">
       <div>
@@ -284,6 +290,9 @@ function EmptyChat(options: { onPickStarter?: (prompt: string) => void }) {
           running.
         </p>
       </div>
+      {sessionId ? (
+        <HealthIssuesBanner sessionId={sessionId} onOpenHelp={onOpenHelp} />
+      ) : null}
       {onPickStarter ? (
         <div className="flex w-full max-w-sm flex-col gap-2">
           {CHAT_STARTERS.map((starter) => (

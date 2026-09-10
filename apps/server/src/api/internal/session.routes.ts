@@ -2,9 +2,8 @@ import { Router } from "express";
 import {
   handleSessionStart,
   handleSessionStatus,
-  handleDownloadArchive,
-  handlePromote,
   handleListApps,
+  handleSessionHealth,
   handleScaffoldApps,
   handleWriteAppsConfig,
   handleRunApp,
@@ -32,14 +31,11 @@ function mountSessionCoreRoutes(router: Router) {
   router.get("/session/status", (req, res) => {
     return handleSessionStatus(req, res);
   });
-  router.get("/download", (req, res) => {
-    return handleDownloadArchive(req, res);
-  });
-  router.post("/promote", (req, res) => {
-    return handlePromote(req, res);
-  });
   router.get("/apps", (req, res) => {
     return handleListApps(req, res);
+  });
+  router.get("/session/health", (req, res) => {
+    return handleSessionHealth(req, res);
   });
 }
 

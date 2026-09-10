@@ -64,15 +64,6 @@ describe("mountSessionRoutes", () => {
         })
       }
     });
-    mock.module("../../projects/codeArchive.js", {
-      exports: {
-        spawnRepoTarGz: async () => ({
-          child: { stdout: { pipe() {} }, stderr: { on() {} }, on() {} },
-          filename: "repo.tar.gz"
-        }),
-        promoteToCanonical: async () => ({ target: "objectStore", files: 0 })
-      }
-    });
     mock.module("../../projects/appRunner.js", {
       exports: {
         listAppStatuses: async () => ({ exists: false, apps: [] }),

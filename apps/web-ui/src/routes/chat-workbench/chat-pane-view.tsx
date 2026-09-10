@@ -56,6 +56,7 @@ export type ChatPaneViewProps = {
   onAttachFiles: (files: File[]) => void;
   onRemoveAttachment: (index: number) => void;
   onOpenFile?: (path: string) => void;
+  onOpenHelp?: () => void;
 };
 
 export function ChatPaneView(props: ChatPaneViewProps) {
@@ -79,6 +80,8 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         clearError={o.clearError}
         onPickStarter={o.setInput}
         onOpenFile={o.onOpenFile}
+        sessionId={o.sessionId}
+        onOpenHelp={o.onOpenHelp}
       />
       {o.pendingAskUser && o.onSubmitAskUser && o.onDismissAskUser ? (
         <div className="shrink-0 border-t px-3 py-2">

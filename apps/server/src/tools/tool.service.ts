@@ -19,6 +19,7 @@ import {
 import { executeListSkills } from "./listSkills.tool.js";
 import { executeInvokeSkill } from "./invokeSkill.tool.js";
 import { executeUpsertWorkspaceParameter } from "./upsertWorkspaceParameter.tool.js";
+import { executeGetWorkspaceHealth } from "./getWorkspaceHealth.tool.js";
 import { executeDockerImageLookup } from "./dockerImageLookup.tool.js";
 import { executeSetupProjectInfra } from "./setupProjectInfra.tool.js";
 import { executeInstallProjectInfra } from "./installProjectInfra.tool.js";
@@ -142,6 +143,10 @@ async function routeNamedTool(options: {
   if (toolName === "invoke_skill") {
     const skillId = typeof args.skillId === "string" ? args.skillId : "";
     const body = await executeInvokeSkill({ sessionId, skillId });
+    return { kind: "result", status: N_200, body };
+  }
+  if (toolName === "get_workspace_health") {
+    const body = await executeGetWorkspaceHealth({ sessionId, args });
     return { kind: "result", status: N_200, body };
   }
   if (toolName === "upsert_workspace_parameter") {

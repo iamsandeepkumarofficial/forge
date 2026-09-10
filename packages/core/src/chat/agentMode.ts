@@ -20,6 +20,7 @@ const SWITCH_TOOLS = ["switch_mode"] as const;
 const ASK_USER_TOOLS = ["ask_user"] as const;
 const SUBTASK_TOOLS = ["create_subtask"] as const;
 const SETUP_TOOLS = [
+  "get_workspace_health",
   "upsert_workspace_parameter",
   "docker_image_lookup",
   "setup_project_infra",

@@ -14,23 +14,14 @@ describe("buildPromptContextForSession", () => {
         })
       }
     });
-    mock.module("../projects/appRunner.js", {
-      exports: {
-        readForgeConfig: async () => ({
-          exists: true,
-          source: "session",
-          config: {
-            apps: [{ name: "web", repo: "web", port: 3000 }]
-          }
-        })
-      }
-    });
     mock.module("../catalog/chatFeatureRepository.js", {
       exports: {
         ChatFeatureRepository: class {
           async getBySessionId(sessionId: string) {
-            if (sessionId === "s-ws") return { workspaceId: "ws1" };
-            return { workspaceId: null };
+            if (sessionId === "s-ws") {
+              return { workspaceId: "ws1", executionTarget: "local" };
+            }
+            return { workspaceId: null, executionTarget: "local" };
           }
         }
       }
@@ -43,32 +34,6 @@ describe("buildPromptContextForSession", () => {
               { repoName: "api", dependsOn: [] },
               { repoName: "web", dependsOn: ["api"] }
             ];
-          }
-        }
-      }
-    });
-    mock.module("../catalog/workspaceHealthRepository.js", {
-      exports: {
-        WorkspaceHealthRepository: class {
-          async get() {
-            return {
-              report: {
-                status: "warnings",
-                computedAt: "2026-01-01T00:00:00.000Z",
-                members: [],
-                findings: [
-                  {
-                    code: "missing-env-key",
-                    severity: "warning",
-                    message: "JWT_SECRET missing"
-                  }
-                ],
-                dependsOnGraph: [],
-                shadows: {
-                  preferredSandboxImage: "forge-sandbox:latest"
-                }
-              }
-            };
           }
         }
       }
@@ -90,28 +55,14 @@ describe("buildPromptContextForSession", () => {
         formatRepoInventoryBlock: () => "## Workspace repos\ninventory"
       }
     });
-    mock.module("../services/workspace/health/types.js", {
-      exports: {
-        formatHealthPromptBlock: () => "## Health\nwarnings",
-        formatSetupAgentSopBlock: (opts?: { preferredSandboxImage?: string }) =>
-          `SOP image=${opts?.preferredSandboxImage ?? "default"}`
-      }
-    });
-    mock.module("./repoReadiness.js", {
-      exports: {
-        readinessFromForgeApps: () => ({
-          readyRepos: ["web"],
-          pendingRepos: ["api"]
-        })
-      }
-    });
     ({ buildPromptContextForSession } = await import("./promptContext.js"));
   });
 
-  it("builds workspace prompt context with inventory, health, readiness", async () => {
+  it("builds workspace prompt context with inventory only (no health/readiness)", async () => {
     const ctx = await buildPromptContextForSession({
       sessionId: "s-ws",
       paths: {
+        sessionRoot: "/workspace",
         workingDir: "/workspace",
         repoDir: "root",
         worktrees: { api: "/workspace/api", web: "/workspace/web" },
@@ -119,27 +70,25 @@ describe("buildPromptContextForSession", () => {
       }
     });
     assert.equal(ctx.inventoryBlock, "## Workspace repos\ninventory");
-    assert.equal(ctx.healthBlock, "## Health\nwarnings");
-    assert.match(ctx.setupSopBlock ?? "", /forge-sandbox:latest/);
+    assert.equal(ctx.executionTarget, "local");
     assert.deepEqual(ctx.envKeyNames, ["DATABASE_URL", "JWT_SECRET"]);
-    assert.deepEqual(ctx.readiness, {
-      readyRepos: ["web"],
-      pendingRepos: ["api"]
-    });
+    assert.equal(
+      "healthBlock" in ctx && (ctx as { healthBlock?: string }).healthBlock,
+      false
+    );
   });
 
   it("builds single-repo inventory when no worktrees", async () => {
     const ctx = await buildPromptContextForSession({
       sessionId: "s-solo",
       paths: {
+        sessionRoot: "/workspace",
         workingDir: "/workspace",
         repoDir: "app",
         hostWorkingDir: "/host/app"
       }
     });
     assert.equal(ctx.inventoryBlock, "## Workspace repos\ninventory");
-    assert.equal(ctx.healthBlock, "");
-    assert.equal(ctx.setupSopBlock, undefined);
-    assert.equal(ctx.readiness, undefined);
+    assert.deepEqual(ctx.envKeyNames, ["DATABASE_URL", "JWT_SECRET"]);
   });
 });

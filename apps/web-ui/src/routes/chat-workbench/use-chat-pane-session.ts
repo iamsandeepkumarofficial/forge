@@ -121,6 +121,6 @@ export function useChatPaneSession(options: SessionOptions) {
         setStreamingText: s.setStreamingText,
         setStreamingReasoning: s.setStreamingReasoning,
         setLiveToolParts: s.setLiveToolParts
-      })
+      }) as Promise<void>
   };
 }

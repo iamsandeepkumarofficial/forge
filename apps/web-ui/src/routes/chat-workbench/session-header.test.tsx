@@ -42,6 +42,7 @@ describe("SessionHeader", () => {
     expect(screen.getByRole("button", { name: "Files" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Changes" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Run" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help" })).toBeTruthy();
     screen.getByRole("button", { name: "Files" }).click();
     expect(onLeftMode).toHaveBeenCalledWith("files");
   });
@@ -58,9 +59,9 @@ describe("SessionHeader", () => {
       />
     );
     expect(screen.getByRole("button", { name: "Leave session" })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Leave session" })).toHaveLength(
-      1
-    );
+    expect(
+      screen.getAllByRole("button", { name: "Leave session" })
+    ).toHaveLength(1);
   });
 
   it("asks before leaving the session", () => {
@@ -77,6 +78,7 @@ describe("SessionHeader", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Leave session" }));
     expect(screen.getByText("Leave this session?")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Stay" }));
     expect(onBack).not.toHaveBeenCalled();
     expect(screen.queryByText("Leave this session?")).toBeNull();

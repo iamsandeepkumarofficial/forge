@@ -199,6 +199,19 @@ const CATALOG: ChatToolCatalogItem[] = [
     ]
   },
   {
+    toolId: "get_workspace_health",
+    toolName: "Get workspace health",
+    description:
+      "Session-first health check: host deps, launch.json readiness, running apps, and last workspace analysis. Call when setup status is unknown.",
+    exampleUsecases: [
+      "Before installing or starting apps — see what is missing.",
+      "After preview_start — confirm services are up."
+    ],
+    negativeUsecases: [
+      "Do not invent launch or toolchain state — call this tool instead."
+    ]
+  },
+  {
     toolId: "upsert_workspace_parameter",
     toolName: "Upsert workspace parameter",
     description:
@@ -227,13 +240,14 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "setup_project_infra",
     toolName: "Setup project infra",
     description:
-      "Attach/start project infrastructure for the workspace (Postgres/Mongo today): inject DATABASE_URL / MONGODB_URI. Requires userApproved: true after ask_user. On local/host missing binaries, do not end on the error — ask_user then install_project_infra, then retry setup_project_infra. Never install host infra via run_terminal.",
+      "Attach/start a **service** engine for the workspace (Postgres/Mongo today): inject DATABASE_URL / MONGODB_URI. Requires userApproved: true after ask_user. On local/host missing binaries, ask_user then install_project_infra, then retry setup_project_infra. Not for language runtimes (Node/Python) — those use install_project_infra only. Never install host deps via run_terminal.",
     exampleUsecases: [
       "User approved setting up Postgres/Mongo for DATABASE_URL / MONGODB_URI.",
       "After install_project_infra places mongod, call setup_project_infra to start and inject URI."
     ],
     negativeUsecases: [
       "Calling without userApproved: true.",
+      "Calling setup_project_infra for node — use install_project_infra dependencyId=node instead.",
       "Installing database servers inside the sandbox via apt or run_terminal.",
       "Ending the turn with only a setup error — use ask_user / install_project_infra."
     ]
@@ -242,15 +256,18 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "install_project_infra",
     toolName: "Install project infra",
     description:
-      "Privileged host install: download a dependency tarball into ~/.forge/runtime and link binaries under ~/.forge/runtime/bin (unsandboxed). Extensible dependencyId registry (mongo, postgres today; more later). Requires userApproved: true. Local/host sessions only for DB deps. Then call setup_project_infra.",
+      "Privileged host install: download a dependency into ~/.forge/runtime/<id>/<version>/ (folder kept intact; current symlink; session PATH prefers …/current/bin). Adapter registry: node, mongo, postgres (more later). Requires userApproved: true. Host sessions only. For DBs, then call setup_project_infra. For Node, pass dependencyId=node and version=20 (or exact patch) — never dependencyId=node-20; do not call setup afterward.",
     exampleUsecases: [
+      "Local session Node mismatch — user approved install_project_infra dependencyId=node version=20.",
       "Local session missing mongod after setup_project_infra failed — user approved install_project_infra dependencyId=mongo.",
       "Install postgres binaries before setup_project_infra on a fresh machine."
     ],
     negativeUsecases: [
       "Calling without userApproved: true.",
+      "dependencyId=node-20 — use dependencyId=node with version=20.",
       "Using run_terminal to curl binaries into ~/.forge — sandbox cannot write there.",
-      "Cloud sessions for mongo/postgres — use setup_project_infra (Docker) instead."
+      "Cloud sessions for mongo/postgres — use setup_project_infra (Docker) instead.",
+      "Calling setup_project_infra after installing Node."
     ]
   },
   {

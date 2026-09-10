@@ -14,7 +14,7 @@ import {
   withHeartbeats,
   type StoredMessage
 } from "./chatApi.js";
-import { partsToModelMessages, withFirstTurnRepoEval } from "./chatMessages.js";
+import { partsToModelMessages } from "./chatMessages.js";
 
 const N_6 = 6;
 const N_50 = 50;
@@ -288,7 +288,7 @@ async function streamLlmStepText(opts: {
         const result = streamText({
           model: opts.model,
           system: opts.baseSystem,
-          messages: partsToModelMessages(withFirstTurnRepoEval(opts.messages)),
+          messages: partsToModelMessages(opts.messages),
           tools: opts.toolsForModel as Parameters<
             typeof streamText
           >[0]["tools"],

@@ -231,6 +231,47 @@ export function fetchApps(sessionId: string): Promise<{
     { method: "GET" }
   );
 }
+
+export type SessionHealthCheckItem = {
+  id: string;
+  status: "ok" | "warn" | "fail" | "unknown";
+  label: string;
+  summary?: string;
+};
+
+export type SessionHealthCheck = {
+  id: string;
+  label: string;
+  status: "ok" | "warn" | "fail" | "unknown";
+  summary: string;
+  detail?: string;
+  remediation?: string;
+  items?: SessionHealthCheckItem[];
+};
+
+export type SessionHealthReport = {
+  sessionId: string;
+  workspaceId: string | null;
+  computedAt: string;
+  overall: "ok" | "warn" | "fail" | "unknown";
+  checks: SessionHealthCheck[];
+  runningApps: Array<{
+    name: string;
+    running: boolean;
+    port?: number;
+    url?: string;
+  }>;
+};
+
+export function fetchSessionHealth(
+  sessionId: string
+): Promise<SessionHealthReport> {
+  return appsRequest(
+    `/internal/session/health?sessionId=${encodeURIComponent(sessionId)}`,
+    { method: "GET" }
+  );
+}
+
 export function scaffoldApps(sessionId: string): Promise<{
   apps: ForgeApp[];
 }> {
@@ -301,31 +342,4 @@ export async function fetchAllAppLogs(
   };
   if (body.error && !body.logs) throw new Error(body.error);
   return body.logs && typeof body.logs === "object" ? body.logs : {};
-}
-export async function downloadRepoArchive(sessionId: string): Promise<void> {
-  const res = await fetch(
-    `${runnerUrl()}/internal/download?sessionId=${encodeURIComponent(sessionId)}`
-  );
-  if (!res.ok) throw new Error((await res.text()).trim() || String(res.status));
-  const blob = await res.blob();
-  const cd = res.headers.get("Content-Disposition");
-  const name = cd?.match(/filename="?([^"]+)"?/)?.[1] ?? "code.tar.gz";
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-export function promoteToCanonical(sessionId: string): Promise<{
-  target: "github" | "objectStore";
-  branch?: string;
-  files?: number;
-}> {
-  return appsRequest(`/internal/promote`, {
-    method: "POST",
-    body: JSON.stringify({ sessionId })
-  });
 }

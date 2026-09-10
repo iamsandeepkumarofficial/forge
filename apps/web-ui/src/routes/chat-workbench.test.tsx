@@ -8,8 +8,8 @@ vi.mock("../lib/projects-api.js", () => ({
   startSession: vi.fn(async () => ({ sessionId: "s1" }))
 }));
 vi.mock("../lib/tool-runner.js", () => ({
-  downloadRepoArchive: vi.fn(),
-  promoteToCanonical: vi.fn()
+  fetchApps: vi.fn(),
+  fetchSessionHealth: vi.fn()
 }));
 vi.mock("./chat-workbench/chat-pane.js", () => ({
   ChatPane: () => <div>Chat pane</div>

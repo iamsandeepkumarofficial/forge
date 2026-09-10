@@ -4,13 +4,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  formatRepoSetupBlock,
+  formatPlatformOpsBlock,
+  formatReadinessSummary,
   loadLaunchReadiness,
   loadWorkspaceLaunchReadiness
 } from "./repoReadiness.js";
 
 describe("repoReadiness", () => {
-  it("reports missing launch.json as not agent-ready", async () => {
+  it("reports missing launch.json as not ready via summary", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "forge-ready-"));
     try {
       const readiness = loadLaunchReadiness(root);
@@ -19,13 +20,20 @@ describe("repoReadiness", () => {
         source: "none",
         apps: []
       });
-      const block = formatRepoSetupBlock({ readiness });
-      assert.match(block, /Eval: not agent-ready/);
+      const summary = formatReadinessSummary(readiness);
+      assert.match(summary, /Launch not ready/);
+      const block = formatPlatformOpsBlock({
+        executionTarget: "local",
+        isWorkspace: false
+      });
       assert.match(block, /upsert_launch_app/);
       assert.match(block, /preview_start/);
-      assert.match(block, /3000–3009/);
+      assert.match(block, /40000–49999/);
       assert.match(block, /FORGE_PUBLISHED_APP_PORTS/);
-      assert.doesNotMatch(block, /forge\.json/);
+      assert.match(block, /get_workspace_health/);
+      assert.doesNotMatch(block, /Eval: not agent-ready/);
+      assert.doesNotMatch(block, /container ports/);
+      assert.doesNotMatch(block, /npm\/yarn\/pnpm/);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -46,16 +54,15 @@ describe("repoReadiness", () => {
       assert.equal(readiness.source, "launch");
       assert.equal(readiness.apps[0]?.name, "web");
       assert.equal(readiness.apps[0]?.type, "web");
-      const block = formatRepoSetupBlock({ readiness });
-      assert.match(block, /Eval: agent-ready/);
-      assert.match(block, /`web` \(web\)/);
-      assert.doesNotMatch(block, /forge\.json/);
+      const summary = formatReadinessSummary(readiness);
+      assert.match(summary, /Launch ready/);
+      assert.match(summary, /`web` \(web\)/);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
 
-  it("falls back to legacy forge.json", async () => {
+  it("does not read root forge.json (launch.json only)", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "forge-ready-"));
     await fs.writeFile(
       path.join(root, "forge.json"),
@@ -72,12 +79,8 @@ describe("repoReadiness", () => {
     );
     try {
       const readiness = loadLaunchReadiness(root);
-      assert.equal(readiness.ready, true);
-      assert.equal(readiness.source, "legacy");
-      const block = formatRepoSetupBlock({ readiness });
-      assert.match(block, /Eval: agent-ready/);
-      assert.doesNotMatch(block, /forge\.json/);
-      assert.doesNotMatch(block, /legacy/);
+      assert.equal(readiness.ready, false);
+      assert.equal(readiness.source, "none");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -124,21 +127,19 @@ describe("repoReadiness", () => {
         readiness.members?.find((m) => m.repo === "bp-backend")?.ready,
         true
       );
-      const block = formatRepoSetupBlock({
-        readiness,
+      const summary = formatReadinessSummary(readiness);
+      assert.match(summary, /bp-frontend/);
+      assert.match(summary, /bp-backend/);
+      const block = formatPlatformOpsBlock({
+        executionTarget: "cloud",
+        isWorkspace: true,
         memberRepos: ["bp-backend", "bp-frontend"]
       });
-      assert.match(block, /multiple repositories/);
-      assert.match(block, /session root/);
       assert.match(block, /\/workspace\/\.forge\/launch\.json/);
       assert.match(block, /invoke_skill/);
-      assert.match(block, /network plane/);
+      assert.match(block, /sandbox ports/);
       assert.match(block, /setup_project_infra/);
-      assert.doesNotMatch(
-        block,
-        /Never write launch config at the session root/
-      );
-      assert.doesNotMatch(block, /Each has its own/);
+      assert.doesNotMatch(block, /Eval: agent-ready/);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

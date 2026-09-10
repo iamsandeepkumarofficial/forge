@@ -13,7 +13,7 @@ export type LaunchAppPeek = {
 
 export type LaunchReadiness = {
   ready: boolean;
-  source: "launch" | "legacy" | "none";
+  source: "launch" | "none";
   apps: LaunchAppPeek[];
 
   members?: Array<{
@@ -67,16 +67,12 @@ function peekApps(filePath: string): LaunchAppPeek[] | null {
 }
 
 function peekLaunchAt(mountPath: string): {
-  source: "launch" | "legacy" | "none";
+  source: "launch" | "none";
   apps: LaunchAppPeek[];
 } {
   const launchApps = peekApps(path.join(mountPath, ".forge", "launch.json"));
   if (launchApps) {
     return { source: "launch", apps: launchApps };
-  }
-  const legacyApps = peekApps(path.join(mountPath, "forge.json"));
-  if (legacyApps) {
-    return { source: "legacy", apps: legacyApps };
   }
   return { source: "none", apps: [] };
 }
@@ -176,48 +172,7 @@ function formatAppList(apps: LaunchAppPeek[]): string {
     .join(", ");
 }
 
-export function formatRepoSetupBlock(options: {
-  readiness: LaunchReadiness;
-
-  memberRepos?: string[];
-}): string {
-  const { readiness, memberRepos } = options;
-  const isWorkspace = Boolean(memberRepos && memberRepos.length > 0);
-  const lines = [
-    "## Repo setup",
-    isWorkspace
-      ? "This workspace session mounts multiple repositories as siblings under `/workspace`. **One** launch file at the session root: `/workspace/.forge/launch.json`. Do **not** create per-member `bp-frontend/.forge/launch.json`."
-      : "This session runs apps from `.forge/launch.json` at the repo root:",
-    isWorkspace
-      ? '{ apps: [{ name, repo, cwd, command, port?, type: web|api|worker }] }. cwd is session-relative (e.g. `"bp-frontend"` or `"bp-frontend/apps/web"`).'
-      : "{ apps: [{ name, cwd, command, port?, type: web|api|worker }] }.",
-    formatReadinessEval(readiness, memberRepos),
-    "",
-    "## Starting apps (mandatory)",
-    "- Identify each member's stack from inventory / shadows, then `invoke_skill` (`nodejs-app`, `python-app`, …). Skills own install and launch mapping — use `run_terminal` for installs/toolchains as the skill directs (`ask_user` before installing a missing toolchain).",
-    "- Confirm dependencies are installed before preview (e.g. `node_modules` for Node, venv/site-packages for Python). Dev servers stay forbidden on `run_terminal`.",
-    `- Fill empty env via \`ask_user\` (form/mcq widget) then \`upsert_workspace_parameter\`. For Postgres/Mongo call \`ask_user\` to confirm, then \`setup_project_infra\` with \`userApproved: true\`. If setup fails (missing local DB binary), explain briefly, \`ask_user\`, then \`install_project_infra\` (not run_terminal) and retry setup — do not end on the error alone. Do not ask only in prose. ${appDbInjectionHint()} Run migrations via \`run_terminal\` **before** starting the API.`,
-    "- To run a web/api app: `upsert_launch_app` (if missing) then `preview_start` (network plane, ports 3000–3009). Do **not** use `run_terminal` for `npm`/`yarn`/`pnpm` `dev`/`start` or long-running Python servers — it times out.",
-    "- Start **api/backends before web/frontends** when `dependsOn` or health says so.",
-    "- For Node, prefer the lockfile package manager (`yarn` if `yarn.lock`, `pnpm` if `pnpm-lock.yaml`, else `npm`). For other stacks follow the invoked skill.",
-    isWorkspace
-      ? `- For workspace upserts, set \`cwd\` under the member (e.g. \`cwd: "bp-frontend"\` or \`cwd: "bp-frontend/apps/web"\`) — Forge writes \`/workspace/.forge/launch.json\`.`
-      : "- After upsert_launch_app, call preview_start with that app name.",
-    "",
-    "## Published app ports (network plane)",
-    "- Apps are published on the **network plane** (preview hostnames). Only container ports **3000–3009** are published. Use `port: 3000` for the first web app, then 3001, 3002, …",
-    "- Dev servers must honor `PORT` and bind `HOST=0.0.0.0` (Forge sets both when starting apps).",
-    "- Do not put 4000, 5173, 8080, or other ports in launch.json — they are not published and preview will be blank.",
-    "- Env hint inside the sandbox: `FORGE_PUBLISHED_APP_PORTS=3000-3009`.",
-    "- Launch config written in this session stays in the session worktree until the user promotes from the workbench — do not assume other chats see it."
-  ];
-  return lines.join("\n");
-}
-
-function formatReadinessEval(
-  readiness: LaunchReadiness,
-  memberRepos?: string[]
-): string {
+export function formatReadinessSummary(readiness: LaunchReadiness): string {
   if (readiness.members && readiness.members.length > 0) {
     const perRepo = readiness.members
       .map((m) =>
@@ -227,15 +182,50 @@ function formatReadinessEval(
       )
       .join("\n");
     if (readiness.ready) {
-      return `Eval: agent-ready (session-root \`/workspace/.forge/launch.json\` has apps).\n${perRepo}`;
+      return `Launch ready (session-root \`/workspace/.forge/launch.json\` has apps).\n${perRepo}`;
     }
-    return `Eval: not agent-ready — \`/workspace/.forge/launch.json\` is missing or empty.\n${perRepo}\nInspect members ${memberRepos?.map((r) => `\`${r}\``).join(", ") ?? ""}, then upsert_launch_app (cwd under member) and preview_start.`;
+    return `Launch not ready — \`/workspace/.forge/launch.json\` is missing or empty.\n${perRepo}`;
   }
   if (readiness.ready) {
-    return `Eval: agent-ready. Apps: ${formatAppList(readiness.apps)}.`;
+    return `Launch ready. Apps: ${formatAppList(readiness.apps)}.`;
   }
   if (readiness.source === "none") {
-    return "Eval: not agent-ready — `.forge/launch.json` is missing. Inspect the repo and upsert_launch_app, then preview_start.";
+    return "Launch not ready — `.forge/launch.json` is missing.";
   }
-  return "Eval: not agent-ready — `.forge/launch.json` has no apps. Inspect the repo and upsert_launch_app, then preview_start.";
+  return "Launch not ready — `.forge/launch.json` has no apps.";
+}
+
+export function formatPlatformOpsBlock(options: {
+  executionTarget: "local" | "cloud";
+  isWorkspace: boolean;
+  memberRepos?: string[];
+}): string {
+  const { executionTarget, isWorkspace, memberRepos } = options;
+  const isHost = executionTarget === "local";
+  const first = memberRepos?.[0] ?? "repo";
+  const lines = [
+    "## Starting apps",
+    "- Identify stack from `## Workspace repos` / inventory, then `invoke_skill` for that stack. Skills own install, package manager, and how the app binds PORT/HOST.",
+    "- Confirm dependencies are installed before preview (follow the skill). Long-running app servers must use `preview_start`, not `run_terminal`.",
+    `- Fill empty env via \`ask_user\` then \`upsert_workspace_parameter\`. For Postgres/Mongo: \`ask_user\` → \`setup_project_infra\` with \`userApproved: true\`; on missing host binaries use \`install_project_infra\` then retry. ${appDbInjectionHint()}`,
+    "- Register apps with `upsert_launch_app` (if missing) then `preview_start`.",
+    "- Start backends before frontends when `dependsOn` or health says so.",
+    isWorkspace
+      ? `- Workspace upserts: set \`cwd\` under the member (e.g. \`${first}\`). Forge writes \`/workspace/.forge/launch.json\` only.`
+      : "- After upsert_launch_app, call preview_start with that app name.",
+    "",
+    "## Published app ports",
+    isHost
+      ? "- Host sessions bind apps on registry ports **40000–49999** (Forge allocates and injects `PORT`). Do not assume Docker’s 3000–3009."
+      : "- Preview plane publishes sandbox ports **3000–3009**. Use `port: 3000` for the first web app, then 3001, …",
+    "- Apps must honor `PORT` and bind `HOST` as the invoked skill describes (Forge sets both when starting apps).",
+    isHost
+      ? "- Prefer omitting a fixed port in launch.json or pass a registry port; Forge remaps Docker-style 3000–3009 to a host registry port."
+      : "- Do not put 4000, 5173, 8080, or other ports in launch.json — they are not published and preview will be blank.",
+    isHost
+      ? "- Env hint: `FORGE_PUBLISHED_APP_PORTS=40000-49999`."
+      : "- Env hint: `FORGE_PUBLISHED_APP_PORTS=3000-3009`.",
+    "- Call `get_workspace_health` for live launch readiness and running-app status."
+  ];
+  return lines.join("\n");
 }

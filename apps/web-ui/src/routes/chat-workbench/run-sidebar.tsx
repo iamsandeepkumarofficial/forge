@@ -76,7 +76,9 @@ function AppRow(options: {
           {a.type}
         </span>
         {a.port != null && (
-          <span className="text-[0.6rem] text-muted-foreground">:{a.port}</span>
+          <span className="text-[0.6rem] text-muted-foreground">
+            :{a.hostPort ?? a.port}
+          </span>
         )}
         {a.running ? (
           <button
@@ -132,9 +134,7 @@ export function RunSidebar({
     setBusy(options.name);
     try {
       await options.action(sessionId, options.name);
-      if (options.track) {
-        trackApp(sessionId, options.name);
-      }
+      if (options.track) trackApp(sessionId, options.name);
       await refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
@@ -154,51 +154,63 @@ export function RunSidebar({
     }
   };
   return (
-    <RunSidebarBody
-      exists={exists}
-      apps={apps}
-      error={error}
-      busy={busy}
-      adding={adding}
-      sessionId={sessionId}
-      onShowPreview={onShowPreview}
-      onAutoCreate={autoCreate}
-      onToggleAdding={() => setAdding((v) => !v)}
-      onSetAdding={setAdding}
-      onRefresh={refresh}
-      onRun={(name) =>
-        void runNamed({ name, action: runApp, track: true })
-      }
-      onStop={(name) => void runNamed({ name, action: stopApp })}
-    />
+    <div className="flex h-full flex-col overflow-auto">
+      {!exists && (
+        <MissingForgeBanner
+          busy={busy}
+          onAutoCreate={autoCreate}
+          onAddManual={() => setAdding(true)}
+        />
+      )}
+      {error && <p className="px-3 py-2 text-xs text-destructive">{error}</p>}
+      <AppsHeader adding={adding} onToggleAdd={() => setAdding((v) => !v)} />
+      {adding && (
+        <AddAppForm
+          sessionId={sessionId}
+          apps={apps}
+          onDone={async () => {
+            setAdding(false);
+            await refresh();
+          }}
+        />
+      )}
+      <AppList
+        apps={apps}
+        exists={exists}
+        busy={busy}
+        onRun={(name) => void runNamed({ name, action: runApp, track: true })}
+        onStop={(name) => void runNamed({ name, action: stopApp })}
+        onShowPreview={onShowPreview}
+      />
+    </div>
   );
 }
 
-type SidebarBodyOptions = {
-  exists: boolean;
-  apps: AppStatus[];
-  error: string | null;
-  busy: string | null;
-  adding: boolean;
-  sessionId: string;
-  onShowPreview: () => void;
-  onAutoCreate: () => void;
-  onToggleAdding: () => void;
-  onSetAdding: (v: boolean) => void;
-  onRefresh: () => Promise<void>;
-  onRun: (name: string) => void;
-  onStop: (name: string) => void;
-};
+function AppsHeader(options: { adding: boolean; onToggleAdd: () => void }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-1.5">
+      <span className="text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
+        Apps
+      </span>
+      <button
+        onClick={options.onToggleAdd}
+        className="text-xs text-primary hover:underline"
+      >
+        {options.adding ? "Cancel" : "+ Add"}
+      </button>
+    </div>
+  );
+}
 
-function AppsList(options: {
-  exists: boolean;
+function AppList(options: {
   apps: AppStatus[];
+  exists: boolean;
   busy: string | null;
   onRun: (name: string) => void;
   onStop: (name: string) => void;
   onShowPreview: () => void;
 }) {
-  const { exists, apps, busy, onRun, onStop, onShowPreview } = options;
+  const { apps, exists, busy, onRun, onStop, onShowPreview } = options;
   return (
     <ul className="px-2">
       {apps.map((a) => (
@@ -217,64 +229,5 @@ function AppsList(options: {
         </li>
       )}
     </ul>
-  );
-}
-
-function RunSidebarBody(options: SidebarBodyOptions) {
-  const {
-    exists,
-    apps,
-    error,
-    busy,
-    adding,
-    sessionId,
-    onShowPreview,
-    onAutoCreate,
-    onToggleAdding,
-    onSetAdding,
-    onRefresh,
-    onRun,
-    onStop
-  } = options;
-  return (
-    <div className="flex h-full flex-col overflow-auto">
-      {!exists && (
-        <MissingForgeBanner
-          busy={busy}
-          onAutoCreate={onAutoCreate}
-          onAddManual={() => onSetAdding(true)}
-        />
-      )}
-      {error && <p className="px-3 py-2 text-xs text-destructive">{error}</p>}
-      <div className="flex items-center justify-between px-3 py-1.5">
-        <span className="text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
-          Apps
-        </span>
-        <button
-          onClick={onToggleAdding}
-          className="text-xs text-primary hover:underline"
-        >
-          {adding ? "Cancel" : "+ Add"}
-        </button>
-      </div>
-      {adding && (
-        <AddAppForm
-          sessionId={sessionId}
-          apps={apps}
-          onDone={async () => {
-            onSetAdding(false);
-            await onRefresh();
-          }}
-        />
-      )}
-      <AppsList
-        exists={exists}
-        apps={apps}
-        busy={busy}
-        onRun={onRun}
-        onStop={onStop}
-        onShowPreview={onShowPreview}
-      />
-    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { onPreviewChatMessage } from "./preview-comment-bus.js";
+import { onAgentPrompt } from "./preview-comment-bus.js";
 import { modeSwitchContinueMessage } from "../../lib/mode-switch.js";
 import { askUserFormReply, type AskUserProposal } from "../../lib/ask-user.js";
 import { applyAskUserFormToWorkspaceParams } from "../../lib/ask-user-apply-params.js";
@@ -26,6 +26,7 @@ type ChatPaneProps = {
   initialPrompt?: string;
   onOpenFile?: (path: string) => void;
   onTurnStatus?: (status: WorkbenchTurnStatus) => void;
+  onOpenHelp?: () => void;
 };
 
 async function submitAskUserAnswer(options: {
@@ -96,11 +97,21 @@ function useChatPaneSideEffects(options: {
 }) {
   const { session, askUserPending, onTurnStatus } = options;
   const sendTextRef = useRef(session.sendText);
+  const stopRef = useRef(session.handleStop);
   useEffect(() => {
     sendTextRef.current = session.sendText;
-  }, [session.sendText]);
+    stopRef.current = session.handleStop;
+  }, [session.sendText, session.handleStop]);
   useEffect(
-    () => onPreviewChatMessage((text) => void sendTextRef.current(text)),
+    () =>
+      onAgentPrompt((msg) => {
+        void (async () => {
+          if (msg.replaceRunning) {
+            await stopRef.current();
+          }
+          await sendTextRef.current(msg.text);
+        })();
+      }),
     []
   );
   useEffect(() => {
@@ -251,6 +262,7 @@ function ChatPaneWired(options: {
         c.session.setAttachments((prev) => prev.filter((_, i) => i !== index))
       }
       onOpenFile={props.onOpenFile}
+      onOpenHelp={props.onOpenHelp}
     />
   );
 }

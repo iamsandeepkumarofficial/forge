@@ -57,6 +57,7 @@ export function Workbench(options: {
           branchName={o.branchName}
           initialPrompt={o.initialPrompt}
           leftMode={o.leftMode}
+          onLeftModeChange={o.onLeftModeChange}
           onOpenFile={docs.openFile}
           onOpenDiff={docs.openDiff}
           onShowPreview={() => docs.setActiveRight(PREVIEW_TAB_ID)}

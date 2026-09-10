@@ -4,10 +4,6 @@ import {
   getSessionSandboxStatus
 } from "../../projects/sessionSandbox.js";
 import {
-  spawnRepoTarGz,
-  promoteToCanonical
-} from "../../projects/codeArchive.js";
-import {
   listAppStatuses,
   writeForgeConfig,
   runApp,
@@ -62,8 +58,9 @@ export async function handleSessionStart(
     res.json({ sessionId, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const clientError =
-      /Local folder path|source\.path is required/i.test(message);
+    const clientError = /Local folder path|source\.path is required/i.test(
+      message
+    );
     res.status(clientError ? N_400 : N_502).json({ error: message });
   }
 }
@@ -87,60 +84,6 @@ export async function handleSessionStatus(
   }
 }
 
-export async function handleDownloadArchive(
-  req: Request,
-  res: Response
-): Promise<void> {
-  const sessionId =
-    typeof req.query.sessionId === "string" ? req.query.sessionId.trim() : "";
-  if (!sessionId) {
-    res.status(N_400).json({ error: "sessionId query required" });
-    return;
-  }
-  try {
-    const { child, filename } = await spawnRepoTarGz(sessionId);
-    res.setHeader("Content-Type", "application/gzip");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    child.stdout.pipe(res);
-    child.on("error", () => {
-      if (!res.headersSent) res.status(N_500).json({ error: "archive failed" });
-      else res.end();
-    });
-    let stderr = "";
-    child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
-    child.on("close", (code) => {
-      if (code !== 0 && !res.headersSent) {
-        res
-          .status(N_500)
-          .json({ error: stderr.trim() || `tar exited ${code}` });
-      }
-    });
-  } catch (err) {
-    res
-      .status(N_500)
-      .json({ error: err instanceof Error ? err.message : String(err) });
-  }
-}
-
-export async function handlePromote(
-  req: Request,
-  res: Response
-): Promise<void> {
-  const sessionId =
-    typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
-  if (!sessionId) {
-    res.status(N_400).json({ error: "sessionId required" });
-    return;
-  }
-  try {
-    res.json(await promoteToCanonical(sessionId));
-  } catch (err) {
-    res
-      .status(N_502)
-      .json({ error: err instanceof Error ? err.message : String(err) });
-  }
-}
-
 export async function handleListApps(
   req: Request,
   res: Response
@@ -153,6 +96,27 @@ export async function handleListApps(
   }
   try {
     res.json(await listAppStatuses(sessionId));
+  } catch (err) {
+    res
+      .status(N_500)
+      .json({ error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+export async function handleSessionHealth(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const sessionId =
+    typeof req.query.sessionId === "string" ? req.query.sessionId.trim() : "";
+  if (!sessionId) {
+    res.status(N_400).json({ error: "sessionId query required" });
+    return;
+  }
+  try {
+    const { getSessionHealthReport } =
+      await import("../../services/workspace/sessionHealth.js");
+    res.json(await getSessionHealthReport(sessionId));
   } catch (err) {
     res
       .status(N_500)

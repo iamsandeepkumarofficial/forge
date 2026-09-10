@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Download, UploadCloud } from "lucide-react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { fetchChat, startSession } from "../lib/projects-api.js";
-import { downloadRepoArchive, promoteToCanonical } from "../lib/tool-runner.js";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Workbench } from "./chat-workbench/workbench-layout.js";
 import { SessionHeader } from "./chat-workbench/session-header.js";
 import { SessionBootScreen } from "./chat-workbench/session-boot.js";
@@ -118,9 +115,6 @@ export function ChatWorkbench() {
         sandboxStatus={wb.sessionId ? wb.sandboxStatus : "starting"}
         leftMode={wb.leftMode}
         onLeftMode={wb.setLeftMode}
-        actions={
-          wb.sessionId ? <SessionActions sessionId={wb.sessionId} /> : undefined
-        }
       />
       <div className="min-h-0 flex-1">
         {wb.booting || wb.sandboxStatus === "error" ? (
@@ -147,56 +141,5 @@ export function ChatWorkbench() {
         )}
       </div>
     </div>
-  );
-}
-
-function SessionActions({ sessionId }: { sessionId: string }) {
-  const [busy, setBusy] = useState<"download" | "promote" | null>(null);
-  const download = async () => {
-    setBusy("download");
-    try {
-      await downloadRepoArchive(sessionId);
-    } catch (e) {
-      alert(`Download failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-  const promote = async () => {
-    if (
-      !window.confirm(
-        "Promote the current working code to canonical? For GitHub this pushes to the chat's branch; for uploads it overwrites the stored project."
-      )
-    ) {
-      return;
-    }
-    setBusy("promote");
-    try {
-      const r = await promoteToCanonical(sessionId);
-      alert(
-        r.target === "github"
-          ? `Pushed to branch "${r.branch}".`
-          : `Canonical updated (${r.files} files stored).`
-      );
-    } catch (e) {
-      alert(`Promote failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-  return (
-    <>
-      <DropdownMenuItem
-        disabled={busy !== null}
-        onClick={() => void download()}
-      >
-        <Download className="size-4" />
-        {busy === "download" ? "Downloading…" : "Download"}
-      </DropdownMenuItem>
-      <DropdownMenuItem disabled={busy !== null} onClick={() => void promote()}>
-        <UploadCloud className="size-4" />
-        {busy === "promote" ? "Promoting…" : "Promote"}
-      </DropdownMenuItem>
-    </>
   );
 }

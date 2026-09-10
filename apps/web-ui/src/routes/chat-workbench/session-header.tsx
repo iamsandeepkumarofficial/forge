@@ -1,5 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
+  CircleHelp,
   FileText,
   GitCompareArrows,
   LogOut,
@@ -13,6 +15,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { acquirePreviewOverlayLock } from "./preview-overlay-lock.js";
 import type {
   LeftPaneMode,
   SandboxStatus,
@@ -34,7 +37,8 @@ const MODES: {
   { key: "chat", label: "Chat", icon: MessageSquare },
   { key: "files", label: "Files", icon: FileText },
   { key: "changes", label: "Changes", icon: GitCompareArrows },
-  { key: "run", label: "Run", icon: Play }
+  { key: "run", label: "Run", icon: Play },
+  { key: "help", label: "Help", icon: CircleHelp }
 ];
 
 function ModeTabs(options: {
@@ -157,8 +161,9 @@ function ExitSessionDialog(options: {
   onLeave: () => void;
 }) {
   const { onStay, onLeave } = options;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  useEffect(() => acquirePreviewOverlayLock(), []);
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <button
         type="button"
         aria-label="Stay in session"
@@ -194,7 +199,8 @@ function ExitSessionDialog(options: {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

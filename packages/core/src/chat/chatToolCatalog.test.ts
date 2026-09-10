@@ -19,6 +19,7 @@ describe("chatToolCatalog", () => {
       "web_search",
       "list_skills",
       "invoke_skill",
+      "get_workspace_health",
       "upsert_workspace_parameter",
       "docker_image_lookup",
       "setup_project_infra",
