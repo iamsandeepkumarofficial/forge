@@ -1,12 +1,4 @@
 import {
-  allocateReservedAppPort,
-  hostPortForContainerPort,
-  FIRST_APP_PORT,
-  isReservedAppPort,
-  LAST_APP_PORT,
-  sessionHostPortBase
-} from "../sessionSandbox.js";
-import {
   previewUrlForHostname,
   sessionPreviewHostname
 } from "../sandboxRuntime/hostnames.js";
@@ -14,7 +6,6 @@ import {
   startBackgroundJob,
   stopBackgroundJob,
   freeListeningPort,
-  waitUntilHostTcpListening,
   waitUntilJobRunning,
   waitUntilTcpListening
 } from "../backgroundJob.js";
@@ -35,23 +26,31 @@ async function loadStatusForApp(
   return statusForApp(options);
 }
 
-async function remapAppPortIfNeeded(options: {
+async function resolveAppListenPort(options: {
   sessionId: string;
   app: ForgeApp;
 }): Promise<ForgeApp> {
   const { sessionId } = options;
   const app = options.app;
-  if (app.port == null || isReservedAppPort(app.port)) return app;
+  if (app.port == null) return app;
+  const { getSandboxRuntime } = await import("../sandboxRuntime/resolve.js");
+  const runtime = await getSandboxRuntime(sessionId);
   const { config } = await readForgeConfig(sessionId);
-  const usedPorts = config.apps
+  const usedListenPorts = config.apps
     .filter((a) => a.name !== app.name && a.port != null)
     .map((a) => a.port as number);
-  const remapped = allocateReservedAppPort(usedPorts) ?? FIRST_APP_PORT;
+  const listenPort = await runtime.resolveListenPort({
+    sessionId,
+    appName: app.name,
+    preferred: app.port,
+    usedListenPorts
+  });
+  if (listenPort === app.port) return app;
   console.warn(
-    `[runApp] session ${sessionId} app ${app.name}: port ${app.port} is outside published range ${FIRST_APP_PORT}–${LAST_APP_PORT}; remapping to ${remapped}`
+    `[runApp] session ${sessionId} app ${app.name}: remapped listen port ${app.port} → ${listenPort} (${runtime.kind})`
   );
-  await persistAppPort({ sessionId, name: app.name, port: remapped });
-  return { ...app, port: remapped };
+  await persistAppPort({ sessionId, name: app.name, port: listenPort });
+  return { ...app, port: listenPort };
 }
 
 async function resolveAppForLaunch(options: {
@@ -89,7 +88,7 @@ export async function runApp(
 ): Promise<AppStatus> {
   let app = await findApp(sessionId, name);
   const { containerName, workingDir, repoDir } = await ctx(sessionId);
-  app = await remapAppPortIfNeeded({ sessionId, app });
+  app = await resolveAppListenPort({ sessionId, app });
   const resolved = await resolveAppForLaunch({
     sessionId,
     app,
@@ -120,32 +119,26 @@ export async function runApp(
       startFailure: started.failure
     });
   }
-  if (app.port != null) {
-    const hostPort = hostPortForContainerPort(sessionId, app.port);
-    if (hostPort != null) {
-      const hostReady = await ensurePreviewHostPort({
+  if (nextApp.port != null) {
+    const portReady = await ensureAppPublishedPortReady({
+      sessionId,
+      containerName,
+      app: nextApp,
+      appDir: resolved.appDir
+    });
+    if (!portReady) {
+      return loadStatusForApp({
         sessionId,
-        containerName,
         app: nextApp,
-        appDir: resolved.appDir,
-        hostPort
+        containerName,
+        startFailure: "port"
       });
-      if (!hostReady) {
-        await stopBackgroundJob({
-          containerName,
-          kind: "app",
-          name: app.name,
-          sessionId
-        }).catch(() => undefined);
-        return loadStatusForApp({
-          sessionId,
-          app: nextApp,
-          containerName,
-          startFailure: "port"
-        });
-      }
     }
-    await publishAppPreview({ sessionId, containerName, port: app.port });
+    await publishAppPreview({
+      sessionId,
+      containerName,
+      port: nextApp.port
+    });
   }
   const status = await loadStatusForApp({
     sessionId,
@@ -156,6 +149,49 @@ export async function runApp(
     void persistSuccessfulEnvironment(sessionId);
   }
   return status;
+}
+
+async function ensureAppPublishedPortReady(options: {
+  sessionId: string;
+  containerName: string;
+  app: ForgeApp;
+  appDir: string;
+}): Promise<boolean> {
+  const { sessionId, containerName, app, appDir } = options;
+  if (app.port == null) return true;
+  const { getSandboxRuntime, resolveSandboxRuntimeKindForSession } =
+    await import("../sandboxRuntime/resolve.js");
+  const runtime = await getSandboxRuntime(sessionId);
+  const publishedPort = await runtime.resolvePublishedPort(sessionId, app.port);
+  if (publishedPort == null) return true;
+  const hostReady = await runtime.ensurePublishedPortReady({
+    handle: {
+      sessionId,
+      runtime: await resolveSandboxRuntimeKindForSession(sessionId),
+      ref: containerName
+    },
+    listenPort: app.port,
+    publishedPort,
+    onRepairRestart: async () => {
+      const restarted = await startAppProcess({
+        sessionId,
+        containerName,
+        app,
+        appDir
+      });
+      return restarted.ok;
+    }
+  });
+  if (!hostReady) {
+    await stopBackgroundJob({
+      containerName,
+      kind: "app",
+      name: app.name,
+      sessionId
+    }).catch(() => undefined);
+    return false;
+  }
+  return true;
 }
 
 async function persistSuccessfulEnvironment(sessionId: string): Promise<void> {
@@ -308,43 +344,6 @@ async function startAppProcess(options: {
     return { ok: false, failure: "port" };
   }
   return { ok: true };
-}
-
-async function ensurePreviewHostPort(options: {
-  sessionId: string;
-  containerName: string;
-  app: ForgeApp;
-  appDir: string;
-  hostPort: number;
-}): Promise<boolean> {
-  const { sessionId, containerName, app, appDir, hostPort } = options;
-  if (await waitUntilHostTcpListening({ port: hostPort, tries: 8 })) {
-    return true;
-  }
-  const { isHostSession } = await import("../sandboxRuntime/resolve.js");
-  if (await isHostSession(sessionId)) {
-    console.warn(
-      `[runApp] session ${sessionId} app ${app.name}: host port ${hostPort} not reachable (host mode; no Docker port repair)`
-    );
-    return false;
-  }
-  console.warn(
-    `[runApp] session ${sessionId} app ${app.name}: host port ${hostPort} not reachable; repairing Docker port bindings`
-  );
-  const { repairHostPortBindings } =
-    await import("../sessionSandbox/container.js");
-  await repairHostPortBindings({
-    containerName,
-    portBase: sessionHostPortBase(sessionId)
-  });
-  const restarted = await startAppProcess({
-    sessionId,
-    containerName,
-    app,
-    appDir
-  });
-  if (!restarted.ok) return false;
-  return waitUntilHostTcpListening({ port: hostPort, tries: 20 });
 }
 
 export async function publishAppPreview(input: {

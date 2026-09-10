@@ -28,12 +28,23 @@ describe("dockerAdapter contract (mocked)", () => {
       stderr: ""
     }));
     const runtime: SandboxRuntime = {
+      kind: "docker",
       createSession: async (sessionId) => ({
         sessionId,
         runtime: "docker",
         ref: `forge-sandbox-${sessionId}`
       }),
       exec,
+      getStatus: async () => ({ status: "ready", running: true }),
+      resolveListenPort: async () => 3000,
+      resolvePublishedPort: async () => 40000,
+      ensurePublishedPortReady: async () => true,
+      publishedAppPortsEnv: () => "3000-3009",
+      isAllowedListenPort: (port) => port >= 3000 && port <= 3009,
+      previewHostname: (sessionId, port) =>
+        port === 3000
+          ? `s-${sessionId}.preview.local`
+          : `p${port}-s-${sessionId}.preview.local`,
       publishPreviewPort: async (handle, port) => ({
         hostname: `s-${handle.sessionId}.preview.local`,
         targetPort: port,

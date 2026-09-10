@@ -74,6 +74,17 @@ export async function startBackgroundJob(options: {
 }): Promise<void> {
   const kind = await resolveKind(options.sessionId);
   const workspaceRoot = kind === "host" ? options.containerName : undefined;
+  let publishedPorts = "3000-3009";
+  if (options.sessionId) {
+    try {
+      const { getSandboxRuntime } = await import("./sandboxRuntime/resolve.js");
+      publishedPorts = (
+        await getSandboxRuntime(options.sessionId)
+      ).publishedAppPortsEnv();
+    } catch {
+      void 0;
+    }
+  }
   const env: Record<string, string> = {
     APPDIR: options.cwd,
     PID: jobPidFile({
@@ -88,7 +99,7 @@ export async function startBackgroundJob(options: {
     }),
     CMD: options.command,
     HOST: kind === "host" ? "127.0.0.1" : "0.0.0.0",
-    FORGE_PUBLISHED_APP_PORTS: "3000-3009",
+    FORGE_PUBLISHED_APP_PORTS: publishedPorts,
     ...options.extraEnv
   };
   const argv =

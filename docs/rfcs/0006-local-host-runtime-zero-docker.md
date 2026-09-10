@@ -91,6 +91,7 @@ flowchart LR
 - Injected `PORT` / service `internalUrl`s use registry ports (no shared `3000` across sessions on one host).
 - Preview-plane continues to map `*.preview.localhost` → those backends.
 - Drop Docker publish/repair only.
+- **Concrete ownership:** [RFC 0009](./0009-sandbox-runtime-port-adapters.md) — `SandboxRuntime` adapters own listen/publish/readiness; `3000–3009` remains Docker/K8s-only.
 
 ### OS sandbox (host mode)
 

@@ -1,9 +1,11 @@
 export type {
   BindMount,
   CreateOpts,
+  EnsurePublishedPortReadyInput,
   ExecOpts,
   ExecResult,
   PreviewBinding,
+  ResolveListenPortInput,
   RuntimeExecInput,
   SandboxRuntime,
   SandboxRuntimeErrorCode,
@@ -37,6 +39,10 @@ export {
 } from "./osSandbox.js";
 export {
   allocateSessionPort,
+  HOST_PORT_CEILING,
+  HOST_PORT_FLOOR,
+  hostPublishedAppPortsEnv,
+  isHostRegistryPort,
   listSessionPortAllocations,
   loadSessionPortRegistry,
   portsForSession,

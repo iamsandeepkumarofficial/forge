@@ -100,26 +100,13 @@ export async function getSessionRepoInfo(
   const dockerName = sandboxContainerName(sessionId);
 
   if (chat.workspaceId) {
-    const workspaceRepo = new WorkspaceRepository();
-    const members = await workspaceRepo.listMembers(chat.workspaceId);
-    const worktrees: Record<string, string> = {};
-    const hostWorktrees: Record<string, string> = {};
-    for (const m of members) {
-      worktrees[m.repoName] = `${WORKSPACE_MOUNT}/${m.repoName}`;
-      const project = await projectRepo.getById(m.projectId);
-      if (project?.source === "local" && project.canonicalKey) {
-        hostWorktrees[m.repoName] = worktreeWorkDir(project.id, sessionId);
-      }
-    }
-    const hostRef = Object.values(hostWorktrees)[0];
-    return {
-      containerName: kind === "host" && hostRef ? hostRef : dockerName,
-      repoDir: members[0]?.repoName || "repo",
-      workingDir: WORKSPACE_MOUNT,
-      sessionRoot: WORKSPACE_MOUNT,
-      worktrees,
-      ...(Object.keys(hostWorktrees).length > 0 ? { hostWorktrees } : {})
-    };
+    return workspaceSessionRepoInfo({
+      sessionId,
+      workspaceId: chat.workspaceId,
+      kind,
+      dockerName,
+      projectRepo
+    });
   }
 
   if (!chat.projectId) {
@@ -142,6 +129,65 @@ export async function getSessionRepoInfo(
     repoDir,
     workingDir: WORKSPACE_MOUNT,
     sessionRoot: WORKSPACE_MOUNT,
+    ...(hostWorkingDir ? { hostWorkingDir } : {})
+  };
+}
+
+async function workspaceSessionRepoInfo(options: {
+  sessionId: string;
+  workspaceId: string;
+  kind: string;
+  dockerName: string;
+  projectRepo: ProjectRepository;
+}): Promise<SessionRepoInfo> {
+  const { sessionId, workspaceId, kind, dockerName, projectRepo } = options;
+  const workspaceRepo = new WorkspaceRepository();
+  const members = await workspaceRepo.listMembers(workspaceId);
+  const worktrees: Record<string, string> = {};
+  const hostWorktrees: Record<string, string> = {};
+  const { workspaceSessionMemberDir, workspaceMemberDir } =
+    await import("../services/project/projectsRoot.js");
+  const { hostManagedSessionRoot } =
+    await import("./sandboxRuntime/hostSessionPaths.js");
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  for (const m of members) {
+    worktrees[m.repoName] = `${WORKSPACE_MOUNT}/${m.repoName}`;
+    const project = await projectRepo.getById(m.projectId);
+    if (project?.source === "local" && project.canonicalKey) {
+      const sessionMember = workspaceSessionMemberDir(
+        workspaceId,
+        sessionId,
+        m.repoName
+      );
+      const durable = workspaceMemberDir(workspaceId, m.repoName);
+      if (fs.existsSync(sessionMember)) {
+        hostWorktrees[m.repoName] = sessionMember;
+      } else if (fs.existsSync(durable)) {
+        hostWorktrees[m.repoName] = durable;
+      }
+    }
+  }
+  const hostWorkspaceView = path.join(
+    hostManagedSessionRoot(sessionId),
+    "workspace"
+  );
+  const hostRef =
+    kind === "host"
+      ? fs.existsSync(hostWorkspaceView)
+        ? hostWorkspaceView
+        : hostManagedSessionRoot(sessionId)
+      : Object.values(hostWorktrees)[0];
+  const hostWorkingDir = fs.existsSync(hostWorkspaceView)
+    ? hostWorkspaceView
+    : undefined;
+  return {
+    containerName: kind === "host" && hostRef ? hostRef : dockerName,
+    repoDir: members[0]?.repoName || "repo",
+    workingDir: WORKSPACE_MOUNT,
+    sessionRoot: WORKSPACE_MOUNT,
+    worktrees,
+    ...(Object.keys(hostWorktrees).length > 0 ? { hostWorktrees } : {}),
     ...(hostWorkingDir ? { hostWorkingDir } : {})
   };
 }
@@ -246,19 +292,12 @@ async function pruneLocalSessionWorktrees(sessionId: string): Promise<void> {
   if (!chat) return;
 
   if (chat.workspaceId) {
-    const workspaceRepo = new WorkspaceRepository();
-    const members = await workspaceRepo.listMembers(chat.workspaceId);
-    for (const member of members) {
-      const project = await projectRepo.getById(member.projectId);
-      if (!project || project.source !== "local" || !project.canonicalKey) {
-        continue;
-      }
-      await removeSessionWorktree({
-        canonicalKey: project.canonicalKey,
-        projectId: project.id,
-        sessionId
-      });
-    }
+    const { removeWorkspaceSessionTree } =
+      await import("./workspaceMaterialize.js");
+    await removeWorkspaceSessionTree({
+      workspaceId: chat.workspaceId,
+      sessionId
+    });
     return;
   }
 

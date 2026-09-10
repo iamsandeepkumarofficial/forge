@@ -81,10 +81,37 @@ export type RuntimeExecInput = {
   cmd: string[];
 } & ExecOpts;
 
+export type ResolveListenPortInput = {
+  sessionId: string;
+  appName: string;
+  preferred?: number;
+  usedListenPorts: number[];
+};
+
+export type EnsurePublishedPortReadyInput = {
+  handle: WorkspaceHandle;
+  listenPort: number;
+  publishedPort: number;
+  onRepairRestart?: () => Promise<boolean>;
+};
+
 export interface SandboxRuntime {
+  readonly kind: SandboxRuntimeKind;
   createSession(sessionId: string, opts?: CreateOpts): Promise<WorkspaceHandle>;
   exec(input: RuntimeExecInput): Promise<ExecResult>;
   getStatus(sessionId: string): Promise<SessionRuntimeStatus>;
+  resolveListenPort(input: ResolveListenPortInput): Promise<number>;
+  resolvePublishedPort(
+    sessionId: string,
+    listenPort: number
+  ): Promise<number | null>;
+  ensurePublishedPortReady(
+    input: EnsurePublishedPortReadyInput
+  ): Promise<boolean>;
+  publishedAppPortsEnv(): string;
+  isAllowedListenPort(port: number): boolean;
+
+  previewHostname(sessionId: string, listenPort: number): string;
   publishPreviewPort(
     handle: WorkspaceHandle,
     port: number

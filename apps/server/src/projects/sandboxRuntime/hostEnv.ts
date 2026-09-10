@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { withForgeRuntimePath } from "../hostInfra/paths.js";
 
 const ENV_ALLOWLIST = new Set([
   "PATH",
@@ -40,6 +41,7 @@ export function scrubHostEnv(
     }
   }
   if (!out.TERM) out.TERM = "xterm-256color";
+  out.PATH = withForgeRuntimePath(out.PATH);
   return out;
 }
 

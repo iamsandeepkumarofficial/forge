@@ -7,7 +7,6 @@ import { GithubOAuthService } from "../../integrations/githubOAuth.js";
 import type { ChatFeature, Project, WorkspaceProject } from "@forge/db";
 import { WORKSPACE_MOUNT } from "./constants.js";
 import {
-  assertLocalFolderPath,
   assertSafeBranch,
   cloneGithubIntoVolume,
   isRepoInitialized,
@@ -15,10 +14,7 @@ import {
   type LocalFolderSource
 } from "./materialize.js";
 import type { BindMount, NamedVolumeMount } from "../sandboxRuntime/types.js";
-import {
-  canonicalGitContainerPath,
-  ensureSessionWorktree
-} from "../localWorktree.js";
+import { partitionMemberMounts } from "./provisionMounts.js";
 const execFileAsync = promisify(execFile);
 
 export type ProvisionSessionSource = LocalFolderSource;
@@ -64,7 +60,7 @@ export async function sandboxSessionCreateOpts(options: {
     image = await selectSandboxImageForWorkspace(workspaceId);
     if (!(await isHostSession(sessionId))) {
       const { ensureWorkspaceDepsVolume, DEPS_CACHE_MOUNT } =
-        await import("../workspaceDepsCache.js");
+        await import("../cloud/workspaceDepsCache.js");
       const volumeName = await ensureWorkspaceDepsVolume(workspaceId, {
         hostMode: false
       });
@@ -259,48 +255,6 @@ async function loadWorkspaceMemberProjects(
   return memberProjects;
 }
 
-async function partitionMemberMounts(options: {
-  sessionId: string;
-  branchName: string;
-  memberProjects: Array<{ member: WorkspaceProject; project: Project }>;
-}): Promise<{
-  bindMounts: BindMount[];
-  githubMembers: Array<{ member: WorkspaceProject; project: Project }>;
-}> {
-  const bindMounts: BindMount[] = [];
-  const githubMembers: Array<{
-    member: WorkspaceProject;
-    project: Project;
-  }> = [];
-  for (const { member, project } of options.memberProjects) {
-    const localPath = resolveLocalFolderPath(project);
-    if (localPath) {
-      const hostPath = await assertLocalFolderPath(localPath);
-      const wt = await ensureSessionWorktree({
-        canonicalKey: hostPath,
-        projectId: project.id,
-        sessionId: options.sessionId,
-        branchName: options.branchName
-      });
-      bindMounts.push({
-        hostPath: wt.workDir,
-        containerPath: `${WORKSPACE_MOUNT}/${member.repoName}`
-      });
-      bindMounts.push({
-        hostPath: wt.gitCanonicalHostPath,
-        containerPath: canonicalGitContainerPath(project.id)
-      });
-    } else if (project.source === "github") {
-      githubMembers.push({ member, project });
-    } else {
-      throw new Error(
-        `Cannot materialize member "${member.repoName}" source "${project.source}"`
-      );
-    }
-  }
-  return { bindMounts, githubMembers };
-}
-
 async function finalizeWorkspaceContainer(options: {
   containerName: string;
   branchName: string;
@@ -355,10 +309,14 @@ export async function provisionWorkspaceScopedSandbox(options: {
   const { sessionId, workspaceId, userId, branchName } = options;
   assertSafeBranch(branchName);
   const memberProjects = await loadWorkspaceMemberProjects(workspaceId);
+  const { isHostSession } = await import("../sandboxRuntime/resolve.js");
+  const hostMode = await isHostSession(sessionId);
   const { bindMounts, githubMembers } = await partitionMemberMounts({
     sessionId,
+    workspaceId,
     branchName,
-    memberProjects
+    memberProjects,
+    hostMode
   });
   const { getSandboxRuntime } = await import("../sandboxRuntime/resolve.js");
   const handle = await (

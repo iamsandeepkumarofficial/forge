@@ -3,17 +3,19 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { ensureContainer, ensureVolume } from "../sessionSandbox/container.js";
 import {
-  FIRST_APP_PORT,
-  hostPortForContainerPort,
   sandboxContainerName,
   sessionVolumeName,
   WORKSPACE_MOUNT
 } from "../sessionSandbox/constants.js";
 import {
-  previewUrlForHostname,
-  sessionPreviewHostname,
-  sessionPreviewHostnameForPort
-} from "./hostnames.js";
+  cloudPublishedAppPortsEnv,
+  isReservedAppPort,
+  resolveCloudListenPort,
+  resolveDockerPublishedPort
+} from "./cloudPorts.js";
+import { ensureDockerPublishedPortReady } from "./ensurePublishedPort.js";
+import { cloudPreviewHostname } from "./previewHostname.js";
+import { previewUrlForHostname } from "./hostnames.js";
 import {
   registerPreviewRoute,
   revokePreviewSession
@@ -23,6 +25,7 @@ import type {
   ExecOpts,
   ExecResult,
   PreviewBinding,
+  ResolveListenPortInput,
   RuntimeExecInput,
   SandboxRuntime,
   SessionRuntimeStatus,
@@ -114,11 +117,8 @@ async function dockerPublishPreviewPort(
   handle: WorkspaceHandle,
   port: number
 ): Promise<PreviewBinding> {
-  const hostPort = hostPortForContainerPort(handle.sessionId, port);
-  const hostname =
-    hostPort === null || port === FIRST_APP_PORT
-      ? sessionPreviewHostname(handle.sessionId)
-      : sessionPreviewHostnameForPort(handle.sessionId, port);
+  const hostPort = resolveDockerPublishedPort(handle.sessionId, port);
+  const hostname = cloudPreviewHostname(handle.sessionId, port);
   const localUrl =
     hostPort !== null
       ? `http://127.0.0.1:${hostPort}`
@@ -152,6 +152,7 @@ async function dockerDestroySession(sessionId: string): Promise<void> {
 
 export function createDockerSandboxRuntime(): SandboxRuntime {
   return {
+    kind: "docker",
     async createSession(
       sessionId: string,
       opts?: CreateOpts
@@ -191,6 +192,14 @@ export function createDockerSandboxRuntime(): SandboxRuntime {
     },
 
     getStatus: dockerGetStatus,
+    resolveListenPort: async (input: ResolveListenPortInput) =>
+      resolveCloudListenPort(input),
+    resolvePublishedPort: async (sessionId, listenPort) =>
+      resolveDockerPublishedPort(sessionId, listenPort),
+    ensurePublishedPortReady: ensureDockerPublishedPortReady,
+    publishedAppPortsEnv: cloudPublishedAppPortsEnv,
+    isAllowedListenPort: isReservedAppPort,
+    previewHostname: cloudPreviewHostname,
     publishPreviewPort: dockerPublishPreviewPort,
     destroySession: dockerDestroySession
   };

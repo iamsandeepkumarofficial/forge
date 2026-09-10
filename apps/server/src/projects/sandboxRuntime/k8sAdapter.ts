@@ -6,10 +6,15 @@ import {
   WORKSPACE_MOUNT
 } from "../sessionSandbox/constants.js";
 import {
+  cloudPublishedAppPortsEnv,
+  isReservedAppPort,
+  resolveCloudListenPort
+} from "./cloudPorts.js";
+import { ensureHostTcpPublishedReady } from "./ensurePublishedPort.js";
+import { cloudPreviewHostname } from "./previewHostname.js";
+import {
   previewUrlForHostname,
-  sanitizeSessionIdForHostname,
-  sessionPreviewHostname,
-  sessionPreviewHostnameForPort
+  sanitizeSessionIdForHostname
 } from "./hostnames.js";
 import {
   registerPreviewRoute,
@@ -17,8 +22,10 @@ import {
 } from "../../preview/previewPlaneClient.js";
 import type {
   CreateOpts,
+  EnsurePublishedPortReadyInput,
   ExecResult,
   PreviewBinding,
+  ResolveListenPortInput,
   RuntimeExecInput,
   SandboxRuntime,
   SessionRuntimeStatus,
@@ -250,10 +257,7 @@ async function k8sPublishPreviewPort(options: {
   port: number;
 }): Promise<PreviewBinding> {
   const { client, handle, port } = options;
-  const hostname =
-    port === FIRST_APP_PORT
-      ? sessionPreviewHostname(handle.sessionId)
-      : sessionPreviewHostnameForPort(handle.sessionId, port);
+  const hostname = cloudPreviewHostname(handle.sessionId, port);
   const backendService = `${sandboxResourceName(handle.sessionId)}.${client.namespace}.svc.cluster.local:${port}`;
   const registered = await registerPreviewRoute({
     sessionId: handle.sessionId,
@@ -274,6 +278,7 @@ export function createK8sSandboxRuntime(
 ): SandboxRuntime {
   const c = client ?? createKubectlSandboxClient();
   return {
+    kind: "kubernetes",
     async createSession(
       sessionId: string,
       opts?: CreateOpts
@@ -311,6 +316,14 @@ export function createK8sSandboxRuntime(
       });
     },
     getStatus: (sessionId) => k8sGetStatus(c, sessionId),
+    resolveListenPort: async (input: ResolveListenPortInput) =>
+      resolveCloudListenPort(input),
+    resolvePublishedPort: async (_sessionId, listenPort) => listenPort,
+    ensurePublishedPortReady: async (input: EnsurePublishedPortReadyInput) =>
+      ensureHostTcpPublishedReady({ publishedPort: input.publishedPort }),
+    publishedAppPortsEnv: cloudPublishedAppPortsEnv,
+    isAllowedListenPort: isReservedAppPort,
+    previewHostname: cloudPreviewHostname,
     publishPreviewPort: (handle, port) =>
       k8sPublishPreviewPort({ client: c, handle, port }),
     async destroySession(sessionId: string): Promise<void> {

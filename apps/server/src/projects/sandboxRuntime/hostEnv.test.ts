@@ -11,6 +11,7 @@ describe("hostEnv", () => {
     assert.equal(env.FORGE_TEST, "x");
     assert.ok(env.TERM);
     assert.equal(env.DATABASE_URL, undefined);
+    assert.equal(typeof env.PATH, "string");
   });
 
   it("hostProcessEnv forces temp under session .forge-runtime/tmp", async () => {

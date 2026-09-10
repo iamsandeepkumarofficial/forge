@@ -39,6 +39,10 @@ describe("sessionSandbox helpers", () => {
       hostPortForContainerPort("s1", FIRST_APP_PORT + RESERVED_PORTS),
       null
     );
+    assert.notEqual(
+      hostPortForContainerPort("s1", FIRST_APP_PORT),
+      FIRST_APP_PORT
+    );
   });
 
   it("sanitizes docker volume and container names", () => {

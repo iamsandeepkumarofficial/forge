@@ -18,4 +18,4 @@ export interface AppStatus extends ForgeApp {
   hostPort?: number;
   startFailure?: AppStartFailure;
 }
-export type LaunchConfigSource = "launch" | "legacy" | "none";
+export type LaunchConfigSource = "launch" | "none";

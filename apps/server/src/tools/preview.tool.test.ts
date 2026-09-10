@@ -12,7 +12,7 @@ describe("PreviewToolService", { concurrency: false }, () => {
     url: runAppRunning ? "http://127.0.0.1:3000" : undefined
   }));
   let listExists = false;
-  let listSource: "launch" | "legacy" | "none" = "none";
+  let listSource: "launch" | "none" = "none";
   let listedApps: Array<{ name: string; type: string }> = [];
   let PreviewToolService: new () => {
     stop: (

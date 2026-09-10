@@ -1,23 +1,18 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  sessionPreviewHostname,
-  sessionPreviewHostnameForPort
-} from "./hostnames.js";
-import {
-  registerPreviewRoute,
-  revokePreviewSession
-} from "../../preview/previewPlaneClient.js";
-import {
-  FIRST_APP_PORT,
-  WORKSPACE_MOUNT
-} from "../sessionSandbox/constants.js";
+import { revokePreviewSession } from "../../preview/previewPlaneClient.js";
+import { WORKSPACE_MOUNT } from "../sessionSandbox/constants.js";
 import {
   ensureSessionsRoot,
   resolveSessionsRoot
 } from "../../services/project/projectsRoot.js";
-import { releaseSessionPorts } from "./sessionPortRegistry.js";
+import {
+  hostPublishedAppPortsEnv,
+  isHostRegistryPort,
+  releaseSessionPorts
+} from "./sessionPortRegistry.js";
+import { hostPreviewHostname } from "./previewHostname.js";
 import { resolveWrappedArgv } from "./osSandbox.js";
 import { hostProcessEnv } from "./hostEnv.js";
 import {
@@ -31,11 +26,15 @@ import {
   workspaceMountsFromBinds,
   type WorkspaceMount
 } from "./hostWorkspaceView.js";
+import {
+  hostEnsurePublishedPortReady,
+  hostPublishPreviewPort,
+  hostResolveListenPort
+} from "./hostAdapterPorts.js";
 import type {
   CreateOpts,
   ExecOpts,
   ExecResult,
-  PreviewBinding,
   RuntimeExecInput,
   SandboxRuntime,
   SessionRuntimeStatus,
@@ -289,29 +288,6 @@ async function hostGetStatus(sessionId: string): Promise<SessionRuntimeStatus> {
   };
 }
 
-async function hostPublishPreviewPort(
-  handle: WorkspaceHandle,
-  port: number
-): Promise<PreviewBinding> {
-  const hostname =
-    port === FIRST_APP_PORT
-      ? sessionPreviewHostname(handle.sessionId)
-      : sessionPreviewHostnameForPort(handle.sessionId, port);
-  const backendService = `127.0.0.1:${port}`;
-  const localUrl = `http://127.0.0.1:${port}`;
-  const registered = await registerPreviewRoute({
-    sessionId: handle.sessionId,
-    port,
-    backendService,
-    hostname
-  });
-  return {
-    hostname: registered?.hostname ?? hostname,
-    targetPort: port,
-    url: registered?.url ?? localUrl
-  };
-}
-
 async function killHostRuntimePids(root: string): Promise<void> {
   const runtimeDir = path.join(root, ".forge-runtime");
   let entries: string[];
@@ -364,6 +340,7 @@ export function listHostActiveSessionIds(): string[] {
 
 export function createHostSandboxRuntime(): SandboxRuntime {
   return {
+    kind: "host",
     createSession: hostCreateSession,
     async exec(input: RuntimeExecInput): Promise<ExecResult> {
       const { handle, cmd, ...opts } = input;
@@ -376,6 +353,12 @@ export function createHostSandboxRuntime(): SandboxRuntime {
       return hostExec({ root, mounts, argv: cmd, opts });
     },
     getStatus: hostGetStatus,
+    resolveListenPort: hostResolveListenPort,
+    resolvePublishedPort: async (_sessionId, listenPort) => listenPort,
+    ensurePublishedPortReady: hostEnsurePublishedPortReady,
+    publishedAppPortsEnv: hostPublishedAppPortsEnv,
+    isAllowedListenPort: isHostRegistryPort,
+    previewHostname: hostPreviewHostname,
     publishPreviewPort: hostPublishPreviewPort,
     async destroySession(sessionId: string): Promise<void> {
       await revokePreviewSession(sessionId);

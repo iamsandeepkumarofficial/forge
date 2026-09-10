@@ -1,9 +1,4 @@
-import { FIRST_APP_PORT, hostPortForContainerPort } from "../sessionSandbox.js";
-import {
-  previewUrlForHostname,
-  sessionPreviewHostname,
-  sessionPreviewHostnameForPort
-} from "../sandboxRuntime/hostnames.js";
+import { previewUrlForHostname } from "../sandboxRuntime/hostnames.js";
 import {
   isBackgroundJobRunning,
   readBackgroundJobLogs,
@@ -76,29 +71,20 @@ function previewProxyConfigured(): boolean {
   );
 }
 
-function previewUrlIfConfigured(
-  sessionId: string,
-  port?: number
-): string | undefined {
-  if (port == null || !previewProxyConfigured()) {
-    return undefined;
-  }
-  const hostname =
-    port === FIRST_APP_PORT
-      ? sessionPreviewHostname(sessionId)
-      : sessionPreviewHostnameForPort(sessionId, port);
-  const scheme = process.env.PREVIEW_URL_SCHEME?.trim() || "http";
-  return previewUrlForHostname(hostname, scheme);
-}
-
 export function resolveRunningAppUrl(options: {
   running: boolean;
   sessionId: string;
   port?: number;
   hostPort?: number | null;
+
+  previewHostname?: string;
 }): string | undefined {
   if (!options.running) return undefined;
-  const previewUrl = previewUrlIfConfigured(options.sessionId, options.port);
+  const scheme = process.env.PREVIEW_URL_SCHEME?.trim() || "http";
+  const previewUrl =
+    options.previewHostname && previewProxyConfigured()
+      ? previewUrlForHostname(options.previewHostname, scheme)
+      : undefined;
   const localUrl = options.hostPort
     ? `http://127.0.0.1:${options.hostPort}`
     : undefined;
@@ -158,8 +144,13 @@ export async function statusForApp(options: {
     name: app.name,
     sessionId
   });
+  const runtime = await (
+    await import("../sandboxRuntime/resolve.js")
+  ).getSandboxRuntime(sessionId);
   const hostPort =
-    app.port != null ? hostPortForContainerPort(sessionId, app.port) : null;
+    app.port != null
+      ? await runtime.resolvePublishedPort(sessionId, app.port)
+      : null;
   if (running && app.port != null && previewProxyConfigured()) {
     await ensurePreviewPublished({
       sessionId,
@@ -167,11 +158,14 @@ export async function statusForApp(options: {
       port: app.port
     });
   }
+  const previewHostname =
+    app.port != null ? runtime.previewHostname(sessionId, app.port) : undefined;
   let url = resolveRunningAppUrl({
     running,
     sessionId,
     port: app.port,
-    hostPort
+    hostPort,
+    previewHostname
   });
 
   if (
@@ -313,9 +307,15 @@ export async function registerWorkspaceGateway(
 
   const { apps } = await listAppStatuses(sessionId);
   const hostByRepo = new Map<string, number>();
+  const listenByRepo = new Map<string, number>();
   for (const app of apps) {
-    if (!app.repo || !app.running || app.hostPort == null) continue;
-    if (!hostByRepo.has(app.repo)) hostByRepo.set(app.repo, app.hostPort);
+    if (!app.repo || !app.running || app.hostPort == null || app.port == null) {
+      continue;
+    }
+    if (!hostByRepo.has(app.repo)) {
+      hostByRepo.set(app.repo, app.hostPort);
+      listenByRepo.set(app.repo, app.port);
+    }
   }
   if (hostByRepo.size === 0) return;
 
@@ -335,11 +335,22 @@ export async function registerWorkspaceGateway(
   }
   if (pathRoutes.length === 0) return;
 
+  const catchAllRoute =
+    ctxWs.routes.find((r) => r.pathPrefix === "/") ?? ctxWs.routes[0];
   const catchAll =
     pathRoutes.find((r) => r.pathPrefix === "/") ?? pathRoutes[0];
+  const primaryListen =
+    (catchAllRoute ? listenByRepo.get(catchAllRoute.target) : undefined) ??
+    [...listenByRepo.values()].sort((a, b) => a - b)[0];
+  if (primaryListen == null) return;
+
+  const runtime = await (
+    await import("../sandboxRuntime/resolve.js")
+  ).getSandboxRuntime(sessionId);
   await registerPreviewRoute({
     sessionId,
-    port: FIRST_APP_PORT,
+    port: primaryListen,
+    hostname: runtime.previewHostname(sessionId, primaryListen),
     backendService: catchAll.backendService,
     pathRoutes
   });

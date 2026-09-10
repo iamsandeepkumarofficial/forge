@@ -101,7 +101,8 @@ async function handleTerminalRun(options: {
   const r = await dockerExec({
     container: sandbox.containerName,
     sessionId: options.sessionId,
-    argv: ["sh", "-lc", commandTrimmed],
+
+    argv: ["sh", "-c", commandTrimmed],
     cwd: cwd.cwd
   });
   const combined = [r.stdout, r.stderr]

@@ -3,9 +3,21 @@ import net from "node:net";
 import path from "node:path";
 import { resolveSessionsRoot } from "../../services/project/projectsRoot.js";
 
-const HOST_PORT_FLOOR = 40_000;
-const HOST_PORT_CEILING = 49_999;
+export const HOST_PORT_FLOOR = 40_000;
+export const HOST_PORT_CEILING = 49_999;
 const N_100 = 100;
+
+export function isHostRegistryPort(port: number): boolean {
+  return (
+    Number.isInteger(port) &&
+    port >= HOST_PORT_FLOOR &&
+    port <= HOST_PORT_CEILING
+  );
+}
+
+export function hostPublishedAppPortsEnv(): string {
+  return `${HOST_PORT_FLOOR}-${HOST_PORT_CEILING}`;
+}
 
 export type SessionPortAllocation = {
   sessionId: string;
@@ -53,12 +65,16 @@ export async function allocateSessionPort(
   sessionId: string,
   preferred?: number
 ): Promise<number> {
-  const candidates: number[] = [];
+  const existing = state.bySession.get(sessionId);
   if (
     preferred != null &&
-    preferred >= HOST_PORT_FLOOR &&
-    preferred <= HOST_PORT_CEILING
+    isHostRegistryPort(preferred) &&
+    existing?.has(preferred)
   ) {
+    return preferred;
+  }
+  const candidates: number[] = [];
+  if (preferred != null && isHostRegistryPort(preferred)) {
     candidates.push(preferred);
   }
   for (let p = HOST_PORT_FLOOR; p <= HOST_PORT_CEILING; p++) {

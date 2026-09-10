@@ -3,11 +3,7 @@ import {
   readFileFromSandbox,
   writeFileToSandbox
 } from "../sandboxExec.js";
-import {
-  FIRST_APP_PORT,
-  isReservedAppPort,
-  LAST_APP_PORT
-} from "../sessionSandbox.js";
+import { isReservedAppPort } from "../sessionSandbox.js";
 import { normalizeLaunchCwd, safeRelDir } from "../launchCwd.js";
 import type { ForgeApp, ForgeConfig, LaunchConfigSource } from "./types.js";
 import { matchLaunchApp } from "./matchLaunchApp.js";
@@ -22,8 +18,6 @@ export type {
 } from "./types.js";
 
 const LAUNCH_FILE = ".forge/launch.json";
-const LEGACY_LAUNCH_FILE = ".pulse/launch.json";
-const LEGACY_ROOT_FILE = "pulse.json";
 export async function ctx(sessionId: string) {
   const { containerName, workingDir, repoDir, worktrees } =
     await resolveSandbox(sessionId);
@@ -108,24 +102,6 @@ async function readLaunchAt(options: {
   const launchConfig = parseConfigJson(launchRaw);
   if (launchConfig) {
     return { source: "launch", config: launchConfig };
-  }
-  const legacyLaunchRaw = await readFileFromSandbox({
-    container: containerName,
-    absPath: `${mountPath}/${LEGACY_LAUNCH_FILE}`,
-    sessionId
-  });
-  const legacyLaunchConfig = parseConfigJson(legacyLaunchRaw);
-  if (legacyLaunchConfig) {
-    return { source: "legacy", config: legacyLaunchConfig };
-  }
-  const legacyRaw = await readFileFromSandbox({
-    container: containerName,
-    absPath: `${mountPath}/${LEGACY_ROOT_FILE}`,
-    sessionId
-  });
-  const legacyConfig = parseConfigJson(legacyRaw);
-  if (legacyConfig) {
-    return { source: "legacy", config: legacyConfig };
   }
   return null;
 }
@@ -340,7 +316,11 @@ export async function upsertLaunchApp(
       : nextApp.port;
   nextApp = {
     ...nextApp,
-    port: resolveLaunchPort(portInput, usedPorts)
+    port: await resolveLaunchPort({
+      sessionId,
+      port: portInput,
+      usedPorts
+    })
   };
 
   const nextApps = [...others, nextApp];
@@ -349,22 +329,35 @@ export async function upsertLaunchApp(
   return next;
 }
 
-export function resolveLaunchPort(
-  port: number | undefined,
-  usedPorts: number[]
-): number | undefined {
+export async function resolveLaunchPort(options: {
+  sessionId: string;
+  port: number | undefined;
+  usedPorts: number[];
+}): Promise<number | undefined> {
+  const { sessionId, port, usedPorts } = options;
   if (port == null) return undefined;
-  if (!isReservedAppPort(port)) {
-    throw new Error(
-      `Port ${port} is outside published range ${FIRST_APP_PORT}–${LAST_APP_PORT}. Use a free port in that range.`
-    );
+  const { getSandboxRuntime } = await import("../sandboxRuntime/resolve.js");
+  const runtime = await getSandboxRuntime(sessionId);
+  const range = runtime.publishedAppPortsEnv().replace("-", "–");
+  if (runtime.isAllowedListenPort(port)) {
+    if (usedPorts.includes(port)) {
+      throw new Error(
+        `Port ${port} is already used by another app. Choose a free port in ${range}.`
+      );
+    }
+    return port;
   }
-  if (usedPorts.includes(port)) {
-    throw new Error(
-      `Port ${port} is already used by another app. Choose a free port in ${FIRST_APP_PORT}–${LAST_APP_PORT}.`
-    );
+  if (runtime.kind === "host" && isReservedAppPort(port)) {
+    return runtime.resolveListenPort({
+      sessionId,
+      appName: "upsert",
+      preferred: port,
+      usedListenPorts: usedPorts
+    });
   }
-  return port;
+  throw new Error(
+    `Port ${port} is outside published range ${range}. Use a free port in that range.`
+  );
 }
 
 export async function persistAppPort(options: {

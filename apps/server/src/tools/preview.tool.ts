@@ -141,15 +141,12 @@ export class PreviewToolService {
     const filtered = filterName
       ? apps.filter((a) => a.name === filterName)
       : apps;
-    let output =
+    const output =
       filtered.length === 0
         ? exists
           ? "No matching apps in .forge/launch.json."
           : "No .forge/launch.json — scaffold from the Run tab or upsert_launch_app."
         : filtered.map(formatAppStatus).join("\n\n---\n\n");
-    if (source === "legacy") {
-      output = `${output}\n\n(Note: using legacy pulse.json; prefer .forge/launch.json.)`;
-    }
     return {
       success: true,
       output,
