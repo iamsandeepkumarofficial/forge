@@ -91,6 +91,10 @@ export class PreviewHost {
   }
 
   async loadURL(url: string): Promise<void> {
+    if (url === "about:blank") {
+      await this.preview.webContents.loadURL(url);
+      return;
+    }
     if (sameLoadedUrl(this.preview.webContents.getURL(), url)) return;
     await this.preview.webContents.loadURL(url);
   }
@@ -131,9 +135,9 @@ export class PreviewHost {
   async startPick(): Promise<PreviewPickResult | null> {
     const picked = await this.startCdpPick();
     if (picked !== undefined) return picked;
-    return this.preview.webContents.executeJavaScript(PICK_SCRIPT) as Promise<
-      PreviewPickResult | null
-    >;
+    return this.preview.webContents.executeJavaScript(
+      PICK_SCRIPT
+    ) as Promise<PreviewPickResult | null>;
   }
 
   async cancelPick(): Promise<void> {

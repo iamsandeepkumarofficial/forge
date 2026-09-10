@@ -80,6 +80,23 @@ describe("PreviewHost", () => {
     assert.equal(preview.visible, false);
   });
 
+  it("always loads about:blank even if already blank-skipping would apply", async () => {
+    const preview = fakeView();
+    const host = new PreviewHost(
+      {
+        contentView: { addChildView: () => undefined },
+        webContents: { send: () => undefined }
+      },
+      {
+        createPreview: () => preview,
+        createDevtools: () => fakeView()
+      }
+    );
+    await host.loadURL("http://other.test/");
+    await host.loadURL("about:blank");
+    assert.equal(preview.webContents.getURL(), "about:blank");
+  });
+
   it("picks via Chromium inspect mode when a debugger is present", async () => {
     const listeners = new Set<(...args: unknown[]) => void>();
     const preview = fakeView();

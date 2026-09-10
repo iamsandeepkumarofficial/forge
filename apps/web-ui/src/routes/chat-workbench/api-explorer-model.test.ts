@@ -11,6 +11,9 @@ import {
 describe("api-explorer helpers", () => {
   it("shows only the port in the preview selector", () => {
     expect(previewPortLabel({ name: "bp-backend", port: 3000 })).toBe("3000");
+    expect(
+      previewPortLabel({ name: "bp-frontend", port: 3000, hostPort: 40007 })
+    ).toBe("40007");
     expect(previewPortLabel({ name: "worker" })).toBe("worker");
   });
 

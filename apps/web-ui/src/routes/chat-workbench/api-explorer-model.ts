@@ -23,9 +23,11 @@ export type ApiOperation = {
 
 export function previewPortLabel(app: {
   port?: number | null;
+  hostPort?: number | null;
   name: string;
 }): string {
-  return app.port != null ? String(app.port) : app.name;
+  const shown = app.hostPort ?? app.port;
+  return shown != null ? String(shown) : app.name;
 }
 
 export function parseHeaderLines(text: string): Record<string, string> {
