@@ -29,6 +29,7 @@ export class SessionMessageRepository {
     role: SessionMessage["role"];
     parts: unknown[];
     turnId?: string | null;
+    createdAt?: Date;
   }): Promise<SessionMessage> {
     const db = getDb();
     const [created] = await db
@@ -38,7 +39,7 @@ export class SessionMessageRepository {
         role: input.role,
         parts: sanitizeJsonForPg(input.parts),
         turnId: input.turnId ?? null,
-        createdAt: new Date()
+        createdAt: input.createdAt ?? new Date()
       })
       .returning();
     return created as SessionMessage;
@@ -73,18 +74,23 @@ export class SessionMessageRepository {
     sourceSessionId: string;
     targetSessionId: string;
     untilMessageId: string;
+    turnIdMap?: ReadonlyMap<string, string>;
   }): Promise<number> {
-    const { sourceSessionId, targetSessionId, untilMessageId } = options;
+    const { sourceSessionId, targetSessionId, untilMessageId, turnIdMap } =
+      options;
     const rows = await this.listBySessionId(sourceSessionId);
     const idx = rows.findIndex((row) => row.id === untilMessageId);
     if (idx < 0) return 0;
     const slice = rows.slice(0, idx + 1);
     for (const row of slice) {
+      const mapped =
+        row.turnId && turnIdMap ? (turnIdMap.get(row.turnId) ?? null) : null;
       await this.create({
         sessionId: targetSessionId,
         role: row.role,
         parts: Array.isArray(row.parts) ? row.parts : [],
-        turnId: null
+        turnId: mapped,
+        createdAt: row.createdAt
       });
     }
     return slice.length;
@@ -169,6 +175,37 @@ export class ChatTurnRepository {
       .where(eq(chatTurns.id, id))
       .returning();
     return (updated as ChatTurn) ?? null;
+  }
+  async cloneCompleted(input: {
+    id: string;
+    sessionId: string;
+    workflowId: string;
+    source: ChatTurn;
+  }): Promise<ChatTurn> {
+    const status =
+      input.source.status === "running" ? "completed" : input.source.status;
+    const db = getDb();
+    const [created] = await db
+      .insert(chatTurns)
+      .values({
+        id: input.id,
+        sessionId: input.sessionId,
+        workflowId: input.workflowId,
+        status,
+        mode: input.source.mode,
+        provider: input.source.provider,
+        model: input.source.model,
+        error: input.source.error,
+        rounds: input.source.rounds,
+        toolCallCount: input.source.toolCallCount,
+        toolNames: input.source.toolNames,
+        hitRoundCap: input.source.hitRoundCap,
+        workspaceCheckpoint: input.source.workspaceCheckpoint,
+        startedAt: input.source.startedAt,
+        finishedAt: input.source.finishedAt ?? new Date()
+      })
+      .returning();
+    return created as ChatTurn;
   }
   async setWorkspaceCheckpoint(
     id: string,

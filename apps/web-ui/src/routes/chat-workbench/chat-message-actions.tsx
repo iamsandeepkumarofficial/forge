@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Copy, GitBranch, MoreHorizontal, Undo2 } from "lucide-react";
+import { Copy, GitBranch, Loader2, MoreHorizontal, Undo2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,7 +77,11 @@ export function AssistantMessageActions(options: {
             void Promise.resolve(onBranch()).finally(() => setBusy(false));
           }}
         >
-          <GitBranch className="size-3.5" />
+          {busy ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <GitBranch className="size-3.5" />
+          )}
         </MessageActionButton>
       ) : null}
       {hasText ? (

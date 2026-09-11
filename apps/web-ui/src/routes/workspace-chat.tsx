@@ -6,8 +6,10 @@ import { Workbench } from "./chat-workbench/workbench-layout.js";
 import { SessionHeader } from "./chat-workbench/session-header.js";
 import {
   bootExistingOrStartSession,
-  SessionBootScreen
+  SessionBootScreen,
+  sessionBootCopyProps
 } from "./chat-workbench/session-boot.js";
+import { useBranchCopyBoot } from "./chat-workbench/use-branch-copy-boot.js";
 import type {
   LeftPaneMode,
   SandboxStatus,
@@ -29,6 +31,9 @@ function readInitialPrompt(state: unknown): string | undefined {
 function useWorkspaceChatSession(options: {
   workspaceId: string;
   chatId: string;
+  locationState: unknown;
+  pathname: string;
+  navigate: ReturnType<typeof useNavigate>;
 }) {
   const { workspaceId, chatId } = options;
   const [chat, setChat] = useState<{
@@ -73,12 +78,13 @@ function useWorkspaceChatSession(options: {
       setStatus: setSandboxStatus
     });
   }, [sessionId]);
-  useEffect(() => {
-    if (!sessionId) return;
-    void Promise.resolve().then(() => {
-      startSandbox();
-    });
-  }, [sessionId, startSandbox]);
+  const branchCopy = useBranchCopyBoot({
+    sessionId,
+    locationState: options.locationState,
+    pathname: options.pathname,
+    navigate: options.navigate,
+    onReady: startSandbox
+  });
   return {
     chat,
     loadingChat,
@@ -89,7 +95,13 @@ function useWorkspaceChatSession(options: {
     setLeftMode,
     sessionId,
     startSandbox,
-    booting: loadingChat || Boolean(sessionId && sandboxStatus === "starting")
+    copying: branchCopy.copying,
+    copyError: branchCopy.copyError,
+    retryCopy: branchCopy.retry,
+    booting:
+      loadingChat ||
+      branchCopy.copying ||
+      Boolean(sessionId && sandboxStatus === "starting")
   };
 }
 
@@ -100,7 +112,20 @@ export function WorkspaceChatWorkbench() {
   const workspaceId = params.workspaceId ?? "";
   const chatId = params.chatId ?? "";
   const initialPrompt = readInitialPrompt(location.state);
-  const wb = useWorkspaceChatSession({ workspaceId, chatId });
+  const wb = useWorkspaceChatSession({
+    workspaceId,
+    chatId,
+    locationState: location.state,
+    pathname: location.pathname,
+    navigate
+  });
+  const boot = sessionBootCopyProps({
+    copying: wb.copying,
+    copyError: wb.copyError,
+    retryCopy: wb.retryCopy,
+    sandboxStatus: wb.sandboxStatus,
+    startSandbox: wb.startSandbox
+  });
   return (
     <div className="flex h-screen flex-col">
       <SessionHeader
@@ -114,10 +139,12 @@ export function WorkspaceChatWorkbench() {
         onLeftMode={wb.setLeftMode}
       />
       <div className="min-h-0 flex-1">
-        {wb.booting || wb.sandboxStatus === "error" ? (
+        {wb.booting || wb.sandboxStatus === "error" || wb.copyError ? (
           <SessionBootScreen
-            sandboxStatus={wb.sandboxStatus === "error" ? "error" : "starting"}
-            onRetry={wb.sandboxStatus === "error" ? wb.startSandbox : undefined}
+            sandboxStatus={boot.sandboxStatus}
+            title={boot.title}
+            detail={boot.detail}
+            onRetry={boot.onRetry}
           />
         ) : wb.sessionId ? (
           <Workbench

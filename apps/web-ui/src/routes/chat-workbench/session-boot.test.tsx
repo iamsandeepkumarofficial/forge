@@ -9,6 +9,17 @@ describe("SessionBootScreen", () => {
     expect(screen.getByText(/Provisioning the sandbox/i)).toBeTruthy();
   });
 
+  it("shows branch copy progress", () => {
+    render(
+      <SessionBootScreen
+        sandboxStatus="starting"
+        title="Copying workspace…"
+        detail="Copying files into this session so you can keep working from that message."
+      />
+    );
+    expect(screen.getByText("Copying workspace…")).toBeTruthy();
+  });
+
   it("shows error state and retries", () => {
     const onRetry = vi.fn();
     render(<SessionBootScreen sandboxStatus="error" onRetry={onRetry} />);

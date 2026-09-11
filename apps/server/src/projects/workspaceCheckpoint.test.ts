@@ -4,8 +4,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  copyCheckpointSidecar,
   parseTouchedFileCheckpoint,
   recordTouchedFiles,
+  restorePlanAfterTurn,
   restorePlanFromTurn,
   restoreSessionWorkspace,
   sessionCheckpointDir
@@ -136,6 +138,67 @@ describe("workspaceCheckpoint", () => {
     const byPath = Object.fromEntries(plan.map((e) => [e.path, e.before]));
     assert.equal(byPath["a.ts"], "A0");
     assert.equal(byPath["b.ts"], null);
+  });
+
+  it("restore plan after a turn excludes that turn's own touches", async () => {
+    const turns = memoryTurns();
+    turns.seed({ id: TURN_1, sessionId: "s1", workspaceCheckpoint: null });
+    turns.seed({ id: TURN_2, sessionId: "s1", workspaceCheckpoint: null });
+    await recordTouchedFiles({
+      sessionId: "s1",
+      turnId: TURN_1,
+      files: [{ path: "a.ts", op: "update", before: "A0" }],
+      turns
+    });
+    await recordTouchedFiles({
+      sessionId: "s1",
+      turnId: TURN_2,
+      files: [
+        { path: "a.ts", op: "update", before: "A1" },
+        { path: "b.ts", op: "create", before: null }
+      ],
+      turns
+    });
+    const plan = await restorePlanAfterTurn({
+      sessionId: "s1",
+      turnId: TURN_1,
+      turns
+    });
+    const byPath = Object.fromEntries(plan.map((e) => [e.path, e.before]));
+    assert.equal(byPath["a.ts"], "A1");
+    assert.equal(byPath["b.ts"], null);
+    assert.equal(
+      (
+        await restorePlanAfterTurn({
+          sessionId: "s1",
+          turnId: TURN_2,
+          turns
+        })
+      ).length,
+      0
+    );
+  });
+
+  it("copies a checkpoint sidecar to a new session and turn id", async () => {
+    const turns = memoryTurns();
+    turns.seed({ id: TURN_1, sessionId: "s1", workspaceCheckpoint: null });
+    await recordTouchedFiles({
+      sessionId: "s1",
+      turnId: TURN_1,
+      files: [{ path: "app.ts", op: "update", before: "keep\n" }],
+      turns
+    });
+    await copyCheckpointSidecar({
+      sourceSessionId: "s1",
+      sourceTurnId: TURN_1,
+      targetSessionId: "s2",
+      targetTurnId: TURN_2
+    });
+    const copied = await fs.readFile(
+      path.join(sessionCheckpointDir("s2", TURN_2), "metadata.json"),
+      "utf8"
+    );
+    assert.match(copied, /app.ts/);
   });
 
   it("writes earliest before bytes and unlinks created files on host restore", async () => {

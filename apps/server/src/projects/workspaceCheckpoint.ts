@@ -34,7 +34,7 @@ export type WorkspaceCheckpointV1 = {
   files: WorkspaceCheckpointFile[];
 };
 
-type RestoreEntry = { path: string; before: string | null };
+export type RestoreEntry = { path: string; before: string | null };
 
 export function parseTouchedFileCheckpoint(
   raw: unknown
@@ -105,7 +105,7 @@ async function readBlob(dir: string, sha: string): Promise<string> {
   return fs.readFile(blobPath(dir, sha), "utf8");
 }
 
-type CheckpointTurnStore = {
+export type CheckpointTurnStore = {
   getById: (id: string) => Promise<{
     id: string;
     sessionId: string;
@@ -192,6 +192,28 @@ function sandboxAbs(info: SessionRepoInfo, rel: string): string {
   }
 }
 
+async function restorePlanFromRows(options: {
+  sessionId: string;
+  range: Array<{ id: string; workspaceCheckpoint: unknown }>;
+}): Promise<RestoreEntry[]> {
+  const earliest = new Map<string, RestoreEntry>();
+  for (const row of options.range) {
+    const parsed = parseTouchedFileCheckpoint(row.workspaceCheckpoint);
+    if (!parsed) continue;
+    const dir = sessionCheckpointDir(options.sessionId, row.id);
+    for (const file of parsed.files) {
+      if (earliest.has(file.path)) continue;
+      if (file.blob === null) {
+        earliest.set(file.path, { path: file.path, before: null });
+        continue;
+      }
+      const before = await readBlob(dir, file.blob);
+      earliest.set(file.path, { path: file.path, before });
+    }
+  }
+  return [...earliest.values()];
+}
+
 export async function restorePlanFromTurn(options: {
   sessionId: string;
   turnId: string;
@@ -206,22 +228,45 @@ export async function restorePlanFromTurn(options: {
     const single = await turns.getById(turnId);
     if (single && single.sessionId === sessionId) range.push(single);
   }
-  const earliest = new Map<string, RestoreEntry>();
-  for (const row of range) {
-    const parsed = parseTouchedFileCheckpoint(row.workspaceCheckpoint);
-    if (!parsed) continue;
-    const dir = sessionCheckpointDir(sessionId, row.id);
-    for (const file of parsed.files) {
-      if (earliest.has(file.path)) continue;
-      if (file.blob === null) {
-        earliest.set(file.path, { path: file.path, before: null });
-        continue;
-      }
-      const before = await readBlob(dir, file.blob);
-      earliest.set(file.path, { path: file.path, before });
-    }
+  return restorePlanFromRows({ sessionId, range });
+}
+
+export async function restorePlanAfterTurn(options: {
+  sessionId: string;
+  turnId: string;
+  turns?: CheckpointTurnStore;
+}): Promise<RestoreEntry[]> {
+  const { sessionId, turnId } = options;
+  const turns = options.turns ?? defaultTurnStore();
+  const rows = await turns.listBySessionId(sessionId);
+  const start = rows.findIndex((row) => row.id === turnId);
+  if (start < 0) return [];
+  return restorePlanFromRows({
+    sessionId,
+    range: rows.slice(start + 1)
+  });
+}
+
+export async function copyCheckpointSidecar(options: {
+  sourceSessionId: string;
+  sourceTurnId: string;
+  targetSessionId: string;
+  targetTurnId: string;
+}): Promise<void> {
+  const src = sessionCheckpointDir(
+    options.sourceSessionId,
+    options.sourceTurnId
+  );
+  const dst = sessionCheckpointDir(
+    options.targetSessionId,
+    options.targetTurnId
+  );
+  try {
+    await fs.access(src);
+  } catch {
+    return;
   }
-  return [...earliest.values()];
+  await fs.cp(src, dst, { recursive: true });
 }
 
 async function applyRestoredFile(options: {

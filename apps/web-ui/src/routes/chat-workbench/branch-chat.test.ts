@@ -1,12 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { branchChatFromMessage } from "./branch-chat";
-import { copySessionMessagesUntil } from "../../lib/chat-agent.js";
+import { describe, it, expect, vi } from "vitest";
+import { createBranchedChat, readBranchCopyState } from "./branch-chat";
 import { createWorkbenchSession } from "../../lib/projects-api.js";
 import { createWorkspaceChat } from "../../lib/workspaces-api.js";
 
-vi.mock("../../lib/chat-agent.js", () => ({
-  copySessionMessagesUntil: vi.fn(async () => undefined)
-}));
 vi.mock("../../lib/projects-api.js", () => ({
   createWorkbenchSession: vi.fn()
 }));
@@ -14,20 +10,14 @@ vi.mock("../../lib/workspaces-api.js", () => ({
   createWorkspaceChat: vi.fn()
 }));
 
-describe("branchChatFromMessage", () => {
-  beforeEach(() => {
-    vi.mocked(copySessionMessagesUntil).mockClear();
-  });
-
-  it("creates a workspace chat and copies history", async () => {
+describe("createBranchedChat", () => {
+  it("creates a workspace chat without copying yet", async () => {
     vi.mocked(createWorkspaceChat).mockResolvedValueOnce({
       id: "c2",
       sessionId: "s2",
       title: "Hello"
     });
-    const href = await branchChatFromMessage({
-      sourceSessionId: "s1",
-      untilMessageId: "m9",
+    const created = await createBranchedChat({
       assistantText: "Hello there",
       projectId: "",
       workspaceId: "w1"
@@ -36,12 +26,10 @@ describe("branchChatFromMessage", () => {
       workspaceId: "w1",
       title: "Hello there"
     });
-    expect(copySessionMessagesUntil).toHaveBeenCalledWith({
-      sourceSessionId: "s1",
-      targetSessionId: "s2",
-      untilMessageId: "m9"
+    expect(created).toEqual({
+      href: "/workspaces/w1/chats/c2",
+      targetSessionId: "s2"
     });
-    expect(href).toBe("/workspaces/w1/chats/c2");
   });
 
   it("creates a project workbench chat when no workspace is set", async () => {
@@ -56,17 +44,28 @@ describe("branchChatFromMessage", () => {
       lastActivityAt: "2026-01-01T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z"
     });
-    const href = await branchChatFromMessage({
-      sourceSessionId: "s1",
-      untilMessageId: "m2",
+    const created = await createBranchedChat({
       assistantText: "Hi",
       projectId: "p1"
     });
-    expect(href).toBe("/projects/p1/chats/c3");
-    expect(copySessionMessagesUntil).toHaveBeenCalledWith({
+    expect(created.href).toBe("/projects/p1/chats/c3");
+    expect(created.targetSessionId).toBe("s3");
+  });
+
+  it("reads branch copy state from location", () => {
+    expect(
+      readBranchCopyState({
+        branchCopy: {
+          sourceSessionId: "s1",
+          targetSessionId: "s2",
+          untilMessageId: "m9"
+        }
+      })
+    ).toEqual({
       sourceSessionId: "s1",
-      targetSessionId: "s3",
-      untilMessageId: "m2"
+      targetSessionId: "s2",
+      untilMessageId: "m9"
     });
+    expect(readBranchCopyState({})).toBeNull();
   });
 });

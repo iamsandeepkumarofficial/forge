@@ -2,10 +2,10 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-11
-- **Revision:** 2026-09-11 — file restore is a sidecar of files the agent touched, not git `commit-tree` / `reset --hard`. Batch file tools + `run_terminal` deny `rm`/`mv`.
+- **Revision:** 2026-09-11 — file restore is a sidecar of files the agent touched, not git `commit-tree` / `reset --hard`. Batch file tools + `run_terminal` deny `rm`/`mv`. Branch copy-on-write clones the parent working tree (including install dirs) and restores after the forked turn.
 - **Authors:** Forge contributors
 - **Depends on:** [RFC 0005](./0005-local-session-git-worktrees.md) (session worktrees / member paths only)
-- **Amends:** chat transcript delete-from-message; mutating file tools emit restore metadata; `run_terminal` cannot `rm`/`mv`
+- **Amends:** chat transcript delete-from-message; mutating file tools emit restore metadata; `run_terminal` cannot `rm`/`mv`; branch clones files to the fork point
 
 ## Summary
 
@@ -33,13 +33,14 @@ That only works if mutating tools report **path + op + prior content**. `write_f
 5. Add `delete_files` and `move_files`. Do **not** add `rewrite_files` — `write_file` already creates or overwrites.
 6. `run_terminal` **refuses** `rm` and `mv` (including `git rm` / `git mv`).
 7. Restore never runs git. `HEAD` / session branch / `git log` are unchanged.
+8. Branch creates a **new** session whose files match the forked assistant turn (copy-on-write parent tree, restore later turns, remap checkpoints).
 
 ## Non-goals
 
-- Restarting `preview_start` after restore.
+- Restarting `preview_start` after restore or branch.
 - Whole-tree snapshot at prompt time (walk, tarball, overlay, git `write-tree`).
 - Snapshotting hand-edits or shell mutations that never went through file tools (`sed -i`, `>`, `python -c`, `find -delete`).
-- Cloning the source worktree when branching a chat (see `docs/tech-debt.md`).
+- Shared disk between parent and child chats (Cursor local fork).
 - Undelete UI.
 - `git clean -fdx` / wiping `node_modules`.
 - Recursive directory delete/move in v1.
@@ -163,8 +164,35 @@ Do not hide Undo. Missing git is irrelevant.
 
 Persist the sidecar when file tools return `metadata.files`. There is no turn-start git checkpoint API.
 
+`POST /api/sessions/:sessionId/branch` `{ untilMessageId, targetSessionId }`:
+
+1. 404 if the fork message is missing; 409 if the target already has messages.
+2. Provision the target sandbox, copy-on-write the parent working tree (skip only `.git` / `.forge-runtime`; include install and build dirs), then restore paths touched **after** the forked assistant’s turn.
+3. Copy live messages through that id. Remap `turnId`s and copy checkpoint blob dirs for the prefix only.
+4. `{ copied, workspaceCloned }`. Fail the request if the file clone throws (do not copy transcript-only).
+
+## Branch
+
+Branch is a **new** chat (same workspace or project). The parent transcript and worktree stay unchanged. Cursor Fork Chat shares one disk; Forge does not.
+
+Fork is the finished **assistant** message (end of turn T):
+
+1. New session + provision from canonical (keeps the child’s own git worktree pointer).
+2. Copy-on-write the parent working tree onto the child (not `.git` / `.forge-runtime`). Install trees and build dirs come along so the child is runnable without a stack-specific reinstall. Host uses clonefile/reflink when the filesystem supports it; Docker overlay is a tar copy.
+3. Apply `restorePlanAfterTurn(T)`: earliest `before` for paths touched in **later** parent turns only, written onto the **child**.
+4. Duplicate prefix `chat_turns` (new ids, `copied:{session}:{turn}` workflow ids) and sidecar dirs. Copied messages keep remapped `turnId` so Undo on the child restores the child’s tree.
+
+```text
+Parent:  M1 → A1 → M2 → A2 → M3 → A3
+Branch from A2:
+
+  Child messages: M1, A1, M2, A2
+  Child files:    parent tree with T3+ undone
+  Parent:         unchanged
+```
+
 ## Out of scope (accepted)
 
-- Preview process restart after restore.
-- Branch-chat worktree clone (document in `docs/tech-debt.md`; branch still does not copy blobs).
+- Preview process restart after restore or branch.
 - Terminal before/after inventory for non-`rm`/`mv` shell mutations.
+- Shared disk between parent and child chats.

@@ -8,6 +8,53 @@ const N_404 = 404;
 const N_409 = 409;
 const N_500 = 500;
 
+const branchInFlight = new Map<
+  string,
+  Promise<{ copied: number; workspaceCloned: boolean }>
+>();
+
+type BranchCopyResult = { copied: number; workspaceCloned: boolean };
+
+async function runBranchCopy(options: {
+  branchSession?: (input: {
+    sourceSessionId: string;
+    targetSessionId: string;
+    untilMessageId: string;
+    live: Awaited<ReturnType<SessionMessageRepository["listBySessionId"]>>;
+    messages: SessionMessageRepository;
+  }) => Promise<BranchCopyResult>;
+  sourceSessionId: string;
+  targetSessionId: string;
+  untilMessageId: string;
+  live: Awaited<ReturnType<SessionMessageRepository["listBySessionId"]>>;
+  messages: SessionMessageRepository;
+}): Promise<BranchCopyResult> {
+  const branchSession =
+    options.branchSession ??
+    (await import("../../projects/sessionBranch.js")).branchSessionFromMessage;
+  return branchSession({
+    sourceSessionId: options.sourceSessionId,
+    targetSessionId: options.targetSessionId,
+    untilMessageId: options.untilMessageId,
+    live: options.live,
+    messages: options.messages
+  });
+}
+
+function coalesceBranch(
+  targetSessionId: string,
+  run: () => Promise<BranchCopyResult>
+): Promise<BranchCopyResult> {
+  let pending = branchInFlight.get(targetSessionId);
+  if (!pending) {
+    pending = run().finally(() => {
+      branchInFlight.delete(targetSessionId);
+    });
+    branchInFlight.set(targetSessionId, pending);
+  }
+  return pending;
+}
+
 function sameOwnerScope(
   source: {
     userId: string;
@@ -86,6 +133,13 @@ export async function handleBranchSessionMessages(options: {
   res: Response;
   features: ChatFeatureRepository;
   messages: SessionMessageRepository;
+  branchSession?: (input: {
+    sourceSessionId: string;
+    targetSessionId: string;
+    untilMessageId: string;
+    live: Awaited<ReturnType<SessionMessageRepository["listBySessionId"]>>;
+    messages: SessionMessageRepository;
+  }) => Promise<{ copied: number; workspaceCloned: boolean }>;
 }): Promise<void> {
   const { req, res, features, messages } = options;
   const sourceSessionId = String(req.params.sessionId ?? "");
@@ -121,16 +175,26 @@ export async function handleBranchSessionMessages(options: {
       res.status(N_409).json({ error: "target session already has messages" });
       return;
     }
-    const copied = await messages.copyUntil({
-      sourceSessionId,
-      targetSessionId,
-      untilMessageId
-    });
-    if (copied === 0) {
+    const live = await messages.listBySessionId(sourceSessionId);
+    if (!live.some((row) => row.id === untilMessageId)) {
       res.status(N_404).json({ error: "message not found" });
       return;
     }
-    res.json({ copied });
+    const result = await coalesceBranch(targetSessionId, () =>
+      runBranchCopy({
+        branchSession: options.branchSession,
+        sourceSessionId,
+        targetSessionId,
+        untilMessageId,
+        live,
+        messages
+      })
+    );
+    if (result.copied === 0) {
+      res.status(N_404).json({ error: "message not found" });
+      return;
+    }
+    res.json(result);
   } catch (err) {
     res
       .status(N_500)

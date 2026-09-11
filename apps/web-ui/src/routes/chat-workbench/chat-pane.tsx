@@ -12,7 +12,7 @@ import { usePendingAskUser } from "./use-pending-ask-user.js";
 import { useTrackBackgroundJobs } from "./use-track-background-jobs.js";
 import { estimateConversationTokens } from "./chat-pane-tokens.js";
 import { ChatPaneView } from "./chat-pane-view.js";
-import { branchChatFromMessage } from "./branch-chat.js";
+import { createBranchedChat } from "./branch-chat.js";
 import type { WorkbenchTurnStatus } from "./types.js";
 import { deriveTurnStatus } from "./workbench-status.js";
 
@@ -235,20 +235,29 @@ function useChatMessageActions(options: {
 }) {
   const { sessionId, projectId, workspaceId, sendText, setError, navigate } =
     options;
-  const handleBranchAssistant = (opts: { messageId: string; text: string }) => {
-    void branchChatFromMessage({
-      sourceSessionId: sessionId,
-      untilMessageId: opts.messageId,
-      assistantText: opts.text,
-      projectId,
-      workspaceId
-    })
-      .then((href) => {
-        void navigate(href);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err : new Error(String(err)));
+  const handleBranchAssistant = async (opts: {
+    messageId: string;
+    text: string;
+  }) => {
+    try {
+      const created = await createBranchedChat({
+        assistantText: opts.text,
+        projectId,
+        workspaceId
       });
+      void navigate(created.href, {
+        state: {
+          branchCopy: {
+            sourceSessionId: sessionId,
+            targetSessionId: created.targetSessionId,
+            untilMessageId: opts.messageId
+          }
+        }
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
   };
   const handleRevertUserMessage = (opts: {
     messageId: string;

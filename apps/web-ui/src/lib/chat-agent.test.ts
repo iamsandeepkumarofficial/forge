@@ -132,4 +132,16 @@ describe("chat-agent", () => {
       })
     );
   });
+
+  it("copySessionMessagesUntil treats an already-copied target as success", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 409
+    } as Response);
+    await copySessionMessagesUntil({
+      sourceSessionId: "s1",
+      targetSessionId: "s2",
+      untilMessageId: "m9"
+    });
+  });
 });

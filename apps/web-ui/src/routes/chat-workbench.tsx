@@ -9,8 +9,10 @@ import { Workbench } from "./chat-workbench/workbench-layout.js";
 import { SessionHeader } from "./chat-workbench/session-header.js";
 import {
   bootExistingOrStartSession,
-  SessionBootScreen
+  SessionBootScreen,
+  sessionBootCopyProps
 } from "./chat-workbench/session-boot.js";
+import { useBranchCopyBoot } from "./chat-workbench/use-branch-copy-boot.js";
 import type {
   LeftPaneMode,
   SandboxStatus,
@@ -29,17 +31,37 @@ function readInitialPrompt(state: unknown): string | undefined {
   return undefined;
 }
 
+type WorkbenchChatCard = {
+  sessionId?: string;
+  title?: string;
+  kind?: "ticket" | "workbench";
+  branchName?: string;
+};
+
+function workbenchChatFromRow(data: {
+  sessionId?: string;
+  title?: string;
+  kind?: "ticket" | "workbench";
+  branchName?: string;
+}): WorkbenchChatCard {
+  return {
+    sessionId: data.sessionId,
+    title: data.title,
+    kind: data.kind,
+    branchName:
+      typeof data.branchName === "string" ? data.branchName : undefined
+  };
+}
+
 function useChatWorkbenchSession(options: {
   projectId: string;
   chatId: string;
+  locationState: unknown;
+  pathname: string;
+  navigate: ReturnType<typeof useNavigate>;
 }) {
   const { projectId, chatId } = options;
-  const [chat, setChat] = useState<{
-    sessionId?: string;
-    title?: string;
-    kind?: "ticket" | "workbench";
-    branchName?: string;
-  } | null>(null);
+  const [chat, setChat] = useState<WorkbenchChatCard | null>(null);
   const [loadingChat, setLoadingChat] = useState(true);
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>("starting");
   const [chrome, setChrome] = useState<WorkbenchChrome>({
@@ -56,15 +78,7 @@ function useChatWorkbenchSession(options: {
     let cancelled = false;
     void fetchChat(projectId, chatId)
       .then((data) => {
-        if (!cancelled) {
-          setChat({
-            sessionId: data.sessionId,
-            title: data.title,
-            kind: data.kind,
-            branchName:
-              typeof data.branchName === "string" ? data.branchName : undefined
-          });
-        }
+        if (!cancelled) setChat(workbenchChatFromRow(data));
       })
       .catch((err) => console.error("Failed to load chat:", err))
       .finally(() => {
@@ -84,12 +98,13 @@ function useChatWorkbenchSession(options: {
       setStatus: setSandboxStatus
     });
   }, [sessionId]);
-  useEffect(() => {
-    if (!sessionId) return;
-    void Promise.resolve().then(() => {
-      startSandbox();
-    });
-  }, [sessionId, startSandbox]);
+  const branchCopy = useBranchCopyBoot({
+    sessionId,
+    locationState: options.locationState,
+    pathname: options.pathname,
+    navigate: options.navigate,
+    onReady: startSandbox
+  });
   return {
     chat,
     loadingChat,
@@ -100,7 +115,13 @@ function useChatWorkbenchSession(options: {
     setLeftMode,
     sessionId,
     startSandbox,
-    booting: loadingChat || Boolean(sessionId && sandboxStatus === "starting")
+    copying: branchCopy.copying,
+    copyError: branchCopy.copyError,
+    retryCopy: branchCopy.retry,
+    booting:
+      loadingChat ||
+      branchCopy.copying ||
+      Boolean(sessionId && sandboxStatus === "starting")
   };
 }
 
@@ -111,7 +132,20 @@ export function ChatWorkbench() {
   const projectId = params.projectId ?? "";
   const chatId = params.chatId ?? "";
   const initialPrompt = readInitialPrompt(location.state);
-  const wb = useChatWorkbenchSession({ projectId, chatId });
+  const wb = useChatWorkbenchSession({
+    projectId,
+    chatId,
+    locationState: location.state,
+    pathname: location.pathname,
+    navigate
+  });
+  const boot = sessionBootCopyProps({
+    copying: wb.copying,
+    copyError: wb.copyError,
+    retryCopy: wb.retryCopy,
+    sandboxStatus: wb.sandboxStatus,
+    startSandbox: wb.startSandbox
+  });
   return (
     <div className="flex h-screen flex-col">
       <SessionHeader
@@ -123,10 +157,12 @@ export function ChatWorkbench() {
         onLeftMode={wb.setLeftMode}
       />
       <div className="min-h-0 flex-1">
-        {wb.booting || wb.sandboxStatus === "error" ? (
+        {wb.booting || wb.sandboxStatus === "error" || wb.copyError ? (
           <SessionBootScreen
-            sandboxStatus={wb.sandboxStatus === "error" ? "error" : "starting"}
-            onRetry={wb.sandboxStatus === "error" ? wb.startSandbox : undefined}
+            sandboxStatus={boot.sandboxStatus}
+            title={boot.title}
+            detail={boot.detail}
+            onRetry={boot.onRetry}
           />
         ) : wb.sessionId ? (
           <Workbench

@@ -127,4 +127,64 @@ describe("sessionCopyHandlers", () => {
     });
     assert.equal(state.statusCode, 409);
   });
+
+  it("does not copy messages when workspace clone fails", async () => {
+    const { res, state } = mockRes();
+    let copied = false;
+    await handleBranchSessionMessages({
+      req: {
+        params: { sessionId: "s1" },
+        body: { untilMessageId: "m1", targetSessionId: "s2" },
+        forgeUser: { id: "u1" }
+      } as never,
+      res,
+      features: {
+        getBySessionId: async (id: string) => ({
+          id,
+          userId: "u1",
+          projectId: "p1",
+          workspaceId: null
+        })
+      } as never,
+      messages: {
+        listBySessionId: async (id: string) =>
+          id === "s2" ? [] : [{ id: "m1", turnId: "t1" }],
+        copyUntil: async () => {
+          copied = true;
+          return 1;
+        }
+      } as never,
+      branchSession: async () => {
+        throw new Error("clone failed");
+      }
+    });
+    assert.equal(copied, false);
+    assert.equal(state.statusCode, 500);
+  });
+
+  it("returns copied and workspaceCloned on success", async () => {
+    const { res, state } = mockRes();
+    await handleBranchSessionMessages({
+      req: {
+        params: { sessionId: "s1" },
+        body: { untilMessageId: "m1", targetSessionId: "s2" },
+        forgeUser: { id: "u1" }
+      } as never,
+      res,
+      features: {
+        getBySessionId: async (id: string) => ({
+          id,
+          userId: "u1",
+          projectId: "p1",
+          workspaceId: null
+        })
+      } as never,
+      messages: {
+        listBySessionId: async (id: string) =>
+          id === "s2" ? [] : [{ id: "m1", turnId: "t1" }]
+      } as never,
+      branchSession: async () => ({ copied: 2, workspaceCloned: true })
+    });
+    assert.deepEqual(state.body, { copied: 2, workspaceCloned: true });
+  });
 });

@@ -2,6 +2,7 @@ import { runnerUrl } from "./tool-runner.js";
 
 const N_5 = 5;
 const N_6 = 6;
+const HTTP_CONFLICT = 409;
 
 export type LlmProvider = "openai" | "anthropic" | "openai-compatible";
 export const REASONING_CAPABLE_PROVIDERS: LlmProvider[] = [
@@ -211,6 +212,7 @@ export async function copySessionMessagesUntil(options: {
       })
     }
   );
+  if (res.status === HTTP_CONFLICT) return;
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as {
       error?: string;

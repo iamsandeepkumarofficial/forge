@@ -157,7 +157,7 @@ export async function listHostWorkspaceFiles(
 
 export type HostDirEntry = { name: string; path: string; isDir: boolean };
 
-const SKIP_DIR_NAMES = new Set([
+export const SKIP_DIR_NAMES = new Set([
   ".git",
   "node_modules",
   ".next",
@@ -165,6 +165,8 @@ const SKIP_DIR_NAMES = new Set([
   "coverage",
   ".forge-runtime"
 ]);
+
+export const CLONE_SKIP_DIR_NAMES = new Set([".git", ".forge-runtime"]);
 
 async function direntIsDir(
   parent: string,

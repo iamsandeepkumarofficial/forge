@@ -10,7 +10,8 @@ vi.mock("../lib/projects-api.js", () => ({
 }));
 vi.mock("../lib/tool-runner.js", () => ({
   fetchApps: vi.fn(),
-  fetchSessionHealth: vi.fn()
+  fetchSessionHealth: vi.fn(),
+  runnerUrl: () => "http://127.0.0.1:4000"
 }));
 vi.mock("./chat-workbench/chat-pane.js", () => ({
   ChatPane: () => <div>Chat pane</div>
