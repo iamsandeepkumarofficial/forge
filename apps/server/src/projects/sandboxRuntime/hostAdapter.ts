@@ -187,7 +187,13 @@ async function spawnHostProcess(options: {
     });
     if (opts.detach) {
       child.unref();
-      resolve({ code: 0, stdout: "", stderr: "" });
+      const pid = child.pid;
+      resolve({
+        code: 0,
+        stdout: "",
+        stderr: "",
+        ...(typeof pid === "number" && pid > 0 ? { pid } : {})
+      });
       return;
     }
     const outChunks: Buffer[] = [];

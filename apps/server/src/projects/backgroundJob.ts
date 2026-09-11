@@ -2,6 +2,21 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { dockerExec } from "./sandboxExec.js";
+import {
+  HOST_JOB_PID_EXTERNAL_ENV,
+  persistExternalJobPid,
+  stopJobHadPid,
+  stopJobScript
+} from "./backgroundJobPid.js";
+
+export {
+  HOST_JOB_PID_EXTERNAL_ENV,
+  persistExternalJobPid,
+  STOP_HAD_PID_TOKEN,
+  STOP_NO_PID_TOKEN,
+  stopJobHadPid,
+  stopJobScript
+} from "./backgroundJobPid.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -49,7 +64,7 @@ export function startJobScript(): string {
     ': > "$LOG"',
     'if ! cd "$APPDIR"; then echo "cwd not found: $APPDIR" >> "$LOG"; exit 1; fi',
     'printf \'$ %s\\n\' "$CMD" >> "$LOG"',
-    'echo $$ > "$PID"',
+    `if [ -z "$${HOST_JOB_PID_EXTERNAL_ENV}" ]; then echo $$ > "$PID"; fi`,
     'exec sh -c "$CMD" >> "$LOG" 2>&1'
   ].join("; ");
 }
@@ -102,48 +117,23 @@ export async function startBackgroundJob(options: {
     FORGE_PUBLISHED_APP_PORTS: publishedPorts,
     ...options.extraEnv
   };
+  if (kind === "host") {
+    env[HOST_JOB_PID_EXTERNAL_ENV] = "1";
+  }
   const argv =
     kind === "host"
       ? ["sh", "-c", startJobScript()]
       : ["setsid", "sh", "-c", startJobScript()];
-  await dockerExec({
+  const started = await dockerExec({
     container: options.containerName,
     sessionId: options.sessionId,
     argv,
     env,
     detach: true
   });
-}
-
-export const STOP_HAD_PID_TOKEN = "FORGE_STOP_HAD_PID";
-export const STOP_NO_PID_TOKEN = "FORGE_STOP_NO_PID";
-
-export function stopJobScript(pidFile: string): string {
-  return `
-P=$(cat "${pidFile}" 2>/dev/null)
-if [ -n "$P" ]; then
-  kill -TERM -"$P" 2>/dev/null
-  kill -TERM "$P" 2>/dev/null
-  if command -v pkill >/dev/null 2>&1; then
-    pkill -TERM -P "$P" 2>/dev/null
-  fi
-  sleep 0.2
-  kill -KILL -"$P" 2>/dev/null
-  kill -KILL "$P" 2>/dev/null
-  if command -v pkill >/dev/null 2>&1; then
-    pkill -KILL -P "$P" 2>/dev/null
-  fi
-  rm -f "${pidFile}"
-  printf '%s\\n' "${STOP_HAD_PID_TOKEN}"
-else
-  rm -f "${pidFile}"
-  printf '%s\\n' "${STOP_NO_PID_TOKEN}"
-fi
-`.trim();
-}
-
-export function stopJobHadPid(stdout: string): boolean {
-  return stdout.includes(STOP_HAD_PID_TOKEN);
+  if (kind === "host") {
+    await persistExternalJobPid({ pidFile: env.PID, pid: started.pid });
+  }
 }
 
 export async function stopBackgroundJob(options: {

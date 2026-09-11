@@ -164,6 +164,31 @@ describe("hostAdapter", () => {
     assert.match(missing.stderr, /Known member repos: backend, frontend/);
   });
 
+  it("detached exec returns the spawn pid", async () => {
+    process.env.FORGE_HOST_SANDBOX = "0";
+    tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-host-pid-"));
+    process.env.FORGE_SESSIONS_ROOT = path.join(tmpRoot, "sessions");
+    const ws = path.join(tmpRoot, "workspace");
+    await fs.mkdir(ws, { recursive: true });
+    const rt = createHostSandboxRuntime();
+    const handle = await rt.createSession("sess-pid", {
+      bindMounts: [{ hostPath: ws, containerPath: "/workspace" }]
+    });
+    const r = await rt.exec({
+      handle,
+      cmd: ["sh", "-c", "sleep 8"],
+      detach: true
+    });
+    assert.equal(typeof r.pid, "number");
+    assert.ok((r.pid ?? 0) > 0);
+    process.kill(r.pid!, 0);
+    try {
+      process.kill(-r.pid!, "SIGTERM");
+    } catch {
+      process.kill(r.pid!, "SIGKILL");
+    }
+  });
+
   it("destroySession removes _host dir but not exact /workspace worktree bind", async () => {
     process.env.FORGE_HOST_SANDBOX = "0";
     tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-host-rm-"));

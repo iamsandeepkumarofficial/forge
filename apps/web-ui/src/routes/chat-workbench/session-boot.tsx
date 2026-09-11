@@ -62,8 +62,8 @@ export function SessionBootScreen(options: {
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
         <p className="text-sm font-medium">Initializing workspace…</p>
         <p className="text-sm text-muted-foreground">
-          Provisioning the sandbox, restoring dependencies, and starting apps.
-          This stays up until the workspace is ready.
+          Provisioning the sandbox and restoring dependencies. This stays up
+          until the workspace is ready.
         </p>
       </div>
     </div>

@@ -9,10 +9,7 @@ describe("backgroundJob", { concurrency: false }, () => {
   let jobPidFile: typeof import("./backgroundJob.js").jobPidFile;
   let freeListeningPortScript: typeof import("./backgroundJob.js").freeListeningPortScript;
   let freeListeningPortHostScript: typeof import("./backgroundJob.js").freeListeningPortHostScript;
-  let stopJobScript: typeof import("./backgroundJob.js").stopJobScript;
-  let stopJobHadPid: typeof import("./backgroundJob.js").stopJobHadPid;
-  let STOP_HAD_PID_TOKEN: typeof import("./backgroundJob.js").STOP_HAD_PID_TOKEN;
-  let STOP_NO_PID_TOKEN: typeof import("./backgroundJob.js").STOP_NO_PID_TOKEN;
+  let HOST_JOB_PID_EXTERNAL_ENV: typeof import("./backgroundJob.js").HOST_JOB_PID_EXTERNAL_ENV;
   let waitUntilJobRunning: typeof import("./backgroundJob.js").waitUntilJobRunning;
   let waitUntilTcpListening: typeof import("./backgroundJob.js").waitUntilTcpListening;
 
@@ -42,10 +39,7 @@ describe("backgroundJob", { concurrency: false }, () => {
       jobPidFile,
       freeListeningPortScript,
       freeListeningPortHostScript,
-      stopJobScript,
-      stopJobHadPid,
-      STOP_HAD_PID_TOKEN,
-      STOP_NO_PID_TOKEN,
+      HOST_JOB_PID_EXTERNAL_ENV,
       waitUntilJobRunning,
       waitUntilTcpListening
     } = await import("./backgroundJob.js"));
@@ -56,6 +50,7 @@ describe("backgroundJob", { concurrency: false }, () => {
     assert.match(script, /: > "\$LOG"/);
     assert.match(script, /cwd not found/);
     assert.match(script, /printf '\$ %s\\n' "\$CMD"/);
+    assert.match(script, new RegExp(HOST_JOB_PID_EXTERNAL_ENV));
     const logIdx = script.indexOf(': > "$LOG"');
     const cmdIdx = script.indexOf("printf");
     const pidIdx = script.indexOf('echo $$ > "$PID"');
@@ -89,18 +84,6 @@ describe("backgroundJob", { concurrency: false }, () => {
     assert.match(script, /kill_pids TERM/);
     assert.match(script, /kill_pids KILL/);
     assert.match(script, /\/proc\/net\/tcp/);
-  });
-
-  it("stopJobScript kills the process group and children then reports pid state", () => {
-    const script = stopJobScript("/tmp/forge-app-web.pid");
-    assert.match(script, /kill -TERM -"\$P"/);
-    assert.match(script, /pkill -TERM -P "\$P"/);
-    assert.match(script, /pkill -KILL -P "\$P"/);
-    assert.match(script, /\/tmp\/forge-app-web\.pid/);
-    assert.match(script, new RegExp(STOP_HAD_PID_TOKEN));
-    assert.match(script, new RegExp(STOP_NO_PID_TOKEN));
-    assert.equal(stopJobHadPid(`${STOP_HAD_PID_TOKEN}\n`), true);
-    assert.equal(stopJobHadPid(`${STOP_NO_PID_TOKEN}\n`), false);
   });
 
   it("waitUntilJobRunning returns false then true", async () => {

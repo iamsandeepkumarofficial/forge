@@ -63,7 +63,7 @@ describe("finalizeSessionProvision", () => {
     ({ finalizeSessionProvision } = await import("./sessionProvision.js"));
   });
 
-  it("restores deps, scaffolds launch, and kicks preview", async () => {
+  it("restores deps and scaffolds launch without auto-starting preview", async () => {
     Object.assign(calls, {
       getBySessionId: 0,
       restore: 0,
@@ -79,7 +79,7 @@ describe("finalizeSessionProvision", () => {
     assert.equal(calls.ensureLaunch, 1);
     assert.equal(calls.log, 1);
     await new Promise((r) => setTimeout(r, 10));
-    assert.equal(calls.autoStart, 1);
+    assert.equal(calls.autoStart, 0);
   });
 
   it("continues when restore or launch fails", async () => {
@@ -96,5 +96,7 @@ describe("finalizeSessionProvision", () => {
     assert.equal(calls.restore, 1);
     assert.equal(calls.ensureLaunch, 1);
     assert.equal(calls.log, 0);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(calls.autoStart, 0);
   });
 });
