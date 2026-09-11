@@ -289,6 +289,7 @@ export function trackTerminalsFromToolParts(options: {
   parts: ToolPart[];
   openTabs?: boolean;
   liveJobNames?: ReadonlySet<string>;
+  liveAppNames?: ReadonlySet<string>;
 }): void {
   const { sessionId, parts } = options;
   const openTabs = options.openTabs === true;
@@ -331,12 +332,20 @@ export function trackTerminalsFromToolParts(options: {
       if (alias && alias !== name) {
         untrackApp(sessionId, alias);
       }
+      const liveNames = options.liveAppNames;
+      const live =
+        liveNames?.has(name) === true ||
+        (alias != null && liveNames?.has(alias) === true);
+      if (liveNames && !live) {
+        untrackApp(sessionId, name);
+        continue;
+      }
       const added = track({
         sessionId,
         kind: "app",
         rawName: name,
         streamId: streamIdForAppTab(`app:${name}`),
-        restart: true
+        restart: openTabs || live
       });
       if (added && openTabs) {
         requestOpenTerminalTab({ id: `app:${name}`, kind: "app" });

@@ -115,12 +115,43 @@ export async function startBackgroundJob(options: {
   });
 }
 
+export const STOP_HAD_PID_TOKEN = "FORGE_STOP_HAD_PID";
+export const STOP_NO_PID_TOKEN = "FORGE_STOP_NO_PID";
+
+export function stopJobScript(pidFile: string): string {
+  return `
+P=$(cat "${pidFile}" 2>/dev/null)
+if [ -n "$P" ]; then
+  kill -TERM -"$P" 2>/dev/null
+  kill -TERM "$P" 2>/dev/null
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -TERM -P "$P" 2>/dev/null
+  fi
+  sleep 0.2
+  kill -KILL -"$P" 2>/dev/null
+  kill -KILL "$P" 2>/dev/null
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -KILL -P "$P" 2>/dev/null
+  fi
+  rm -f "${pidFile}"
+  printf '%s\\n' "${STOP_HAD_PID_TOKEN}"
+else
+  rm -f "${pidFile}"
+  printf '%s\\n' "${STOP_NO_PID_TOKEN}"
+fi
+`.trim();
+}
+
+export function stopJobHadPid(stdout: string): boolean {
+  return stdout.includes(STOP_HAD_PID_TOKEN);
+}
+
 export async function stopBackgroundJob(options: {
   containerName: string;
   kind: BackgroundJobKind;
   name: string;
   sessionId?: string;
-}): Promise<void> {
+}): Promise<{ hadPid: boolean }> {
   const kind = await resolveKind(options.sessionId);
   const workspaceRoot = kind === "host" ? options.containerName : undefined;
   const pf = jobPidFile({
@@ -128,15 +159,12 @@ export async function stopBackgroundJob(options: {
     name: options.name,
     workspaceRoot
   });
-  await dockerExec({
+  const r = await dockerExec({
     container: options.containerName,
     sessionId: options.sessionId,
-    argv: [
-      "sh",
-      "-c",
-      `P=$(cat "${pf}" 2>/dev/null); if [ -n "$P" ]; then kill -TERM -"$P" 2>/dev/null; kill -TERM "$P" 2>/dev/null; sleep 0.2; kill -KILL -"$P" 2>/dev/null; kill -KILL "$P" 2>/dev/null; fi; rm -f "${pf}"`
-    ]
+    argv: ["sh", "-c", stopJobScript(pf)]
   });
+  return { hadPid: stopJobHadPid(r.stdout) };
 }
 
 export function freeListeningPortScript(port: number): string {

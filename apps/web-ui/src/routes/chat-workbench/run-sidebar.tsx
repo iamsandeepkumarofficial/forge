@@ -9,7 +9,7 @@ import {
 } from "../../lib/tool-runner.js";
 import { useApps } from "./use-apps.js";
 import { AddAppForm } from "./add-app-form.js";
-import { trackApp } from "./tracked-terminals.js";
+import { trackApp, untrackApp } from "./tracked-terminals.js";
 
 export { AddAppForm } from "./add-app-form.js";
 
@@ -137,11 +137,13 @@ export function RunSidebar({
     name: string;
     action: (sessionId: string, name: string) => Promise<unknown>;
     track?: boolean;
+    untrack?: boolean;
   }) => {
     setBusy(options.name);
     try {
       await options.action(sessionId, options.name);
       if (options.track) trackApp(sessionId, options.name);
+      if (options.untrack) untrackApp(sessionId, options.name);
       await refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
@@ -186,7 +188,9 @@ export function RunSidebar({
         exists={exists}
         busy={busy}
         onRun={(name) => void runNamed({ name, action: runApp, track: true })}
-        onStop={(name) => void runNamed({ name, action: stopApp })}
+        onStop={(name) =>
+          void runNamed({ name, action: stopApp, untrack: true })
+        }
         onShowPreview={onShowPreview}
       />
     </div>

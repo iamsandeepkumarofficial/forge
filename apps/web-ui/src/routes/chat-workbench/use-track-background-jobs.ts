@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { UiChatMessage } from "../../lib/chat-agent.js";
 import { listTerminalJobs } from "../../lib/session-terminal.js";
+import { fetchApps } from "../../lib/tool-runner.js";
 import { toolPartsOf, type ToolPart } from "../../lib/tool-display.js";
 import { trackTerminalsFromToolParts } from "./tracked-terminals.js";
 
@@ -33,20 +34,32 @@ export function useTrackBackgroundJobs(options: {
     const parts = historyToolParts(messages);
     let cancelled = false;
     void (async () => {
-      let liveJobNames: Set<string> | undefined;
-      try {
-        const jobs = await listTerminalJobs(sessionId);
-        liveJobNames = new Set(
-          jobs.filter((job) => job.running).map((job) => job.name)
-        );
-      } catch {
-        liveJobNames = undefined;
-      }
+      const [jobsResult, appsResult] = await Promise.allSettled([
+        listTerminalJobs(sessionId),
+        fetchApps(sessionId)
+      ]);
       if (cancelled) return;
+      const liveJobNames =
+        jobsResult.status === "fulfilled"
+          ? new Set(
+              jobsResult.value
+                .filter((job) => job.running)
+                .map((job) => job.name)
+            )
+          : undefined;
+      const liveAppNames =
+        appsResult.status === "fulfilled"
+          ? new Set(
+              appsResult.value.apps
+                .filter((app) => app.running)
+                .map((app) => app.name)
+            )
+          : undefined;
       trackTerminalsFromToolParts({
         sessionId,
         parts,
-        liveJobNames
+        liveJobNames,
+        liveAppNames
       });
       historyScannedFor.current = sessionId;
     })();

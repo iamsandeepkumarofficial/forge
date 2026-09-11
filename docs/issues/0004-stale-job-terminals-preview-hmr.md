@@ -3,7 +3,7 @@
 - **Status:** Fixed
 - **Date:** 2026-09-11
 - **Severity:** Confusing on chat revisit; preview looks broken until a manual refresh
-- **Related:** [0002](./0002-stale-preview-across-sessions.md), [0003](./0003-preview-start-empty-terminal.md)
+- **Related:** [0002](./0002-stale-preview-across-sessions.md), [0003](./0003-preview-start-empty-terminal.md), [0008](./0008-ghost-preview-terminals-stop.md) (apps needed the same live restore gate)
 
 ## Summary
 

@@ -11,3 +11,4 @@ Postmortems and fix write-ups for bugs that are easy to reintroduce. Prefer link
 | [0005](./0005-chat-live-thinking-tools-actions.md)    | Live thinking vanishes; duplicate tools; Copy/Branch/⋯ per LLM step                     | Fixed  | 2026-09-11 |
 | [0006](./0006-single-repo-workspace-member-path.md)   | Single-repo sessions flattened under `/workspace` instead of `/workspace/<repo>`        | Fixed  | 2026-09-11 |
 | [0007](./0007-chat-turns-rounds-column-missing.md)    | `POST /chat` fails: `column "rounds" does not exist`                                    | Fixed  | 2026-09-11 |
+| [0008](./0008-ghost-preview-terminals-stop.md)        | Ghost `preview_start` terminals after branch; Stop blanks preview but leaves processes  | Fixed  | 2026-09-11 |

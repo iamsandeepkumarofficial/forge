@@ -9,7 +9,8 @@ import {
   shouldTrackPreviewStartToolPart,
   trackApp,
   trackBackgroundJob,
-  trackTerminalsFromToolParts
+  trackTerminalsFromToolParts,
+  untrackApp
 } from "./tracked-terminals";
 import { resetTerminalSessionRegistryForTests } from "../../lib/terminal-session-registry";
 
@@ -118,6 +119,46 @@ describe("tracked-terminals", () => {
           output: "Started web"
         }
       ]
+    });
+    expect(listTrackedApps("s1")).toEqual(["web"]);
+  });
+
+  it("skips historical preview_start apps that are not live", () => {
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "preview_start",
+          metadata: { app: { name: "web", running: true } },
+          output: "Started web"
+        },
+        {
+          type: "tool-invocation",
+          toolName: "preview_start",
+          metadata: { app: { name: "api", running: true } },
+          output: "Started api"
+        }
+      ],
+      liveAppNames: new Set()
+    });
+    expect(listTrackedApps("s1")).toEqual([]);
+  });
+
+  it("re-tracks a preview_start app when live status says it is running", () => {
+    trackApp("s1", "web");
+    untrackApp("s1", "web");
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "preview_start",
+          metadata: { app: { name: "web", running: true } },
+          output: "Started web"
+        }
+      ],
+      liveAppNames: new Set(["web"])
     });
     expect(listTrackedApps("s1")).toEqual(["web"]);
   });

@@ -2,6 +2,7 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useTrackBackgroundJobs } from "./use-track-background-jobs";
 import {
+  listTrackedApps,
   listTrackedBackgroundJobs,
   resetTrackedTerminalsForTests
 } from "./tracked-terminals";
@@ -9,9 +10,17 @@ import {
 const listTerminalJobs = vi.fn(async (_sessionId?: string) => [
   { name: "old", running: true }
 ]);
+const fetchApps = vi.fn(async (_sessionId?: string) => ({
+  exists: true,
+  apps: [] as Array<{ name: string; running: boolean }>
+}));
 
 vi.mock("../../lib/session-terminal.js", () => ({
   listTerminalJobs: (sessionId: string) => listTerminalJobs(sessionId)
+}));
+
+vi.mock("../../lib/tool-runner.js", () => ({
+  fetchApps: (sessionId: string) => fetchApps(sessionId)
 }));
 
 vi.mock("../../lib/terminal-session-client.js", () => ({
@@ -51,6 +60,8 @@ describe("useTrackBackgroundJobs", () => {
     resetTrackedTerminalsForTests();
     listTerminalJobs.mockReset();
     listTerminalJobs.mockResolvedValue([{ name: "old", running: true }]);
+    fetchApps.mockReset();
+    fetchApps.mockResolvedValue({ exists: true, apps: [] });
   });
   it("waits for historyLoaded before scanning messages", async () => {
     resetTrackedTerminalsForTests();
@@ -134,5 +145,86 @@ describe("useTrackBackgroundJobs", () => {
       expect(listTerminalJobs).toHaveBeenCalled();
     });
     expect(listTrackedBackgroundJobs("s1")).toEqual([]);
+  });
+
+  it("does not restore historical preview_start apps that are not running", async () => {
+    fetchApps.mockResolvedValue({
+      exists: true,
+      apps: [
+        { name: "web", running: false },
+        { name: "api", running: false }
+      ]
+    });
+    renderHook(() =>
+      useTrackBackgroundJobs({
+        sessionId: "fork",
+        messages: [
+          {
+            id: "m1",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-invocation",
+                toolName: "preview_start",
+                metadata: { app: { name: "web", running: true } },
+                output: "Started web"
+              },
+              {
+                type: "tool-invocation",
+                toolName: "preview_start",
+                metadata: { app: { name: "api", running: true } },
+                output: "Started api"
+              }
+            ]
+          }
+        ],
+        historyLoaded: true,
+        liveToolParts: []
+      })
+    );
+    await waitFor(() => {
+      expect(fetchApps).toHaveBeenCalledWith("fork");
+    });
+    expect(listTrackedApps("fork")).toEqual([]);
+  });
+
+  it("restores historical preview_start apps that are still running", async () => {
+    fetchApps.mockResolvedValue({
+      exists: true,
+      apps: [
+        { name: "web", running: true },
+        { name: "api", running: false }
+      ]
+    });
+    renderHook(() =>
+      useTrackBackgroundJobs({
+        sessionId: "s1",
+        messages: [
+          {
+            id: "m1",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-invocation",
+                toolName: "preview_start",
+                metadata: { app: { name: "web", running: true } },
+                output: "Started web"
+              },
+              {
+                type: "tool-invocation",
+                toolName: "preview_start",
+                metadata: { app: { name: "api", running: true } },
+                output: "Started api"
+              }
+            ]
+          }
+        ],
+        historyLoaded: true,
+        liveToolParts: []
+      })
+    );
+    await waitFor(() => {
+      expect(listTrackedApps("s1")).toEqual(["web"]);
+    });
   });
 });

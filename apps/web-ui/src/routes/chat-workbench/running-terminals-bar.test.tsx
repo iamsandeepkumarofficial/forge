@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RunningTerminalsBar } from "./running-terminals-bar";
 import {
+  listTrackedApps,
   resetTrackedTerminalsForTests,
   trackApp,
   trackBackgroundJob
@@ -65,7 +66,9 @@ describe("RunningTerminalsBar", () => {
       expect(screen.getByText("2 terminals running")).toBeTruthy();
     });
     expect(screen.queryByText("web")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /2 terminals running/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /2 terminals running/i })
+    );
     expect(screen.getByText("web")).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Open web in terminal" })
@@ -82,10 +85,34 @@ describe("RunningTerminalsBar", () => {
     await waitFor(() => {
       expect(screen.getByText("1 terminal running")).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole("button", { name: /1 terminal running/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /1 terminal running/i })
+    );
     fireEvent.click(screen.getByRole("button", { name: "Stop web" }));
     await waitFor(() => {
       expect(stopApp).toHaveBeenCalledWith("s1", "web");
     });
+    await waitFor(() => {
+      expect(listTrackedApps("s1")).toEqual([]);
+      expect(screen.queryByTestId("running-terminals-bar")).toBeNull();
+    });
+  });
+
+  it("keeps the app tracked when stop fails", async () => {
+    stopApp.mockRejectedValueOnce(new Error("still running"));
+    trackApp("s1", "web");
+    render(<RunningTerminalsBar sessionId="s1" />);
+    await waitFor(() => {
+      expect(screen.getByText("1 terminal running")).toBeTruthy();
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /1 terminal running/i })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Stop web" }));
+    await waitFor(() => {
+      expect(stopApp).toHaveBeenCalledWith("s1", "web");
+    });
+    expect(listTrackedApps("s1")).toEqual(["web"]);
+    expect(screen.getByTestId("running-terminals-bar")).toBeTruthy();
   });
 });

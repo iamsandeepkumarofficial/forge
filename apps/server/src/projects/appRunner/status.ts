@@ -1,5 +1,6 @@
 import { previewUrlForHostname } from "../sandboxRuntime/hostnames.js";
 import {
+  freeListeningPort,
   isBackgroundJobRunning,
   readBackgroundJobLogs,
   stopBackgroundJob
@@ -14,16 +15,36 @@ import { ctx, readForgeConfig, matchLaunchApp } from "./config.js";
 import { runApp } from "./run.js";
 
 const N_800 = 800;
+const lastPreviewPublishAt = new Map<string, number>();
 
 export async function stopApp(sessionId: string, name: string): Promise<void> {
   const { containerName } = await ctx(sessionId);
-  const app = await findAppName(sessionId, name);
-  await stopBackgroundJob({
+  const { config } = await readForgeConfig(sessionId);
+  const matched = matchLaunchApp(config.apps, name);
+  const app = matched?.name ?? name;
+  const wasRunning = await isBackgroundJobRunning({
     containerName,
     kind: "app",
     name: app,
     sessionId
   });
+  const stopped = await stopBackgroundJob({
+    containerName,
+    kind: "app",
+    name: app,
+    sessionId
+  });
+  const port = matched?.port;
+  if ((wasRunning || stopped.hadPid) && port != null) {
+    await freeListeningPort({
+      containerName,
+      port,
+      sessionId
+    }).catch(() => undefined);
+  }
+  if (port != null) {
+    lastPreviewPublishAt.delete(`${sessionId}:${port}`);
+  }
 }
 export async function appLogs(options: {
   sessionId: string;
@@ -94,7 +115,6 @@ export function resolveRunningAppUrl(options: {
 const PLANE_HEALTH_TTL_MS = 3000;
 const PREVIEW_REREGISTER_MS = 15000;
 let planeHealthyCache: { at: number; ok: boolean } | null = null;
-const lastPreviewPublishAt = new Map<string, number>();
 
 async function isPreviewPlaneHealthy(): Promise<boolean> {
   const base = process.env.PREVIEW_PLANE_URL?.trim()?.replace(/\/$/, "");

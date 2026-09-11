@@ -5,7 +5,9 @@ import { stopTerminalJob } from "../../lib/session-terminal.js";
 import {
   listTrackedApps,
   listTrackedBackgroundJobs,
-  subscribeTrackedTerminals
+  subscribeTrackedTerminals,
+  untrackApp,
+  untrackBackgroundJob
 } from "./tracked-terminals.js";
 import {
   runningTerminalItemsFrom,
@@ -30,6 +32,25 @@ function itemsForSession(sessionId: string): RunningTerminalItem[] {
       running: true
     }))
   });
+}
+
+async function stopTrackedItem(
+  sessionId: string,
+  item: RunningTerminalItem
+): Promise<void> {
+  if (item.kind === "app") {
+    const name = item.id.slice("app:".length);
+    await stopApp(sessionId, name);
+    untrackApp(sessionId, name);
+    return;
+  }
+  const name = item.id.slice("job:".length);
+  await stopTerminalJob({ sessionId, name });
+  untrackBackgroundJob(sessionId, name);
+}
+
+function runningCountLabel(count: number): string {
+  return count === 1 ? "1 terminal running" : `${count} terminals running`;
 }
 
 function RunningTerminalRow(options: {
@@ -97,14 +118,9 @@ export function RunningTerminalsBar({ sessionId }: { sessionId: string }) {
     async (item: RunningTerminalItem) => {
       setStoppingId(item.id);
       try {
-        if (item.kind === "app") {
-          await stopApp(sessionId, item.id.slice("app:".length));
-        } else {
-          await stopTerminalJob({
-            sessionId,
-            name: item.id.slice("job:".length)
-          });
-        }
+        await stopTrackedItem(sessionId, item);
+      } catch {
+        return;
       } finally {
         setStoppingId(null);
       }
@@ -114,10 +130,7 @@ export function RunningTerminalsBar({ sessionId }: { sessionId: string }) {
 
   if (items.length === 0) return null;
 
-  const countLabel =
-    items.length === 1
-      ? "1 terminal running"
-      : `${items.length} terminals running`;
+  const countLabel = runningCountLabel(items.length);
 
   return (
     <div
