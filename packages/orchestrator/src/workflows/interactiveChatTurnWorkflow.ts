@@ -7,6 +7,7 @@ import {
   truncatedToolCallOutput
 } from "./chatTurnLimits.js";
 import {
+  assistantTextForFinalize,
   buildResult,
   failureMessage,
   isLocalChatProvider,
@@ -22,6 +23,7 @@ export type {
   InteractiveChatTurnResult
 } from "./chatTurnHelpers.js";
 export {
+  assistantTextForFinalize,
   buildResult,
   failureMessage,
   isLocalChatProvider,
@@ -365,20 +367,28 @@ export async function interactiveChatTurnWorkflow(
       parts: [{ type: "text", text: args.userText }],
       turnId: args.turnId
     });
+    await sandbox.checkpointChatWorkspace({
+      sessionId: args.sessionId,
+      turnId: args.turnId
+    });
     const loop = await runToolRoundLoop({
       args,
       currentMode: { value: args.mode },
       toolNameSet
     });
     rounds = loop.rounds;
-    finalText = loop.finalText;
+    finalText = assistantTextForFinalize({
+      text: loop.finalText,
+      reasoningText: loop.finalReasoningText,
+      toolCallCount: loop.toolCallCount
+    });
     toolCallCount = loop.toolCallCount;
     await short.finalizeChatTurn({
       sessionId: args.sessionId,
       turnId: args.turnId,
       assistantParts: assistantPartsForStep({
         reasoningText: loop.finalReasoningText,
-        text: finalText || "_(no response)_"
+        text: finalText
       }),
       status: "completed"
     });
@@ -387,7 +397,7 @@ export async function interactiveChatTurnWorkflow(
       rounds,
       toolNames: [...toolNameSet].sort(),
       toolCallCount,
-      finalText: finalText || "_(no response)_"
+      finalText
     });
   } catch (err) {
     return handleTurnFailure({

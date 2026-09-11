@@ -54,4 +54,42 @@ describe("sandboxHostFs.tool", () => {
       null
     );
   });
+
+  it("lists workspace member folders at root", async () => {
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "forge-sfs-ws-"));
+    const frontend = path.join(tmp, "frontend");
+    const backend = path.join(tmp, "backend");
+    await fs.mkdir(frontend);
+    await fs.mkdir(backend);
+    await fs.writeFile(path.join(frontend, "pkg.json"), "{}");
+    const info: SessionRepoInfo = {
+      containerName: tmp,
+      repoDir: "frontend",
+      workingDir: "/workspace",
+      sessionRoot: "/workspace",
+      hostWorkingDir: tmp,
+      worktrees: {
+        frontend: "/workspace/frontend",
+        backend: "/workspace/backend"
+      },
+      hostWorktrees: { frontend, backend }
+    };
+    const listed = await executeHostSandboxFsTool({
+      info,
+      toolName: "list_dir",
+      args: { path: "" }
+    });
+    assert.equal(listed?.success, true);
+    assert.deepEqual(listed?.metadata?.entries, [
+      { name: "backend", path: "backend", isDir: true },
+      { name: "frontend", path: "frontend", isDir: true }
+    ]);
+    const read = await executeHostSandboxFsTool({
+      info,
+      toolName: "read_file",
+      args: { path: "frontend/pkg.json" }
+    });
+    assert.equal(read?.success, true);
+    assert.equal(read?.metadata?.content, "{}");
+  });
 });

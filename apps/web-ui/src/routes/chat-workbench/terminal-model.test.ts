@@ -99,12 +99,24 @@ describe("terminal-model", () => {
       ],
       { trackedApps: ["web"], trackedJobs: [] }
     );
-    expect(next.map((tab) => tab.id).sort()).toEqual([
-      "app:web",
-      "job:install",
-      "main"
-    ]);
+    expect(next.map((tab) => tab.id).sort()).toEqual(["app:web", "main"]);
     expect(next.find((tab) => tab.id === "app:web")?.running).toBe(true);
-    expect(next.find((tab) => tab.id === "job:install")?.running).toBe(false);
+  });
+
+  it("adds tracked job tabs and drops finished jobs", () => {
+    const next = applyTrackedRunningState(
+      [
+        {
+          id: "main",
+          kind: "shell",
+          label: "Shell",
+          running: false,
+          closable: false
+        }
+      ],
+      { trackedApps: [], trackedJobs: ["install"] }
+    );
+    expect(next.map((tab) => tab.id)).toEqual(["main", "job:install"]);
+    expect(next.find((tab) => tab.id === "job:install")?.running).toBe(true);
   });
 });

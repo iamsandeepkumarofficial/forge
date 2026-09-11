@@ -6,15 +6,16 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject
 } from "react";
-import { ChevronDown, ChevronUp, SquareTerminal, Terminal } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { DockBar } from "./bottom-dock-bar.js";
 import { PreviewDevtools } from "./preview-devtools.js";
 import { isElectronPreview } from "../../lib/desktop.js";
 import { ElectronDevtoolsHole } from "./electron-preview-hole.js";
 import {
+  loadDockExtras,
   loadDockMode,
   loadTerminalHeight,
   loadTerminalOpen,
+  persistDockExtras,
   persistDockMode,
   persistTerminalHeight,
   persistTerminalOpen
@@ -22,9 +23,13 @@ import {
 import { TerminalPane } from "./terminal-pane.js";
 import {
   dockEnsureFromEvent,
+  dockExtrasAfterClose,
+  dockExtrasAfterOpen,
+  dockModeAfterClose,
   dockModeFromEvent,
   PREVIEW_DOCK_EVENT,
   TERMINAL_TOGGLE_EVENT,
+  type CloseableDockMode,
   type PreviewDockMode
 } from "./terminal-toggle.js";
 import {
@@ -38,9 +43,41 @@ const N_70 = 70;
 const N_100 = 100;
 const PRIMARY_BUTTON = 0;
 
+function bindDockListeners(options: {
+  requestMode: (next: PreviewDockMode) => void;
+  selectMode: (next: PreviewDockMode) => void;
+}): () => void {
+  const { requestMode, selectMode } = options;
+  const onKey = (e: KeyboardEvent) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key !== "`") return;
+    e.preventDefault();
+    requestMode("terminal");
+  };
+  const onDock = (e: Event) => {
+    const nextMode = dockModeFromEvent(e);
+    if (dockEnsureFromEvent(e)) {
+      selectMode(nextMode);
+      return;
+    }
+    requestMode(nextMode);
+  };
+  const onLegacyToggle = () => {
+    requestMode("terminal");
+  };
+  window.addEventListener("keydown", onKey);
+  window.addEventListener(PREVIEW_DOCK_EVENT, onDock);
+  window.addEventListener(TERMINAL_TOGGLE_EVENT, onLegacyToggle);
+  return () => {
+    window.removeEventListener("keydown", onKey);
+    window.removeEventListener(PREVIEW_DOCK_EVENT, onDock);
+    window.removeEventListener(TERMINAL_TOGGLE_EVENT, onLegacyToggle);
+  };
+}
+
 export function BottomTerminal({ sessionId }: { sessionId: string }) {
   const [open, setOpen] = useState(loadTerminalOpen);
   const [mode, setMode] = useState<PreviewDockMode>(loadDockMode);
+  const [extras, setExtras] = useState<CloseableDockMode[]>(loadDockExtras);
   const containerRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(open);
   const modeRef = useRef(mode);
@@ -57,48 +94,43 @@ export function BottomTerminal({ sessionId }: { sessionId: string }) {
     });
   }, []);
   const selectMode = useCallback((next: PreviewDockMode) => {
+    setExtras((prev) => {
+      const extrasNext = dockExtrasAfterOpen(prev, next);
+      persistDockExtras(extrasNext);
+      return extrasNext;
+    });
     setMode(next);
     persistDockMode(next);
     setOpen(true);
     persistTerminalOpen(true);
   }, []);
-  const requestMode = useCallback((next: PreviewDockMode) => {
-    if (openRef.current && modeRef.current === next) {
-      setOpen(false);
-      persistTerminalOpen(false);
-      return;
-    }
-    setMode(next);
-    persistDockMode(next);
-    setOpen(true);
-    persistTerminalOpen(true);
+  const closeExtra = useCallback((extra: CloseableDockMode) => {
+    setExtras((prev) => {
+      const extrasNext = dockExtrasAfterClose(prev, extra);
+      persistDockExtras(extrasNext);
+      return extrasNext;
+    });
+    setMode((current) => {
+      const next = dockModeAfterClose(current, extra);
+      persistDockMode(next);
+      return next;
+    });
   }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key !== "`") return;
-      e.preventDefault();
-      requestMode("terminal");
-    };
-    const onDock = (e: Event) => {
-      const nextMode = dockModeFromEvent(e);
-      if (dockEnsureFromEvent(e)) {
-        selectMode(nextMode);
+  const requestMode = useCallback(
+    (next: PreviewDockMode) => {
+      if (openRef.current && modeRef.current === next) {
+        setOpen(false);
+        persistTerminalOpen(false);
         return;
       }
-      requestMode(nextMode);
-    };
-    const onLegacyToggle = () => {
-      requestMode("terminal");
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener(PREVIEW_DOCK_EVENT, onDock);
-    window.addEventListener(TERMINAL_TOGGLE_EVENT, onLegacyToggle);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener(PREVIEW_DOCK_EVENT, onDock);
-      window.removeEventListener(TERMINAL_TOGGLE_EVENT, onLegacyToggle);
-    };
-  }, [requestMode, selectMode]);
+      selectMode(next);
+    },
+    [selectMode]
+  );
+  useEffect(
+    () => bindDockListeners({ requestMode, selectMode }),
+    [requestMode, selectMode]
+  );
   useEffect(() => {
     retainTerminalSessionClient(sessionId);
     return () => {
@@ -110,9 +142,11 @@ export function BottomTerminal({ sessionId }: { sessionId: string }) {
       sessionId={sessionId}
       open={open}
       mode={mode}
+      extras={extras}
       containerRef={containerRef}
       resize={resize}
       onSelect={selectMode}
+      onCloseExtra={closeExtra}
       onToggle={toggle}
     />
   );
@@ -122,15 +156,27 @@ function DockShell(options: {
   sessionId: string;
   open: boolean;
   mode: PreviewDockMode;
+  extras: CloseableDockMode[];
   containerRef: RefObject<HTMLDivElement | null>;
   resize: ReturnType<typeof useTerminalResize>;
   onSelect: (mode: PreviewDockMode) => void;
+  onCloseExtra: (extra: CloseableDockMode) => void;
   onToggle: () => void;
 }) {
-  const { sessionId, open, mode, containerRef, resize, onSelect, onToggle } =
-    options;
+  const {
+    sessionId,
+    open,
+    mode,
+    extras,
+    containerRef,
+    resize,
+    onSelect,
+    onCloseExtra,
+    onToggle
+  } = options;
   const showTerminal = open && mode === "terminal";
-  const showDevtools = open && mode === "devtools";
+  const showDevtools =
+    open && mode === "devtools" && extras.includes("devtools");
   const [fitSignal, setFitSignal] = useState(0);
   useEffect(() => {
     if (!showTerminal) return;
@@ -156,13 +202,39 @@ function DockShell(options: {
       <DockBar
         open={open}
         mode={mode}
+        extras={extras}
         onSelect={onSelect}
+        onCloseExtra={onCloseExtra}
         onToggle={onToggle}
       />
+      <DockBodies
+        sessionId={sessionId}
+        extras={extras}
+        showTerminal={showTerminal}
+        showDevtools={showDevtools}
+        height={resize.height}
+        fitSignal={fitSignal}
+      />
+    </div>
+  );
+}
+
+function DockBodies(options: {
+  sessionId: string;
+  extras: CloseableDockMode[];
+  showTerminal: boolean;
+  showDevtools: boolean;
+  height: number;
+  fitSignal: number;
+}) {
+  const { sessionId, extras, showTerminal, showDevtools, height, fitSignal } =
+    options;
+  return (
+    <>
       <div
         data-testid="terminal-body"
         hidden={!showTerminal}
-        style={showTerminal ? { height: resize.height } : undefined}
+        style={showTerminal ? { height } : undefined}
         className="min-h-0 overflow-hidden"
       >
         <TerminalPane
@@ -171,19 +243,21 @@ function DockShell(options: {
           fitSignal={fitSignal}
         />
       </div>
-      <div
-        data-testid="devtools-body"
-        hidden={!showDevtools}
-        style={showDevtools ? { height: resize.height } : undefined}
-        className="min-h-0"
-      >
-        {isElectronPreview() ? (
-          <ElectronDevtoolsHole active={showDevtools} />
-        ) : (
-          <PreviewDevtools />
-        )}
-      </div>
-    </div>
+      {extras.includes("devtools") ? (
+        <div
+          data-testid="devtools-body"
+          hidden={!showDevtools}
+          style={showDevtools ? { height } : undefined}
+          className="min-h-0"
+        >
+          {isElectronPreview() ? (
+            <ElectronDevtoolsHole active={showDevtools} />
+          ) : (
+            <PreviewDevtools />
+          )}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -257,58 +331,4 @@ function useTerminalResize(containerRef: RefObject<HTMLDivElement | null>) {
     return undefined;
   }, [dragging, onPointerMove, onPointerUp]);
   return { height, dragging, startDrag };
-}
-
-function DockBar(options: {
-  open: boolean;
-  mode: PreviewDockMode;
-  onSelect: (mode: PreviewDockMode) => void;
-  onToggle: () => void;
-}) {
-  const { open, mode, onSelect, onToggle } = options;
-  return (
-    <div className="flex h-8 shrink-0 items-center gap-0.5 px-1 text-xs">
-      <button
-        type="button"
-        aria-pressed={open && mode === "terminal"}
-        onClick={() => onSelect("terminal")}
-        className={dockTabClass(open && mode === "terminal")}
-      >
-        <Terminal className="size-3.5" />
-        Terminal
-      </button>
-      <button
-        type="button"
-        aria-pressed={open && mode === "devtools"}
-        onClick={() => onSelect("devtools")}
-        className={dockTabClass(open && mode === "devtools")}
-      >
-        <SquareTerminal className="size-3.5" />
-        DevTools
-      </button>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-label={open ? "Collapse panel" : "Expand panel"}
-        title={open ? "Collapse panel" : "Expand panel"}
-        className="ml-auto inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-      >
-        {open ? (
-          <ChevronDown className="size-3.5" />
-        ) : (
-          <ChevronUp className="size-3.5" />
-        )}
-      </button>
-    </div>
-  );
-}
-
-function dockTabClass(active: boolean): string {
-  return cn(
-    "inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium uppercase tracking-wide",
-    active
-      ? "bg-muted text-foreground"
-      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-  );
 }

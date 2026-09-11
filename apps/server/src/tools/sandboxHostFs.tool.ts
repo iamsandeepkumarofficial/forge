@@ -37,10 +37,12 @@ function logicalPath(rel: string, info: SessionRepoInfo): string {
   return resolveWorkspacePath(rel, { knownRepos: knownRepos(info) });
 }
 
+function workspaceMemberNames(info: SessionRepoInfo): string[] {
+  const trees = info.worktrees ?? info.hostWorktrees;
+  return trees ? Object.keys(trees).sort() : [];
+}
+
 function hostRoot(info: SessionRepoInfo): string {
-  if (info.hostWorktrees && Object.keys(info.hostWorktrees).length > 0) {
-    return Object.values(info.hostWorktrees)[0]!;
-  }
   return info.hostWorkingDir ?? info.containerName;
 }
 
@@ -91,9 +93,11 @@ async function hostReadFile(options: {
     return { success: false, output: `File not found: ${rel}` };
   }
   const totalLines = content.split(/\r?\n/).length;
+  const clipped = capChars(content, MAX_READ_CHARS);
   return {
     success: true,
-    output: `Read ${rel} (${totalLines} lines):\n${capChars(content, MAX_READ_CHARS)}`
+    output: `Read ${rel} (${totalLines} lines):\n${clipped}`,
+    metadata: { content: clipped, totalLines }
   };
 }
 
@@ -252,6 +256,21 @@ async function hostListDir(options: {
   const rel = String(options.args.path ?? "")
     .replace(/\\/g, "/")
     .replace(/^\/+/, "");
+  if (!rel) {
+    const names = workspaceMemberNames(options.info);
+    if (names.length > 0) {
+      const entries = names.map((name) => ({
+        name,
+        path: name,
+        isDir: true
+      }));
+      return {
+        success: true,
+        output: `${entries.length} entries`,
+        metadata: { entries }
+      };
+    }
+  }
   const abs = rel
     ? resolveHostFsPath({
         info: options.info,

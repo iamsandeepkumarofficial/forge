@@ -4,6 +4,34 @@ export const OPEN_TERMINAL_JOB_EVENT = "forge-open-terminal-job";
 export const OPEN_TERMINAL_TAB_EVENT = "forge-open-terminal-tab";
 
 export type PreviewDockMode = "terminal" | "devtools";
+export const CLOSEABLE_DOCK_MODES = ["devtools"] as const;
+export type CloseableDockMode = (typeof CLOSEABLE_DOCK_MODES)[number];
+
+export function isCloseableDockMode(mode: string): mode is CloseableDockMode {
+  return (CLOSEABLE_DOCK_MODES as readonly string[]).includes(mode);
+}
+
+export function dockExtrasAfterOpen(
+  extras: CloseableDockMode[],
+  mode: PreviewDockMode
+): CloseableDockMode[] {
+  if (!isCloseableDockMode(mode) || extras.includes(mode)) return extras;
+  return [...extras, mode];
+}
+
+export function dockExtrasAfterClose(
+  extras: CloseableDockMode[],
+  extra: CloseableDockMode
+): CloseableDockMode[] {
+  return extras.filter((m) => m !== extra);
+}
+
+export function dockModeAfterClose(
+  mode: PreviewDockMode,
+  extra: CloseableDockMode
+): PreviewDockMode {
+  return mode === extra ? "terminal" : mode;
+}
 
 export type OpenTerminalTabDetail = {
   id: string;

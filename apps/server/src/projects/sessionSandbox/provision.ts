@@ -9,8 +9,9 @@ import { WORKSPACE_MOUNT } from "./constants.js";
 import {
   assertSafeBranch,
   cloneGithubIntoVolume,
-  isRepoInitialized,
+  ensureGitHeadAt,
   isRepoInitializedAt,
+  repoDirForProject,
   type LocalFolderSource
 } from "./materialize.js";
 import type { BindMount, NamedVolumeMount } from "../sandboxRuntime/types.js";
@@ -190,7 +191,9 @@ export async function provisionProjectScopedSandbox(options: {
 }): Promise<{ status: "ready"; workingDir: string; containerId: string }> {
   const { sessionId, chat, project, source } = options;
   assertSafeBranch(chat.branchName);
+  const repoDir = repoDirForProject(project);
   const workingDir = WORKSPACE_MOUNT;
+  const repoMount = `${WORKSPACE_MOUNT}/${repoDir}`;
   const localPath = resolveLocalFolderPath(project, source);
   if (localPath) {
     const { provisionLocalProjectSandbox } =
@@ -209,7 +212,7 @@ export async function provisionProjectScopedSandbox(options: {
     await getSandboxRuntime(sessionId)
   ).createSession(sessionId, await sandboxSessionCreateOpts({ sessionId }));
   const containerName = handle.ref;
-  const repoInitialized = await isRepoInitialized(containerName);
+  const repoInitialized = await isRepoInitializedAt(containerName, repoMount);
   if (!repoInitialized) {
     if (project.source !== "github") {
       throw new Error(
@@ -221,10 +224,11 @@ export async function provisionProjectScopedSandbox(options: {
       containerName,
       project,
       branch: chat.branchName,
-      token: token ?? undefined
+      token: token ?? undefined,
+      repoName: repoDir
     });
   }
-  await disableGitFileMode({ containerName, workingDir });
+  await disableGitFileMode({ containerName, workingDir: repoMount });
   return { status: "ready", workingDir, containerId: containerName };
 }
 
@@ -287,6 +291,10 @@ async function finalizeWorkspaceContainer(options: {
   }
   for (const { member } of options.memberProjects) {
     const target = `${WORKSPACE_MOUNT}/${member.repoName}`;
+    await ensureGitHeadAt({
+      containerName: options.containerName,
+      mountPath: target
+    }).catch(() => {});
     await execFileAsync("docker", [
       "exec",
       options.containerName,

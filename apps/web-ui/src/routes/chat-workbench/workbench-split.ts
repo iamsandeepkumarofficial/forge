@@ -34,24 +34,30 @@ export function isAdaptiveDefault(pct: number): boolean {
   );
 }
 
-export function nextSplitPct(options: {
-  current: number;
-  hasPreview: boolean;
-  userOverride: boolean;
-}): number {
-  if (options.userOverride) return options.current;
-  if (!isAdaptiveDefault(options.current)) return options.current;
-  return options.hasPreview ? PREVIEW_LEFT_PCT : IDLE_LEFT_PCT;
-}
-
-export function initialSplitPct(): number {
+export function storedSplitPct(): number | null {
   try {
     const v = Number(localStorage.getItem(SPLIT_KEY));
     if (Number.isFinite(v) && v >= SPLIT_MIN && v <= SPLIT_MAX) return v;
   } catch {
     void 0;
   }
-  return IDLE_LEFT_PCT;
+  return null;
+}
+
+export function nextSplitPct(options: {
+  current: number;
+  hasPreview: boolean;
+  userOverride: boolean;
+  hasStoredSplit?: boolean;
+}): number {
+  if (options.userOverride) return options.current;
+  if (options.hasStoredSplit) return options.current;
+  if (!isAdaptiveDefault(options.current)) return options.current;
+  return options.hasPreview ? PREVIEW_LEFT_PCT : IDLE_LEFT_PCT;
+}
+
+export function initialSplitPct(): number {
+  return storedSplitPct() ?? IDLE_LEFT_PCT;
 }
 
 export function clampSplitPct(pct: number): number {

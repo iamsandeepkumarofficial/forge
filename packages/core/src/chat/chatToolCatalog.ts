@@ -215,9 +215,10 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "upsert_workspace_parameter",
     toolName: "Upsert workspace parameter",
     description:
-      "Create or update a workspace Parameter store key (injected into sandbox env). Workspace sessions only.",
+      "Create or update workspace Parameter store keys (injected into sandbox env). Workspace sessions only. Pass items[] to save several keys in one call after a multi-field ask_user form.",
     exampleUsecases: [
-      "Finalize an env key after confirming the value with the user or from a non-secret .env.example."
+      "Finalize an env key after confirming the value with the user or from a non-secret .env.example.",
+      "After a form ask_user with several env fields, call once with items: [{ key, value, secret? }, ...]."
     ],
     negativeUsecases: [
       "Guessing secrets — ask the user.",
@@ -274,12 +275,13 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "ask_user",
     toolName: "Ask user",
     description:
-      "Pause the turn and show an interactive MCQ or form widget in the chat composer. Use for setup consent (params, secrets, infra, toolchain) and for recoverable failures (missing local deps) — not free-form prose questions. Deduce concrete MCQ actions from the failure (e.g. install_project_infra, start existing service, skip). For form fields always set `value` to a sensible default (example URL, generated secret, NODE_ENV=development, etc.) so the user can accept or edit.",
+      "Pause the turn and show an interactive MCQ or form widget. Keep `prompt` to 1–2 sentences — never dump markdown tables or long env docs in prompt. Split infra consent (MCQ) from env/secrets (form). Form fields may set group and type (text|secret|boolean). After a multi-field form, upsert_workspace_parameter once with items[]. When a DB is unreachable, MCQ: re-provision / paste an alternate URI / skip — do not loop preview_start.",
     exampleUsecases: [
       "Ask which Mongo connection string to store before upsert_workspace_parameter — prefill value from .env.example or a local mongo URL.",
-      "Confirm setup_project_infra (Postgres/Mongo) before calling with userApproved: true.",
+      "Confirm setup_project_infra (Postgres/Mongo) with an MCQ before calling with userApproved: true.",
       "Ask the user to approve installing a missing runtime (e.g. python3).",
-      "After setup_project_infra fails because mongod is missing: MCQ including install via install_project_infra, start mongod if installed, skip."
+      "After setup_project_infra fails because mongod is missing: MCQ including install via install_project_infra, start mongod if installed, skip.",
+      "When the provisioned DB is down: MCQ re-provision / use another URI / skip."
     ],
     negativeUsecases: [
       "Do not ask in plain text when a widget would collect the answer.",

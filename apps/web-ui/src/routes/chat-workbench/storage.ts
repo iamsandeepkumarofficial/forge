@@ -10,8 +10,10 @@ export const AUTO_MODEL_KEY = "forge.workbench.auto-model";
 export const SPLIT_KEY = "forge.workbench.split";
 export const TERMINAL_OPEN_KEY = "forge.workbench.terminal-open";
 export const TERMINAL_HEIGHT_KEY = "forge.workbench.terminal-height";
-export const TERMINAL_TAB_LIST_WIDTH_KEY = "forge.workbench.terminal-tab-list-width";
+export const TERMINAL_TAB_LIST_WIDTH_KEY =
+  "forge.workbench.terminal-tab-list-width";
 export const DOCK_MODE_KEY = "forge.workbench.dock-mode";
+export const DOCK_EXTRAS_KEY = "forge.workbench.dock-extras";
 export const TERMINAL_ACTIVE_TAB_PREFIX = "forge.workbench.terminal-tab.";
 
 const N_96 = 96;
@@ -105,9 +107,38 @@ export function persistDockMode(mode: "terminal" | "devtools"): void {
   }
 }
 
+export function loadDockExtras(): Array<"devtools"> {
+  try {
+    const raw = localStorage.getItem(DOCK_EXTRAS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return [
+          ...new Set(
+            parsed.filter((item): item is "devtools" => item === "devtools")
+          )
+        ];
+      }
+    }
+  } catch {
+    void 0;
+  }
+  return loadDockMode() === "devtools" ? ["devtools"] : [];
+}
+
+export function persistDockExtras(extras: Array<"devtools">): void {
+  try {
+    localStorage.setItem(DOCK_EXTRAS_KEY, JSON.stringify(extras));
+  } catch {
+    void 0;
+  }
+}
+
 export function loadActiveTerminalTab(sessionId: string): string | null {
   try {
-    const value = localStorage.getItem(`${TERMINAL_ACTIVE_TAB_PREFIX}${sessionId}`);
+    const value = localStorage.getItem(
+      `${TERMINAL_ACTIVE_TAB_PREFIX}${sessionId}`
+    );
     return value?.trim() || null;
   } catch {
     return null;

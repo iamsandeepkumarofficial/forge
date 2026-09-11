@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { onAgentPrompt } from "./preview-comment-bus.js";
 import { modeSwitchContinueMessage } from "../../lib/mode-switch.js";
 import { askUserFormReply, type AskUserProposal } from "../../lib/ask-user.js";
@@ -11,6 +12,7 @@ import { usePendingAskUser } from "./use-pending-ask-user.js";
 import { useTrackBackgroundJobs } from "./use-track-background-jobs.js";
 import { estimateConversationTokens } from "./chat-pane-tokens.js";
 import { ChatPaneView } from "./chat-pane-view.js";
+import { branchChatFromMessage } from "./branch-chat.js";
 import type { WorkbenchTurnStatus } from "./types.js";
 import { deriveTurnStatus } from "./workbench-status.js";
 
@@ -124,7 +126,7 @@ function useChatPaneSideEffects(options: {
   }, [onTurnStatus, session.status, askUserPending]);
 }
 
-function useChatPaneControllers(props: ChatPaneProps) {
+function useChatPaneSessionBundle(props: ChatPaneProps) {
   const {
     sessionId,
     projectId,
@@ -132,8 +134,7 @@ function useChatPaneControllers(props: ChatPaneProps) {
     workspaceId,
     skipInitialPromptNavigate,
     sendInitialPromptEvenIfNotEmpty,
-    initialPrompt,
-    onTurnStatus
+    initialPrompt
   } = props;
   const model = useChatPaneModel();
   const session = useChatPaneSession({
@@ -156,6 +157,13 @@ function useChatPaneControllers(props: ChatPaneProps) {
     historyLoaded: session.historyLoaded,
     liveToolParts: session.liveToolParts
   });
+  return { model, session };
+}
+
+function useChatPaneControllers(props: ChatPaneProps) {
+  const { sessionId, projectId, workspaceId, onTurnStatus } = props;
+  const navigate = useNavigate();
+  const { model, session } = useChatPaneSessionBundle(props);
   const askUser = usePendingAskUser({
     sessionId,
     messages: session.messages,
@@ -193,6 +201,14 @@ function useChatPaneControllers(props: ChatPaneProps) {
       setAskUserSubmitting
     });
   };
+  const messageActions = useChatMessageActions({
+    sessionId,
+    projectId,
+    workspaceId,
+    sendText: session.sendText,
+    setError: session.setError,
+    navigate
+  });
   return {
     model,
     session,
@@ -201,8 +217,46 @@ function useChatPaneControllers(props: ChatPaneProps) {
     handleSubmitAskUser,
     showAskUser,
     modeSwitch,
-    conversationTokens
+    conversationTokens,
+    ...messageActions
   };
+}
+
+function useChatMessageActions(options: {
+  sessionId: string;
+  projectId: string;
+  workspaceId?: string;
+  sendText: (
+    raw: string,
+    sendOpts?: { truncateFromMessageId?: string }
+  ) => void | Promise<void>;
+  setError: (e: Error | null) => void;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const { sessionId, projectId, workspaceId, sendText, setError, navigate } =
+    options;
+  const handleBranchAssistant = (opts: { messageId: string; text: string }) => {
+    void branchChatFromMessage({
+      sourceSessionId: sessionId,
+      untilMessageId: opts.messageId,
+      assistantText: opts.text,
+      projectId,
+      workspaceId
+    })
+      .then((href) => {
+        void navigate(href);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err : new Error(String(err)));
+      });
+  };
+  const handleRevertUserMessage = (opts: {
+    messageId: string;
+    text: string;
+  }) => {
+    void sendText(opts.text, { truncateFromMessageId: opts.messageId });
+  };
+  return { handleBranchAssistant, handleRevertUserMessage };
 }
 
 function ChatPaneWired(options: {
@@ -224,6 +278,8 @@ function ChatPaneWired(options: {
       streamingText={c.session.streamingText}
       streamingReasoning={c.session.streamingReasoning}
       liveToolParts={c.session.liveToolParts}
+      committedSteps={c.session.committedSteps}
+      historyLoaded={c.session.historyLoaded}
       status={c.session.status}
       error={c.session.error}
       clearError={c.session.clearError}
@@ -263,6 +319,8 @@ function ChatPaneWired(options: {
       }
       onOpenFile={props.onOpenFile}
       onOpenHelp={props.onOpenHelp}
+      onBranchAssistant={c.handleBranchAssistant}
+      onRevertUserMessage={c.handleRevertUserMessage}
     />
   );
 }

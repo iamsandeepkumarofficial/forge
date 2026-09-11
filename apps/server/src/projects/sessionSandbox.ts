@@ -119,16 +119,40 @@ export async function getSessionRepoInfo(
     throw new Error(`Project not found for chat session: ${sessionId}`);
   }
   const repoDir = repoDirForProject(project);
-  const hostWorkingDir =
+  const repoMount = `${WORKSPACE_MOUNT}/${repoDir}`;
+  const worktrees = { [repoDir]: repoMount };
+  const hostWorktrees: Record<string, string> = {};
+  const hostGitDir =
     project.source === "local" && project.canonicalKey
       ? worktreeWorkDir(project.id, sessionId)
       : undefined;
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  if (hostGitDir && fs.existsSync(hostGitDir)) {
+    hostWorktrees[repoDir] = hostGitDir;
+  }
+  const { hostManagedSessionRoot } =
+    await import("./sandboxRuntime/hostSessionPaths.js");
+  const hostWorkspaceView = path.join(
+    hostManagedSessionRoot(sessionId),
+    "workspace"
+  );
+  const hostRef =
+    kind === "host"
+      ? fs.existsSync(hostWorkspaceView)
+        ? hostWorkspaceView
+        : (hostGitDir ?? dockerName)
+      : undefined;
+  const hostWorkingDir = fs.existsSync(hostWorkspaceView)
+    ? hostWorkspaceView
+    : hostGitDir;
   return {
-    containerName:
-      kind === "host" && hostWorkingDir ? hostWorkingDir : dockerName,
+    containerName: kind === "host" && hostRef ? hostRef : dockerName,
     repoDir,
     workingDir: WORKSPACE_MOUNT,
     sessionRoot: WORKSPACE_MOUNT,
+    worktrees,
+    ...(Object.keys(hostWorktrees).length > 0 ? { hostWorktrees } : {}),
     ...(hostWorkingDir ? { hostWorkingDir } : {})
   };
 }
@@ -245,8 +269,24 @@ async function hostWorkspaceLooksEmpty(root: string): Promise<boolean> {
   try {
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
-    await fs.access(path.join(root, ".git"));
-    return false;
+    try {
+      await fs.access(path.join(root, ".git"));
+      return false;
+    } catch {
+      void 0;
+    }
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      if (entry.name.startsWith(".")) continue;
+      try {
+        await fs.access(path.join(root, entry.name, ".git"));
+        return false;
+      } catch {
+        void 0;
+      }
+    }
+    return true;
   } catch {
     return true;
   }

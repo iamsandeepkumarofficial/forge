@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useTerminalTabRefresh } from "./use-terminal-tab-refresh";
 import { resetTrackedTerminalsForTests } from "./tracked-terminals";
 import { resetTerminalSessionRegistryForTests } from "../../lib/terminal-session-registry";
@@ -50,5 +50,43 @@ describe("useTerminalTabRefresh", () => {
     const { result } = renderHook(() => useTerminalTabRefresh("s1"));
     await waitFor(() => expect(result.current.error).toBe("offline"));
     expect(result.current.loading).toBe(false);
+  });
+
+  it("does not keep job tabs from a previous session", async () => {
+    listTerminalTabs.mockResolvedValue([
+      {
+        id: "main",
+        kind: "shell",
+        label: "Shell",
+        running: false,
+        closable: false
+      }
+    ]);
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useTerminalTabRefresh(sessionId),
+      { initialProps: { sessionId: "s1" } }
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setTabs((prev) => [
+        ...prev,
+        {
+          id: "job:install",
+          kind: "job",
+          label: "install",
+          running: false,
+          closable: true
+        }
+      ]);
+    });
+    expect(result.current.tabs.some((tab) => tab.id === "job:install")).toBe(
+      true
+    );
+    rerender({ sessionId: "s2" });
+    await waitFor(() => {
+      expect(result.current.tabs.some((tab) => tab.id === "job:install")).toBe(
+        false
+      );
+    });
   });
 });

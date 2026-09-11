@@ -46,11 +46,9 @@ export function WorkbenchLeft(options: {
           onOpenHelp={() => o.onLeftModeChange("help")}
         />
       </div>
-      {o.leftMode === "files" ? (
-        <div className="min-h-0 flex-1">
-          <FilesTab sessionId={o.sessionId} onOpen={o.onOpenFile} />
-        </div>
-      ) : null}
+      <div className={cn("min-h-0 flex-1", o.leftMode !== "files" && "hidden")}>
+        <FilesTab sessionId={o.sessionId} onOpen={o.onOpenFile} />
+      </div>
       {o.leftMode === "changes" ? (
         <div className="min-h-0 flex-1">
           <ChangesTab

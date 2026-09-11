@@ -22,13 +22,6 @@ import type {
   WorkbenchTurnStatus
 } from "./types.js";
 
-const TURN_LABEL: Record<WorkbenchTurnStatus, string> = {
-  idle: "Idle",
-  thinking: "Thinking",
-  running: "Running",
-  waiting: "Waiting on you"
-};
-
 const MODES: {
   key: LeftPaneMode;
   label: string;
@@ -47,7 +40,7 @@ function ModeTabs(options: {
 }) {
   const { leftMode, onLeftMode } = options;
   return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-muted/70 p-0.5">
+    <div className="relative z-10 flex items-center gap-0.5 rounded-lg bg-muted/70 p-0.5">
       {MODES.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
@@ -71,21 +64,12 @@ function ModeTabs(options: {
 }
 
 function SessionHeaderActions(options: {
-  turnStatus: WorkbenchTurnStatus;
-  sandboxStatus: SandboxStatus;
   actions?: ReactNode;
   onExit: () => void;
 }) {
-  const { turnStatus, sandboxStatus, actions, onExit } = options;
+  const { actions, onExit } = options;
   return (
-    <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-      <TurnStatus status={turnStatus} />
-      {sandboxStatus === "starting" ? (
-        <StatusChip label="Starting sandbox" tone="warn" />
-      ) : null}
-      {sandboxStatus === "error" ? (
-        <StatusChip label="Sandbox error" tone="danger" />
-      ) : null}
+    <div className="relative z-10 ml-auto flex min-w-0 items-center justify-end gap-1.5 bg-background pl-2">
       <button
         type="button"
         aria-label="Leave session"
@@ -121,25 +105,15 @@ export function SessionHeader(options: {
   onLeftMode: (mode: LeftPaneMode) => void;
   actions?: ReactNode;
 }) {
-  const {
-    onBack,
-    title,
-    turnStatus,
-    sandboxStatus,
-    leftMode,
-    onLeftMode,
-    actions
-  } = options;
+  const { onBack, title, leftMode, onLeftMode, actions } = options;
   const [confirmExit, setConfirmExit] = useState(false);
   return (
-    <div className="flex min-w-0 shrink-0 items-center gap-2 border-b px-3 py-1.5">
-      <h1 className="min-w-0 max-w-[12rem] shrink-0 truncate text-sm font-semibold">
+    <div className="relative flex min-w-0 shrink-0 items-center gap-2 border-b px-3 py-1.5">
+      <ModeTabs leftMode={leftMode} onLeftMode={onLeftMode} />
+      <h1 className="pointer-events-none absolute inset-x-12 truncate text-center text-sm font-semibold">
         {title}
       </h1>
-      <ModeTabs leftMode={leftMode} onLeftMode={onLeftMode} />
       <SessionHeaderActions
-        turnStatus={turnStatus}
-        sandboxStatus={sandboxStatus}
         actions={actions}
         onExit={() => setConfirmExit(true)}
       />
@@ -201,50 +175,5 @@ function ExitSessionDialog(options: {
       </div>
     </div>,
     document.body
-  );
-}
-
-function TurnStatus({ status }: { status: WorkbenchTurnStatus }) {
-  if (status === "idle") {
-    return (
-      <span
-        aria-label="Idle"
-        title="Idle"
-        className="inline-flex size-2.5 shrink-0 rounded-full bg-muted-foreground/45"
-      />
-    );
-  }
-  return (
-    <StatusChip
-      label={TURN_LABEL[status]}
-      tone={
-        status === "waiting"
-          ? "warn"
-          : status === "running" || status === "thinking"
-            ? "live"
-            : "muted"
-      }
-    />
-  );
-}
-
-function StatusChip(options: {
-  label: string;
-  tone: "muted" | "live" | "warn" | "danger";
-}) {
-  const { label, tone } = options;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium",
-        tone === "muted" && "bg-muted text-muted-foreground",
-        tone === "live" && "bg-primary/10 text-primary dark:bg-primary/20",
-        tone === "warn" &&
-          "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200",
-        tone === "danger" && "bg-destructive/10 text-destructive"
-      )}
-    >
-      {label}
-    </span>
   );
 }

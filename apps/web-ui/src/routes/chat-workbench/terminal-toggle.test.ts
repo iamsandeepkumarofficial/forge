@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   dockEnsureFromEvent,
+  dockExtrasAfterClose,
+  dockExtrasAfterOpen,
+  dockModeAfterClose,
   dockModeFromEvent,
   jobNameFromOpenEvent,
   OPEN_TERMINAL_JOB_EVENT,
@@ -32,6 +35,15 @@ describe("terminal-toggle", () => {
   it("defaults unknown dock events to terminal", () => {
     expect(dockModeFromEvent(new Event("x"))).toBe("terminal");
     expect(dockEnsureFromEvent(new Event("x"))).toBe(false);
+  });
+
+  it("keeps extra dock tabs until they are closed", () => {
+    expect(dockExtrasAfterOpen([], "terminal")).toEqual([]);
+    expect(dockExtrasAfterOpen([], "devtools")).toEqual(["devtools"]);
+    expect(dockExtrasAfterOpen(["devtools"], "devtools")).toEqual(["devtools"]);
+    expect(dockExtrasAfterClose(["devtools"], "devtools")).toEqual([]);
+    expect(dockModeAfterClose("devtools", "devtools")).toBe("terminal");
+    expect(dockModeAfterClose("terminal", "devtools")).toBe("terminal");
   });
 
   it("opens terminal dock and emits tab for jobs", () => {

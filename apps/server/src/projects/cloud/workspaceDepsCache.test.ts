@@ -34,6 +34,21 @@ describe("workspaceDepsCache", () => {
     assert.ok(skipAt > 0 && skipAt < rmAt);
   });
 
+  it("skips restore on lockhash mismatch before linking", () => {
+    const src = readFileSync(
+      fileURLToPath(new URL("./workspaceDepsCache.ts", import.meta.url)),
+      "utf8"
+    );
+    const mismatchAt = src.indexOf("hash-mismatch");
+    const hashOkAt = src.indexOf("HASH_OK");
+    const alreadyAt = src.indexOf("already-linked");
+    const restoredAt = src.indexOf("restored-link");
+    assert.ok(hashOkAt > 0 && mismatchAt > 0);
+    assert.ok(mismatchAt < alreadyAt);
+    assert.ok(mismatchAt < restoredAt);
+    assert.match(src, /HASH_OK" != "1"/);
+  });
+
   it("skips docker volume ops in host mode", () => {
     const src = readFileSync(
       fileURLToPath(new URL("./workspaceDepsCache.ts", import.meta.url)),

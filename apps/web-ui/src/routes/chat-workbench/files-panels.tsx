@@ -108,8 +108,11 @@ async function loadViewerContent(options: {
     toolName: "read_file",
     args: { path: tab.path }
   });
-  const nl = res.output.indexOf("\n");
-  const content = nl >= 0 ? res.output.slice(nl + 1) : res.output;
+  const metaContent =
+    typeof res.metadata?.content === "string"
+      ? res.metadata.content
+      : undefined;
+  const content = metaContent ?? res.output;
   return {
     title: tab.path,
     kind: "file",

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FileTab, WorkbenchChrome, WorkbenchTurnStatus } from "./types.js";
-import { initialSplitPct, nextSplitPct } from "./workbench-split.js";
+import {
+  initialSplitPct,
+  nextSplitPct,
+  storedSplitPct
+} from "./workbench-split.js";
 import {
   PREVIEW_TAB_ID,
   closeDocTab,
@@ -60,7 +64,12 @@ export function useWorkbenchSplit(options: { previewLive: boolean }) {
   if (splitKey !== nextKey) {
     setSplitKey(nextKey);
     setLeftPct((current) =>
-      nextSplitPct({ current, hasPreview: previewLive, userOverride })
+      nextSplitPct({
+        current,
+        hasPreview: previewLive,
+        userOverride,
+        hasStoredSplit: storedSplitPct() != null
+      })
     );
   }
   return {

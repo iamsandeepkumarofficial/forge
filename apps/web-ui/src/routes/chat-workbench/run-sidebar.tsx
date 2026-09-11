@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Play, Square } from "lucide-react";
 import {
   scaffoldApps,
   runApp,
@@ -82,19 +83,25 @@ function AppRow(options: {
         )}
         {a.running ? (
           <button
+            type="button"
             onClick={() => onStop(a.name)}
             disabled={busy === a.name}
-            className="rounded border px-2 py-0.5 text-[0.65rem]"
+            aria-label={`Stop ${a.name}`}
+            title={`Stop ${a.name}`}
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border text-red-600 hover:bg-muted hover:text-red-700 disabled:opacity-40 dark:text-red-500"
           >
-            Stop
+            <Square className="size-2.5 fill-current" />
           </button>
         ) : (
           <button
+            type="button"
             onClick={() => onRun(a.name)}
             disabled={busy === a.name}
-            className="rounded bg-primary px-2 py-0.5 text-[0.65rem] text-primary-foreground disabled:opacity-50"
+            aria-label={`Run ${a.name}`}
+            title={`Run ${a.name}`}
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-50"
           >
-            Run
+            <Play className="size-2.5 fill-current" />
           </button>
         )}
       </div>

@@ -15,7 +15,7 @@ describe("SessionHeader", () => {
       />
     );
     expect(screen.getByRole("heading", { name: "Add auth" })).toBeTruthy();
-    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.queryByText("Running")).toBeNull();
     expect(screen.queryByText(/preview.localhost/)).toBeNull();
     expect(screen.queryByText("Starting sandbox")).toBeNull();
     expect(screen.queryByText("← Chats")).toBeNull();
@@ -34,7 +34,7 @@ describe("SessionHeader", () => {
       />
     );
     expect(screen.getByRole("heading", { name: "Chat" })).toBeTruthy();
-    expect(screen.getByLabelText("Idle")).toBeTruthy();
+    expect(screen.queryByLabelText("Idle")).toBeNull();
     expect(screen.queryByText("Idle")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Chat" }).getAttribute("aria-pressed")
@@ -87,7 +87,7 @@ describe("SessionHeader", () => {
     expect(onBack).toHaveBeenCalled();
   });
 
-  it("shows sandbox starting and waiting", () => {
+  it("does not show sandbox or waiting chips in the header", () => {
     render(
       <SessionHeader
         onBack={vi.fn()}
@@ -98,7 +98,7 @@ describe("SessionHeader", () => {
         onLeftMode={vi.fn()}
       />
     );
-    expect(screen.getByText("Waiting on you")).toBeTruthy();
-    expect(screen.getByText("Starting sandbox")).toBeTruthy();
+    expect(screen.queryByText("Waiting on you")).toBeNull();
+    expect(screen.queryByText("Starting sandbox")).toBeNull();
   });
 });

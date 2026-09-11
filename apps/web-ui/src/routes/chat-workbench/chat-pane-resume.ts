@@ -28,6 +28,8 @@ export type ResumeTurnControllers = {
   setStreamingText: React.Dispatch<React.SetStateAction<string>>;
   setStreamingReasoning: React.Dispatch<React.SetStateAction<string>>;
   setLiveToolParts: React.Dispatch<React.SetStateAction<ToolPart[]>>;
+  flushLiveStep: () => void;
+  clearLiveTurn: () => void;
   setError: (e: Error | null) => void;
   setMessages: React.Dispatch<React.SetStateAction<UiChatMessage[]>>;
   onAppliedMode?: (mode: ComposerAgentMode) => void;
@@ -47,13 +49,10 @@ export function handleResumeStreamEvent(
     setStreamingReasoning: options.setStreamingReasoning,
     setLiveToolParts: options.setLiveToolParts,
     setError: options.setError,
-    onAppliedMode: options.onAppliedMode
+    onAppliedMode: options.onAppliedMode,
+    onLlmStart: options.flushLiveStep
   });
-  if (
-    options.eventType === "tool_result" ||
-    options.eventType === "llm_finish" ||
-    options.eventType === "done"
-  ) {
+  if (options.eventType === "tool_result" || options.eventType === "done") {
     void fetchSessionMessages(options.sessionId)
       .then((rows) => options.setMessages(mergeSessionMessagesForUi(rows)))
       .catch(() => undefined);
@@ -70,9 +69,7 @@ function beginLiveResume(options: {
   controllers.setActiveTurnId(turnId);
   controllers.setStatus("streaming");
   controllers.setError(null);
-  controllers.setStreamingText("");
-  controllers.setStreamingReasoning("");
-  controllers.setLiveToolParts([]);
+  controllers.clearLiveTurn();
 }
 
 function endLiveResume(
@@ -80,9 +77,7 @@ function endLiveResume(
   rows?: UiChatMessage[]
 ): void {
   if (rows) controllers.setMessages(rows);
-  controllers.setStreamingText("");
-  controllers.setStreamingReasoning("");
-  controllers.setLiveToolParts([]);
+  controllers.clearLiveTurn();
   controllers.setActiveTurnId(null);
   controllers.setStatus("ready");
 }

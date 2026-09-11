@@ -9,6 +9,51 @@ import { isHostSession } from "./sandboxRuntime/resolve.js";
 
 const INITIAL_TAIL = 500;
 const EXIT_POLL_MS = 2000;
+const RESTART_GRACE_MS = 3000;
+const JOB_START_WAIT_MS = 4000;
+
+export function nextLogFollowPoll(options: {
+  running: boolean;
+  seenRunning: boolean;
+  notRunningSince: number | null;
+  now: number;
+  graceMs?: number;
+  startedAt?: number;
+  startWaitMs?: number;
+}): {
+  finish: boolean;
+  seenRunning: boolean;
+  notRunningSince: number | null;
+} {
+  const graceMs = options.graceMs ?? RESTART_GRACE_MS;
+  if (options.running) {
+    return { finish: false, seenRunning: true, notRunningSince: null };
+  }
+  if (!options.seenRunning) {
+    if (
+      options.startWaitMs != null &&
+      options.startedAt != null &&
+      options.now - options.startedAt >= options.startWaitMs
+    ) {
+      return {
+        finish: true,
+        seenRunning: false,
+        notRunningSince: options.startedAt
+      };
+    }
+    return {
+      finish: false,
+      seenRunning: false,
+      notRunningSince: null
+    };
+  }
+  const since = options.notRunningSince ?? options.now;
+  return {
+    finish: options.now - since >= graceMs,
+    seenRunning: true,
+    notRunningSince: since
+  };
+}
 
 export type LogFollowHandle = {
   close: () => void;
@@ -76,6 +121,10 @@ export async function attachLogFollow(options: {
   let closed = false;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let followClose: (() => void) | undefined;
+  let seenRunning = false;
+  let notRunningSince: number | null = null;
+  const attachedAt = Date.now();
+  const startWaitMs = options.kind === "term" ? JOB_START_WAIT_MS : undefined;
 
   const finish = (notify = false) => {
     if (closed) return;
@@ -114,9 +163,18 @@ export async function attachLogFollow(options: {
       name: options.name,
       sessionId: options.sessionId
     }).then((running) => {
-      if (!running) {
-        finish(true);
-      }
+      if (closed) return;
+      const next = nextLogFollowPoll({
+        running,
+        seenRunning,
+        notRunningSince,
+        now: Date.now(),
+        startedAt: attachedAt,
+        startWaitMs
+      });
+      seenRunning = next.seenRunning;
+      notRunningSince = next.notRunningSince;
+      if (next.finish) finish(true);
     });
   }, EXIT_POLL_MS);
 

@@ -1,156 +1,45 @@
 import { type RefObject } from "react";
-import { AssistantMarkdown } from "../../components/assistant-markdown.js";
-import { ThinkingBlock } from "../../components/thinking-block.js";
-import { ToolCalls } from "../../components/tool-calls.js";
-import type { UiChatMessage } from "../../lib/chat-agent.js";
 import {
-  toolPartsOf as toolPartsFromUnknown,
-  type ToolPart
-} from "../../lib/tool-display.js";
-import { cn } from "../../lib/utils.js";
-import { chatTurnActivity, liveToolName } from "./chat-turn-activity.js";
-import { HealthIssuesBanner } from "./health-panel.js";
+  TranscriptBody,
+  type TranscriptBodyOptions
+} from "./chat-transcript.js";
+import { looksLikePlan } from "./chat-message-turns.js";
 
 const N_80 = 80;
 
-export const CHAT_STARTERS: { label: string; prompt: string }[] = [
-  {
-    label: "Explain this workspace",
-    prompt:
-      "Explain this workspace: what it is, how it is structured, and how to run it."
-  },
-  {
-    label: "Fix setup blockers",
-    prompt:
-      "Analyze this workspace and fix setup blockers so the app can run and preview."
-  },
-  {
-    label: "Add a feature",
-    prompt:
-      "Help me add a new feature. First ask what I want, then implement it."
-  }
-];
+export { CHAT_STARTERS } from "./chat-transcript.js";
+export { looksLikePlan };
 
-function extractMessageText(message: UiChatMessage): string {
-  return message.parts
-    .filter(
-      (
-        p
-      ): p is {
-        type: string;
-        text: string;
-      } => p.type === "text" && typeof p.text === "string"
-    )
-    .map((p) => p.text)
-    .join("");
-}
-
-function extractMessageReasoning(message: UiChatMessage): string {
-  return message.parts
-    .filter(
-      (
-        p
-      ): p is {
-        type: string;
-        text: string;
-      } => p.type === "reasoning" && typeof p.text === "string"
-    )
-    .map((p) => p.text)
-    .join("");
-}
-
-function toolPartsOf(message: UiChatMessage): ToolPart[] {
-  return toolPartsFromUnknown(message.parts);
-}
-
-export function looksLikePlan(text: string): boolean {
-  const numbered = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => /^\d+[.)]\s/.test(line));
-  return numbered.length >= 2;
-}
-
-function UserTurn(options: { text: string }) {
-  return (
-    <div className="ml-auto max-w-[92%]">
-      <p className="rounded-lg bg-muted px-3 py-2 text-sm whitespace-pre-wrap text-foreground">
-        {options.text}
-      </p>
-    </div>
-  );
-}
-
-function AssistantTurn(options: {
-  text: string;
-  reasoning?: string;
-  tools: ToolPart[];
-  streaming?: boolean;
-  onOpenFile?: (path: string) => void;
-}) {
-  const { text, reasoning, tools, streaming, onOpenFile } = options;
-  const plan = !streaming && looksLikePlan(text) && tools.length === 0;
-  return (
-    <div className="max-w-none space-y-2">
-      {reasoning ? (
-        <ThinkingBlock
-          text={reasoning}
-          defaultOpen={Boolean(streaming)}
-          streaming={Boolean(streaming && !text && tools.length === 0)}
-        />
-      ) : null}
-      {text ? (
-        <div
-          className={cn(
-            plan && "rounded-lg border border-border bg-muted/30 px-3 py-2"
-          )}
-        >
-          {plan ? (
-            <p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              Plan
-            </p>
-          ) : null}
-          <AssistantMarkdown
-            text={text}
-            streamingIndicator={Boolean(streaming)}
-          />
-        </div>
-      ) : streaming && !reasoning ? (
-        <AssistantMarkdown text="…" streamingIndicator />
-      ) : null}
-      <ToolCalls parts={tools} onOpenPath={onOpenFile} />
-    </div>
-  );
-}
-
-export function ChatMessageList(options: {
+export type ChatMessageListOptions = TranscriptBodyOptions & {
   scrollerRef: RefObject<HTMLDivElement | null>;
   stickToBottomRef: RefObject<boolean>;
   sessionKind: "ticket" | "workbench";
   projectId: string;
   chatId: string;
-  sessionId?: string;
-  messages: UiChatMessage[];
-  isStreaming: boolean;
-  streamingText: string;
-  streamingReasoning?: string;
-  liveToolParts: ToolPart[];
-  status: "ready" | "submitted" | "streaming" | "error";
-  waiting?: boolean;
-  error: Error | null;
-  clearError: () => void;
-  onPickStarter?: (prompt: string) => void;
-  onOpenFile?: (path: string) => void;
-  onOpenHelp?: () => void;
-}) {
+};
+
+function syncStickToBottom(
+  el: HTMLDivElement,
+  stickToBottomRef: RefObject<boolean>
+): void {
+  const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+  stickToBottomRef.current = distance < N_80;
+}
+
+export function ChatMessageList(options: ChatMessageListOptions) {
   const {
     scrollerRef,
     stickToBottomRef,
+    sessionKind: _sessionKind,
+    projectId: _projectId,
+    chatId: _chatId,
     messages,
     isStreaming,
     streamingText,
-    streamingReasoning = "",
+    streamingReasoning,
     liveToolParts,
+    committedSteps,
+    historyLoaded,
     status,
     waiting,
     error,
@@ -158,17 +47,15 @@ export function ChatMessageList(options: {
     onPickStarter,
     onOpenFile,
     sessionId,
-    onOpenHelp
+    onOpenHelp,
+    onBranchAssistant,
+    onRevertUserMessage
   } = options;
   return (
     <div
       ref={scrollerRef}
       className="flex-1 overflow-y-auto"
-      onScroll={(e) => {
-        const el = e.currentTarget;
-        const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-        stickToBottomRef.current = distance < N_80;
-      }}
+      onScroll={(e) => syncStickToBottom(e.currentTarget, stickToBottomRef)}
     >
       <div className="space-y-4 px-4 py-4">
         <TranscriptBody
@@ -177,6 +64,8 @@ export function ChatMessageList(options: {
           streamingText={streamingText}
           streamingReasoning={streamingReasoning}
           liveToolParts={liveToolParts}
+          committedSteps={committedSteps}
+          historyLoaded={historyLoaded}
           status={status}
           waiting={waiting}
           error={error}
@@ -185,128 +74,10 @@ export function ChatMessageList(options: {
           onOpenFile={onOpenFile}
           sessionId={sessionId}
           onOpenHelp={onOpenHelp}
+          onBranchAssistant={onBranchAssistant}
+          onRevertUserMessage={onRevertUserMessage}
         />
       </div>
-    </div>
-  );
-}
-
-function TranscriptBody(options: {
-  messages: UiChatMessage[];
-  isStreaming: boolean;
-  streamingText: string;
-  streamingReasoning: string;
-  liveToolParts: ToolPart[];
-  status: "ready" | "submitted" | "streaming" | "error";
-  waiting?: boolean;
-  error: Error | null;
-  clearError: () => void;
-  onPickStarter?: (prompt: string) => void;
-  onOpenFile?: (path: string) => void;
-  sessionId?: string;
-  onOpenHelp?: () => void;
-}) {
-  const showLive =
-    options.isStreaming ||
-    Boolean(options.streamingText) ||
-    Boolean(options.streamingReasoning) ||
-    options.liveToolParts.length > 0;
-  return (
-    <>
-      {options.messages.length === 0 && !options.isStreaming ? (
-        <EmptyChat
-          onPickStarter={options.onPickStarter}
-          sessionId={options.sessionId}
-          onOpenHelp={options.onOpenHelp}
-        />
-      ) : null}
-      {options.messages.map((m) =>
-        m.role === "user" ? (
-          <UserTurn key={m.id} text={extractMessageText(m)} />
-        ) : (
-          <AssistantTurn
-            key={m.id}
-            text={extractMessageText(m)}
-            reasoning={extractMessageReasoning(m)}
-            tools={toolPartsOf(m)}
-            onOpenFile={options.onOpenFile}
-          />
-        )
-      )}
-      {showLive ? (
-        <AssistantTurn
-          text={options.streamingText}
-          reasoning={options.streamingReasoning}
-          tools={options.liveToolParts}
-          streaming
-          onOpenFile={options.onOpenFile}
-        />
-      ) : null}
-      <TurnActivity
-        label={chatTurnActivity({
-          status: options.status,
-          waiting: options.waiting,
-          toolName: liveToolName(options.liveToolParts)
-        })}
-      />
-      {options.error ? (
-        <div className="flex items-center gap-2 text-xs text-destructive">
-          <span>{options.error.message}</span>
-          <button onClick={() => options.clearError()} className="underline">
-            dismiss
-          </button>
-        </div>
-      ) : null}
-    </>
-  );
-}
-
-function TurnActivity({ label }: { label: string | null }) {
-  if (!label) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-center gap-2 text-xs text-muted-foreground"
-    >
-      <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function EmptyChat(options: {
-  onPickStarter?: (prompt: string) => void;
-  sessionId?: string;
-  onOpenHelp?: () => void;
-}) {
-  const { onPickStarter, sessionId, onOpenHelp } = options;
-  return (
-    <div className="flex flex-col items-center gap-4 px-2 pt-8 text-center">
-      <div>
-        <p className="text-sm font-medium">What should we work on?</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          The agent edits this session’s sandbox. Preview appears when an app is
-          running.
-        </p>
-      </div>
-      {sessionId ? (
-        <HealthIssuesBanner sessionId={sessionId} onOpenHelp={onOpenHelp} />
-      ) : null}
-      {onPickStarter ? (
-        <div className="flex w-full max-w-sm flex-col gap-2">
-          {CHAT_STARTERS.map((starter) => (
-            <button
-              key={starter.label}
-              type="button"
-              onClick={() => onPickStarter(starter.prompt)}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-left text-sm hover:bg-muted"
-            >
-              {starter.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

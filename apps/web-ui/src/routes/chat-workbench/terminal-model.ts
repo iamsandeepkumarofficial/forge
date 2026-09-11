@@ -106,15 +106,24 @@ export function applyTrackedRunningState(
     if (!tab.running && !tab.stoppable) continue;
     appMap.set(name, { ...tab, running: false, stoppable: false });
   }
-  const jobs = tabs
-    .filter((tab) => tab.kind === "job")
-    .map((tab) => {
-      const name = jobNameFromTabId(tab.id);
-      const running = trackedJobs.has(name);
-      if (tab.running === running && tab.stoppable === running) return tab;
-      return { ...tab, running, stoppable: running };
-    });
-  return [...shells, ...appMap.values(), ...jobs];
+  const jobMap = new Map<string, TerminalTab>();
+  for (const tab of tabs) {
+    if (tab.kind !== "job") continue;
+    jobMap.set(jobNameFromTabId(tab.id), tab);
+  }
+  for (const name of trackedJobs) {
+    const existing = jobMap.get(name);
+    jobMap.set(
+      name,
+      existing
+        ? { ...existing, running: true, stoppable: true }
+        : pinnedJobTab(name, true)
+    );
+  }
+  for (const name of [...jobMap.keys()]) {
+    if (!trackedJobs.has(name)) jobMap.delete(name);
+  }
+  return [...shells, ...appMap.values(), ...jobMap.values()];
 }
 
 export function countRunningTabs(tabs: TerminalTab[]): number {

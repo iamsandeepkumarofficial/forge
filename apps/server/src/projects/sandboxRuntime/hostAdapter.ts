@@ -55,6 +55,7 @@ const DEFAULT_MAX_BUFFER = N_16 * N_1024 * N_1024;
 type HostSessionState = {
   root: string;
   mounts: WorkspaceMount[];
+  extraWritableRoots: string[];
 };
 
 const sessionStates = new Map<string, HostSessionState>();
@@ -105,9 +106,39 @@ function mountHostPaths(mounts: WorkspaceMount[]): string[] {
   return [...new Set(mounts.map((m) => m.hostPath))];
 }
 
+const WORKTREES_MARKER = `${path.sep}worktrees${path.sep}`;
+
+export async function gitdirWritableRoots(workDir: string): Promise<string[]> {
+  const pointer = path.join(workDir, ".git");
+  try {
+    const st = await fs.stat(pointer);
+    if (st.isDirectory()) return [pointer];
+    if (!st.isFile()) return [];
+    const contents = await fs.readFile(pointer, "utf8");
+    const match = contents.match(/^\s*gitdir:\s*(.+)\s*$/m);
+    if (!match?.[1]) return [];
+    const gitdir = path.resolve(match[1].trim());
+    const idx = gitdir.lastIndexOf(WORKTREES_MARKER);
+    const common = idx > 0 ? gitdir.slice(0, idx) : gitdir;
+    return [...new Set([gitdir, common])];
+  } catch {
+    return [];
+  }
+}
+
+async function extraWritableRootsForMounts(
+  mounts: WorkspaceMount[]
+): Promise<string[]> {
+  const roots = [...mountHostPaths(mounts)];
+  for (const mount of mounts) {
+    roots.push(...(await gitdirWritableRoots(mount.hostPath)));
+  }
+  return [...new Set(roots)];
+}
+
 export function extraWritableRootsForHostRoot(root: string): string[] {
   for (const state of sessionStates.values()) {
-    if (state.root === root) return mountHostPaths(state.mounts);
+    if (state.root === root) return state.extraWritableRoots;
   }
   return [];
 }
@@ -211,7 +242,7 @@ async function hostExec(input: {
     argv,
     sessionRoot: root,
     cwd,
-    extraWritableRoots: mountHostPaths(mounts)
+    extraWritableRoots: await extraWritableRootsForMounts(mounts)
   });
   return spawnHostProcess({
     wrappedArgv,
@@ -248,7 +279,11 @@ async function hostCreateSession(
         recursive: true
       });
     }
-    sessionStates.set(sessionId, { root, mounts });
+    sessionStates.set(sessionId, {
+      root,
+      mounts,
+      extraWritableRoots: await extraWritableRootsForMounts(mounts)
+    });
     return { sessionId, runtime: "host", ref: root };
   } catch (err) {
     throw new SandboxRuntimeError({

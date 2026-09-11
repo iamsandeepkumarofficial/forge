@@ -47,12 +47,22 @@ describe("run-panels", () => {
       expect(screen.getByLabelText("Preview URL")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Go" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Comment on an element" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Comment on an element" })
+      ).toBeTruthy();
       expect(screen.getByRole("button", { name: "DevTools" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Preview options" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Preview options" })
+      ).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Open in new tab" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Open in new tab" })
+      ).toBeNull();
       expect(screen.queryByRole("button", { name: "Copy URL" })).toBeNull();
+    });
+    await waitFor(() => {
+      const frame = document.querySelector("iframe");
+      expect(frame?.getAttribute("src")).toContain("/__forge/inspect?src=");
     });
   });
 
@@ -117,7 +127,9 @@ describe("run-panels", () => {
     });
     render(<AppPreviewPane sessionId="s1" />);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Preview options" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Preview options" })
+      ).toBeTruthy();
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview options" }));
     await waitFor(() => {
@@ -147,7 +159,9 @@ describe("run-panels", () => {
     render(<AppPreviewPane sessionId="s1" />);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
-      expect(screen.getByRole("combobox", { name: "Preview port" })).toBeTruthy();
+      expect(
+        screen.getByRole("combobox", { name: "Preview port" })
+      ).toBeTruthy();
     });
     expect(screen.getByRole("option", { name: "3000" })).toBeTruthy();
     expect(screen.queryByRole("option", { name: /bp-backend/i })).toBeNull();

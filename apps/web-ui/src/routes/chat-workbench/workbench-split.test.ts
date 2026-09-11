@@ -40,6 +40,25 @@ describe("workbench-split", () => {
     ).toBe(50);
   });
 
+  it("does not adapt when a split is already stored", () => {
+    expect(
+      nextSplitPct({
+        current: 41,
+        hasPreview: true,
+        userOverride: false,
+        hasStoredSplit: true
+      })
+    ).toBe(41);
+    expect(
+      nextSplitPct({
+        current: 50,
+        hasPreview: true,
+        userOverride: false,
+        hasStoredSplit: true
+      })
+    ).toBe(50);
+  });
+
   it("reads a stored split", () => {
     localStorage.setItem(SPLIT_KEY, "41");
     expect(initialSplitPct()).toBe(41);

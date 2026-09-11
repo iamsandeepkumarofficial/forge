@@ -9,9 +9,13 @@ const MIN_ROWS = 2;
 const FONT_SIZE = 12;
 const SCROLLBACK = 5000;
 
-export function createTerminal(): { term: Terminal; fit: FitAddon } {
+export function createTerminal(options?: { convertEol?: boolean }): {
+  term: Terminal;
+  fit: FitAddon;
+} {
   const term = new Terminal({
     cursorBlink: true,
+    convertEol: options?.convertEol === true,
     fontFamily:
       "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
     fontSize: FONT_SIZE,
@@ -87,7 +91,9 @@ export function useXtermHost(options: {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return undefined;
-    const { term, fit } = createTerminal();
+    const { term, fit } = createTerminal({
+      convertEol: disableStdin === true
+    });
     if (disableStdin) term.options.disableStdin = true;
     term.open(host);
     termRef.current = term;

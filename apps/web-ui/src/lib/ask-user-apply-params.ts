@@ -14,7 +14,7 @@ export async function applyAskUserFormToWorkspaceParams(options: {
     await upsertWorkspaceParameter(options.workspaceId, {
       key: field.id,
       value,
-      secret: field.secret === true
+      secret: field.secret === true || field.type === "secret"
     });
     saved.push(field.id);
   }

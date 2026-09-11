@@ -6,6 +6,7 @@ import * as path from "node:path";
 import {
   assertLocalFolderPath,
   assertSafeBranch,
+  cloneGithubIntoSubdirScript,
   cloneGithubWorkspaceScript,
   repoDirForProject
 } from "./materialize.js";
@@ -17,25 +18,57 @@ describe("sessionSandbox materialize helpers", () => {
     assert.doesNotThrow(() => assertSafeBranch("feature/ok"));
   });
 
-  it("repoDirForProject uses repo for local", () => {
+  it("repoDirForProject sanitizes the project display name", () => {
     assert.equal(
       repoDirForProject({
         source: "local",
+        name: "My App!",
+        dedupeKey: "x"
+      } as never),
+      "My-App"
+    );
+  });
+
+  it("repoDirForProject falls back to repo for local without a name", () => {
+    assert.equal(
+      repoDirForProject({
+        source: "local",
+        name: "",
         dedupeKey: "x"
       } as never),
       "repo"
     );
   });
 
-  it("repoDirForProject uses repo for local with path", () => {
+  it("repoDirForProject falls back to GitHub slug when name is empty", () => {
     assert.equal(
       repoDirForProject({
-        source: "local",
-        dedupeKey: "local:/tmp/x",
-        canonicalKey: "/tmp/x"
+        source: "github",
+        name: "  ",
+        dedupeKey: "acme/widgets"
       } as never),
-      "repo"
+      "widgets"
     );
+  });
+
+  it("repoDirForProject prefers display name over GitHub slug", () => {
+    assert.equal(
+      repoDirForProject({
+        source: "github",
+        name: "Widgets UI",
+        dedupeKey: "acme/widgets"
+      } as never),
+      "Widgets-UI"
+    );
+  });
+
+  it("cloneGithubIntoSubdirScript unpacks into /workspace/<repo>", () => {
+    const script = cloneGithubIntoSubdirScript("widgets");
+    assert.match(
+      script,
+      new RegExp(`cp -a /tmp/forge-src/\\. "${WORKSPACE_MOUNT}/widgets/"`)
+    );
+    assert.match(script, new RegExp(`cd "${WORKSPACE_MOUNT}/widgets"`));
   });
 
   it("cloneGithubWorkspaceScript unpacks into /workspace", () => {

@@ -91,11 +91,33 @@ export type ListSkillsInput = z.infer<typeof listSkillsInputSchema>;
 export const invokeSkillInputSchema = z.object({ skillId: z.string() });
 export type InvokeSkillInput = z.infer<typeof invokeSkillInputSchema>;
 
-export const upsertWorkspaceParameterInputSchema = z.object({
-  key: z.string(),
+export const upsertWorkspaceParameterItemSchema = z.object({
+  key: z.string().describe("ENV-style key, e.g. JWT_SECRET"),
   value: z.string(),
   secret: z.boolean().optional()
 });
+
+export const upsertWorkspaceParameterInputSchema = z
+  .object({
+    key: z.string().optional(),
+    value: z.string().optional(),
+    secret: z.boolean().optional(),
+    items: z.array(upsertWorkspaceParameterItemSchema).min(1).optional()
+  })
+  .superRefine((val, ctx) => {
+    const hasItems = Array.isArray(val.items) && val.items.length > 0;
+    const hasSingle =
+      typeof val.key === "string" &&
+      val.key.length > 0 &&
+      typeof val.value === "string";
+    if (hasItems === hasSingle) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Provide either key+value or a non-empty items array, not both."
+      });
+    }
+  });
 export type UpsertWorkspaceParameterInput = z.infer<
   typeof upsertWorkspaceParameterInputSchema
 >;
@@ -166,7 +188,9 @@ export const askUserFieldSchema = z.object({
   label: z.string(),
   secret: z.boolean().optional(),
   placeholder: z.string().optional(),
-  value: z.string().optional()
+  value: z.string().optional(),
+  group: z.string().optional(),
+  type: z.enum(["text", "secret", "boolean"]).optional()
 });
 export const askUserInputSchema = z.object({
   kind: z.enum(["mcq", "form"]),

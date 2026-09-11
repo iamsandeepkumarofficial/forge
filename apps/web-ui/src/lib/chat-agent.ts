@@ -178,6 +178,47 @@ export async function cancelChatTurn(
     throw new Error(body.error || `cancel failed: ${res.status}`);
   }
 }
+
+export async function deleteSessionMessagesFrom(
+  sessionId: string,
+  messageId: string
+): Promise<void> {
+  const res = await fetch(
+    `${runnerUrl()}/api/sessions/${encodeURIComponent(sessionId)}/messages/from/${encodeURIComponent(messageId)}`,
+    { method: "DELETE", headers: authHeaders() }
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(body.error || `delete messages failed: ${res.status}`);
+  }
+}
+
+export async function copySessionMessagesUntil(options: {
+  sourceSessionId: string;
+  targetSessionId: string;
+  untilMessageId: string;
+}): Promise<void> {
+  const res = await fetch(
+    `${runnerUrl()}/api/sessions/${encodeURIComponent(options.sourceSessionId)}/branch`,
+    {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        untilMessageId: options.untilMessageId,
+        targetSessionId: options.targetSessionId
+      })
+    }
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(body.error || `branch copy failed: ${res.status}`);
+  }
+}
+
 export type StreamHandlers = {
   onEvent: (event: {
     eventType: string;

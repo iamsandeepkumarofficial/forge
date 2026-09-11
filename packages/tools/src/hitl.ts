@@ -76,11 +76,17 @@ function executeAskUserForm(prompt: string, input: AskUserInput): ToolResult {
     .map((f) => ({
       id: f.id.trim(),
       label: f.label.trim(),
-      ...(f.secret === true ? { secret: true } : {}),
+      ...(f.secret === true || f.type === "secret" ? { secret: true } : {}),
       ...(typeof f.placeholder === "string" && f.placeholder.trim()
         ? { placeholder: f.placeholder.trim() }
         : {}),
-      ...(typeof f.value === "string" ? { value: f.value } : {})
+      ...(typeof f.value === "string" ? { value: f.value } : {}),
+      ...(typeof f.group === "string" && f.group.trim()
+        ? { group: f.group.trim() }
+        : {}),
+      ...(f.type === "text" || f.type === "secret" || f.type === "boolean"
+        ? { type: f.type }
+        : {})
     }));
   if (fields.length < 1) {
     return {

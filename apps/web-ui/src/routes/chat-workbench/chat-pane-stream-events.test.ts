@@ -6,21 +6,18 @@ vi.mock("./chat-pane-send.js", () => ({
 }));
 
 describe("applyTurnStreamEvent", () => {
-  it("resets live buffers on llm_start", () => {
-    const setStreamingText = vi.fn();
-    const setStreamingReasoning = vi.fn();
-    const setLiveToolParts = vi.fn();
+  it("flushes live activity on llm_start when onLlmStart is provided", () => {
+    const onLlmStart = vi.fn();
     applyTurnStreamEvent({
       eventType: "llm_start",
       payload: {},
-      setStreamingText,
-      setStreamingReasoning,
-      setLiveToolParts,
-      setError: vi.fn()
+      setStreamingText: vi.fn(),
+      setStreamingReasoning: vi.fn(),
+      setLiveToolParts: vi.fn(),
+      setError: vi.fn(),
+      onLlmStart
     });
-    expect(setStreamingText).toHaveBeenCalledWith("");
-    expect(setStreamingReasoning).toHaveBeenCalledWith("");
-    expect(setLiveToolParts).toHaveBeenCalledWith([]);
+    expect(onLlmStart).toHaveBeenCalled();
   });
 
   it("appends reasoning deltas", () => {

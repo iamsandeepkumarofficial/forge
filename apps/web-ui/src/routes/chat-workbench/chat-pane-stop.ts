@@ -15,6 +15,7 @@ export async function stopChatTurn(options: {
   setStreamingText: (v: string) => void;
   setStreamingReasoning: (v: string) => void;
   setLiveToolParts: (v: ToolPart[]) => void;
+  clearLiveTurn: () => void;
 }) {
   options.streamAbortRef.current?.abort();
   if (options.activeTurnId) {
@@ -35,4 +36,5 @@ export async function stopChatTurn(options: {
   options.setStreamingText("");
   options.setStreamingReasoning("");
   options.setLiveToolParts([]);
+  options.clearLiveTurn();
 }

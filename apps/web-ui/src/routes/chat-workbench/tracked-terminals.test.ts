@@ -191,6 +191,60 @@ describe("tracked-terminals", () => {
     expect(listTrackedBackgroundJobs("s1")).toEqual([]);
   });
 
+  it("does not restart finished jobs from historical background args", () => {
+    trackBackgroundJob("s1", "install");
+    subscribed.get("job:install")?.onExited?.();
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "run_terminal",
+          args: { background: true, jobName: "install" },
+          metadata: { jobName: "install", running: true },
+          output: "started"
+        }
+      ]
+    });
+    expect(listTrackedBackgroundJobs("s1")).toEqual([]);
+  });
+
+  it("re-tracks a job when live status says it is running", () => {
+    trackBackgroundJob("s1", "install");
+    subscribed.get("job:install")?.onExited?.();
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "run_terminal",
+          args: { background: true, jobName: "install" },
+          metadata: { jobName: "install", running: true },
+          output: "started"
+        }
+      ],
+      liveJobNames: new Set(["install"])
+    });
+    expect(listTrackedBackgroundJobs("s1")).toEqual(["install"]);
+  });
+
+  it("skips historical jobs that are not live", () => {
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "run_terminal",
+          args: { background: true, jobName: "install" },
+          metadata: { jobName: "install", running: true },
+          output: "started"
+        }
+      ],
+      liveJobNames: new Set()
+    });
+    expect(listTrackedBackgroundJobs("s1")).toEqual([]);
+  });
+
   it("re-tracks after explicit restart via trackBackgroundJob", () => {
     trackBackgroundJob("s1", "build");
     subscribed.get("job:build")?.onExited?.();
@@ -206,12 +260,41 @@ describe("tracked-terminals", () => {
     expect(listTrackedBackgroundJobs("s1")).toEqual(["build"]);
   });
 
-  it("untracks when the socket reports exited", () => {
+  it("untracks jobs when the socket reports exited, keeps app tabs", () => {
     trackBackgroundJob("s1", "build");
     trackApp("s1", "api");
     subscribed.get("job:build")?.onExited?.();
     subscribed.get("app:api")?.onExited?.();
     expect(listTrackedBackgroundJobs("s1")).toEqual([]);
-    expect(listTrackedApps("s1")).toEqual([]);
+    expect(listTrackedApps("s1")).toEqual(["api"]);
+  });
+
+  it("rebinds a preview alias tab to the canonical app name", () => {
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "preview_start",
+          args: { name: "bp-backend" },
+          state: "call"
+        }
+      ]
+    });
+    expect(listTrackedApps("s1")).toEqual(["bp-backend"]);
+    trackTerminalsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "preview_start",
+          args: { name: "bp-backend" },
+          metadata: { app: { name: "bp-backend/bp-backend" } },
+          state: "result",
+          output: "Started"
+        }
+      ]
+    });
+    expect(listTrackedApps("s1")).toEqual(["bp-backend/bp-backend"]);
   });
 });

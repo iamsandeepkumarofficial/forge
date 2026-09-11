@@ -54,6 +54,8 @@ function useSessionTransport(o: SessionOptions) {
     setStreamingText: s.setStreamingText,
     setStreamingReasoning: s.setStreamingReasoning,
     setLiveToolParts: s.setLiveToolParts,
+    flushLiveStep: s.flushLiveStep,
+    clearLiveTurn: s.clearLiveTurn,
     setError: s.setError,
     setMessages: history.setMessages,
     onAppliedMode: o.onAppliedMode
@@ -64,7 +66,10 @@ function useSessionTransport(o: SessionOptions) {
 export function useChatPaneSession(options: SessionOptions) {
   const o = options;
   const { s, history, scroll, resumeChecked } = useSessionTransport(o);
-  const sendText = (raw: string, sendOpts?: { mode?: ChatMode }) =>
+  const sendText = (
+    raw: string,
+    sendOpts?: { mode?: ChatMode; truncateFromMessageId?: string }
+  ) =>
     sendChatPaneText({
       raw,
       attachments: s.attachments,
@@ -80,12 +85,15 @@ export function useChatPaneSession(options: SessionOptions) {
       setStreamingText: s.setStreamingText,
       setStreamingReasoning: s.setStreamingReasoning,
       setLiveToolParts: s.setLiveToolParts,
+      flushLiveStep: s.flushLiveStep,
+      clearLiveTurn: s.clearLiveTurn,
       setStatus: s.setStatus,
       setMessages: history.setMessages,
       setActiveTurnId: s.setActiveTurnId,
       stickToBottomRef: scroll.stickToBottomRef,
       streamAbortRef: s.streamAbortRef,
-      onAppliedMode: o.onAppliedMode
+      onAppliedMode: o.onAppliedMode,
+      truncateFromMessageId: sendOpts?.truncateFromMessageId
     });
   useInitialPromptSend({
     initialPrompt: o.initialPrompt,
@@ -120,7 +128,8 @@ export function useChatPaneSession(options: SessionOptions) {
         setMessages: history.setMessages,
         setStreamingText: s.setStreamingText,
         setStreamingReasoning: s.setStreamingReasoning,
-        setLiveToolParts: s.setLiveToolParts
+        setLiveToolParts: s.setLiveToolParts,
+        clearLiveTurn: s.clearLiveTurn
       }) as Promise<void>
   };
 }

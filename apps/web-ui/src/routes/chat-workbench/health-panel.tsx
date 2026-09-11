@@ -4,7 +4,7 @@ import {
   type SessionHealthReport
 } from "../../lib/tool-runner.js";
 import { postAgentPrompt } from "./preview-comment-bus.js";
-import { buildHealthFixPrompt, healthHasGaps } from "./health-fix.js";
+import { buildHealthFixPrompt, healthHasGaps } from "./health-format.js";
 
 function healthDot(status: SessionHealthReport["overall"]): string {
   if (status === "ok") return "bg-green-500";

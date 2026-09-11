@@ -18,10 +18,12 @@ import {
   loadTerminalHeight,
   loadTerminalTabListWidth,
   loadDockMode,
+  loadDockExtras,
   persistTerminalOpen,
   persistTerminalHeight,
   persistTerminalTabListWidth,
-  persistDockMode
+  persistDockMode,
+  persistDockExtras
 } from "./storage";
 
 describe("chat-workbench storage", () => {
@@ -39,6 +41,12 @@ describe("chat-workbench storage", () => {
     expect(loadTerminalHeight()).toBeGreaterThan(0);
     expect(loadTerminalTabListWidth()).toBeGreaterThan(0);
     expect(loadDockMode()).toBe("terminal");
+    expect(loadDockExtras()).toEqual([]);
+  });
+
+  it("migrates a persisted DevTools dock mode into extras", () => {
+    persistDockMode("devtools");
+    expect(loadDockExtras()).toEqual(["devtools"]);
   });
 
   it("reads stored values from localStorage", () => {
@@ -60,6 +68,8 @@ describe("chat-workbench storage", () => {
     expect(localStorage.getItem(DOCK_MODE_KEY)).toBe("devtools");
     expect(loadTerminalOpen()).toBe(true);
     expect(loadDockMode()).toBe("devtools");
+    persistDockExtras(["devtools"]);
+    expect(loadDockExtras()).toEqual(["devtools"]);
     expect(Number(localStorage.getItem(TERMINAL_HEIGHT_KEY))).toBe(
       loadTerminalHeight()
     );

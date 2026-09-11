@@ -38,9 +38,30 @@ describe("hitl", () => {
     const form = executeAskUser({
       kind: "form",
       prompt: "Secrets",
-      fields: [{ id: "k", label: "Key", secret: true, value: "v" }]
+      fields: [
+        {
+          id: "k",
+          label: "Key",
+          secret: true,
+          value: "v",
+          group: "Secrets",
+          type: "secret"
+        },
+        {
+          id: "ok",
+          label: "Enable",
+          type: "boolean",
+          value: "true",
+          group: "Infrastructure"
+        }
+      ]
     });
     assert.equal(form.metadata?.kind, "form");
+    const fields = form.metadata?.fields as Array<Record<string, unknown>>;
+    assert.equal(fields[0]?.group, "Secrets");
+    assert.equal(fields[0]?.type, "secret");
+    assert.equal(fields[1]?.type, "boolean");
+    assert.equal(fields[1]?.group, "Infrastructure");
   });
 
   it("executeSwitchMode proposes outside auto and applies in auto", () => {

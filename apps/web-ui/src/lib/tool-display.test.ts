@@ -3,6 +3,8 @@ import {
   applyLiveToolEvent,
   mergeSessionMessagesForUi,
   synthesizeToolDiff,
+  toolActivityGlimpse,
+  toolActivityLabel,
   truncateDiffText
 } from "./tool-display";
 import type { UiChatMessage } from "./chat-agent";
@@ -126,6 +128,28 @@ describe("applyLiveToolEvent", () => {
     expect(withResult[0]!.output).toBe("Wrote a.ts");
   });
 
+  it("ignores a duplicate tool_call with the same id", () => {
+    const first = applyLiveToolEvent({
+      prev: [],
+      eventType: "tool_call",
+      payload: {
+        toolCallId: "c1",
+        toolName: "preview_start",
+        args: { name: "web" }
+      }
+    });
+    const dup = applyLiveToolEvent({
+      prev: first,
+      eventType: "tool_call",
+      payload: {
+        toolCallId: "c1",
+        toolName: "preview_start",
+        args: { name: "web" }
+      }
+    });
+    expect(dup).toHaveLength(1);
+  });
+
   it("preserves switch_mode metadata on tool_result", () => {
     const withCall = applyLiveToolEvent({
       prev: [],
@@ -156,5 +180,62 @@ describe("applyLiveToolEvent", () => {
       target: "ask",
       needsConfirmation: true
     });
+  });
+});
+
+describe("toolActivityLabel", () => {
+  it("uses verb labels for known tools", () => {
+    expect(toolActivityLabel("edit_file", { pending: true })).toBe("Editing");
+    expect(toolActivityLabel("edit_file")).toBe("Edited");
+    expect(toolActivityLabel("read_file")).toBe("Read");
+    expect(toolActivityLabel("run_terminal", { pending: true })).toBe(
+      "Running terminal"
+    );
+    expect(toolActivityLabel("preview_start")).toBe("Started preview");
+  });
+
+  it("uses verb labels for upsert tools", () => {
+    expect(
+      toolActivityLabel("upsert_workspace_parameter", { pending: true })
+    ).toBe("Upserting parameter");
+    expect(toolActivityLabel("upsert_launch_app")).toBe("Upserted launch app");
+  });
+
+  it("falls back to a gerund for unknown tools", () => {
+    expect(toolActivityLabel("sync_widget_cache", { pending: true })).toBe(
+      "Syncing widget cache"
+    );
+  });
+});
+
+describe("toolActivityGlimpse", () => {
+  it("shows preview app names from args or metadata", () => {
+    expect(
+      toolActivityGlimpse("preview_start", { args: { name: "web" } })
+    ).toBe("web");
+    expect(
+      toolActivityGlimpse("preview_start", {
+        args: {},
+        metadata: { app: { name: "api" } }
+      })
+    ).toBe("api");
+  });
+
+  it("shows upserted parameter keys and launch app names", () => {
+    expect(
+      toolActivityGlimpse("upsert_workspace_parameter", {
+        args: { key: "JWT_SECRET" }
+      })
+    ).toBe("JWT_SECRET");
+    expect(
+      toolActivityGlimpse("upsert_workspace_parameter", {
+        args: {
+          items: [{ key: "NODE_ENV" }, { key: "PORT" }, { key: "HOST" }]
+        }
+      })
+    ).toBe("NODE_ENV +2");
+    expect(
+      toolActivityGlimpse("upsert_launch_app", { args: { name: "web" } })
+    ).toBe("web");
   });
 });

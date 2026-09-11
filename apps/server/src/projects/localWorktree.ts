@@ -9,7 +9,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-const FORGE_GIT_IDENTITY = {
+export const FORGE_GIT_IDENTITY = {
   name: "Forge Agent",
   email: "forge@local"
 } as const;

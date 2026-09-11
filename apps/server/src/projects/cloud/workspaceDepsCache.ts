@@ -81,10 +81,16 @@ CACHED=""
 if [ -f "${cache}/.forge-lockhash" ]; then
   CACHED=$(cat "${cache}/.forge-lockhash")
 fi
-# Exact match is ideal; soft-restore when cache exists so new chats are not
-# left without node_modules after minor lockfile / package.json drift.
-if [ -n "$CACHED" ] && [ "$CACHED" != "$CUR" ]; then
+HASH_OK=0
+if [ -n "$CACHED" ] && [ "$CACHED" = "$CUR" ]; then
+  HASH_OK=1
+fi
+if [ "$HASH_OK" != "1" ]; then
+  # Missing cached hash while cache exists, or lockfile/package.json drift:
+  # skip restore. Do not ln/cp stale modules, and do not rm a live
+  # node_modules (revisit must not yank a running Next/node process).
   echo "hash-mismatch cached=$CACHED current=$CUR" >&2
+  exit 0
 fi
 # Revisit must not yank modules from a live Next/node process.
 if [ -L "${abs}/node_modules" ]; then
@@ -97,10 +103,8 @@ if [ -L "${abs}/node_modules" ]; then
   esac
 fi
 if [ -d "${abs}/node_modules" ] && [ ! -L "${abs}/node_modules" ]; then
-  if [ -n "$CACHED" ] && [ "$CACHED" = "$CUR" ]; then
-    echo already-present
-    exit 0
-  fi
+  echo already-present
+  exit 0
 fi
 rm -rf "${abs}/node_modules"
 if ln -sfn "${cache}/node_modules" "${abs}/node_modules" 2>/dev/null; then

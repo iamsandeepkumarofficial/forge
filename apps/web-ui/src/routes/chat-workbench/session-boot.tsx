@@ -1,6 +1,34 @@
 import { Loader2 } from "lucide-react";
 import type { SandboxStatus } from "./types.js";
 
+export async function bootExistingOrStartSession(options: {
+  sessionId: string;
+  getStatus: (sessionId: string) => Promise<{ status?: string }>;
+  start: (sessionId: string) => Promise<unknown>;
+  setStatus: (status: SandboxStatus) => void;
+}): Promise<void> {
+  const { sessionId, getStatus, start, setStatus } = options;
+  let alreadyReady = false;
+  try {
+    const st = await getStatus(sessionId);
+    if (st.status === "ready") {
+      alreadyReady = true;
+      setStatus("ready");
+    } else {
+      setStatus("starting");
+    }
+  } catch {
+    setStatus("starting");
+  }
+  try {
+    await start(sessionId);
+    setStatus("ready");
+  } catch (err) {
+    console.error("Failed to start session sandbox:", err);
+    if (!alreadyReady) setStatus("error");
+  }
+}
+
 export function SessionBootScreen(options: {
   sandboxStatus: SandboxStatus;
   onRetry?: () => void;

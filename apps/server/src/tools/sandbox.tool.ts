@@ -6,6 +6,7 @@ import {
   readFileFromSandbox,
   writeFileToSandbox
 } from "../projects/sandboxExec.js";
+import { getSessionRepoInfo } from "../projects/sessionSandbox.js";
 import type { ToolResult } from "./types.js";
 import {
   parseTerminalAction,
@@ -24,6 +25,12 @@ export const SANDBOX_TOOL_NAMES = new Set([
   "search_codebase",
   "list_files",
   "list_dir"
+]);
+const READ_ONLY_FS_TOOLS = new Set([
+  "read_file",
+  "list_dir",
+  "list_files",
+  "search_codebase"
 ]);
 const MAX_READ_CHARS = 40000;
 const MAX_OUTPUT_CHARS = 20000;
@@ -98,9 +105,11 @@ async function handleReadFile(options: {
       return { success: false, output: `File not found: ${rel}` };
     }
     const totalLines = content.split(/\r?\n/).length;
+    const clipped = capChars(content, MAX_READ_CHARS);
     return {
       success: true,
-      output: `Read ${rel} (${totalLines} lines):\n${capChars(content, MAX_READ_CHARS)}`
+      output: `Read ${rel} (${totalLines} lines):\n${clipped}`,
+      metadata: { content: clipped, totalLines }
     };
   } catch (err) {
     return {
@@ -267,7 +276,15 @@ async function handleListDir(options: {
       .split("\n")
       .map((s) => s.trim())
       .filter(Boolean)
-      .filter((n) => n !== ".git/" && n !== "node_modules/")
+      .filter(
+        (n) =>
+          n !== ".git/" &&
+          n !== "node_modules/" &&
+          n !== ".next/" &&
+          n !== "dist/" &&
+          n !== "coverage/" &&
+          n !== ".forge-runtime/"
+      )
       .map((n) => {
         const isDir = n.endsWith("/");
         const name = isDir ? n.slice(0, -1) : n;
@@ -295,7 +312,9 @@ export async function executeSandboxTool(options: {
   args: Record<string, unknown>;
 }): Promise<ToolResult> {
   const { sessionId, toolName, args } = options;
-  const info = await resolveSandbox(sessionId);
+  const info = READ_ONLY_FS_TOOLS.has(toolName)
+    ? await getSessionRepoInfo(sessionId)
+    : await resolveSandbox(sessionId);
   const { containerName, sessionRoot, worktrees } = info;
   const { isHostSession } =
     await import("../projects/sandboxRuntime/resolve.js");

@@ -11,7 +11,11 @@ vi.mock("../lib/workspaces-api.js", () => ({
 }));
 
 vi.mock("../lib/projects-api.js", () => ({
-  startSession: (...args: unknown[]) => startSession(...args)
+  startSession: (...args: unknown[]) => startSession(...args),
+  getSessionStatus: vi.fn(async () => ({
+    sessionId: "sess-1",
+    status: "absent"
+  }))
 }));
 
 vi.mock("./chat-workbench/workbench-layout.js", () => ({

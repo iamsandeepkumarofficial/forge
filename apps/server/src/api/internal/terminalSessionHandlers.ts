@@ -8,6 +8,7 @@ import {
   attachJobLogFollow
 } from "../../projects/sessionAppLog.js";
 import type { LogFollowHandle } from "../../projects/sessionAppLog.js";
+import { resolveAppLogStreamName } from "../../projects/appLogStreamName.js";
 import {
   encodeDataFrame,
   parseClientControlMessage,
@@ -65,10 +66,14 @@ export async function openStream(options: {
   }
   if (parsed.kind === "app") {
     let follow: LogFollowHandle | null = null;
+    const appName = await resolveAppLogStreamName(
+      options.sessionId,
+      parsed.name
+    );
     follow = await attachAppLogFollow({
       containerName: options.containerName,
       sessionId: options.sessionId,
-      appName: parsed.name,
+      appName,
       onData: options.onData,
       onExited: options.onExited
     });

@@ -109,6 +109,24 @@ export async function ensureChatSandbox(sessionId: string): Promise<void> {
   });
 }
 
+export async function checkpointChatWorkspace(input: {
+  sessionId: string;
+  turnId: string;
+}): Promise<Record<string, string>> {
+  const res = await withHeartbeats({
+    work: api(
+      `/internal/chat/turns/${encodeURIComponent(input.turnId)}/checkpoint`,
+      {
+        method: "POST",
+        body: JSON.stringify({ sessionId: input.sessionId })
+      }
+    ),
+    detail: `checkpointChatWorkspace:${input.turnId}`
+  });
+  const body = (await res.json()) as { checkpoint?: Record<string, string> };
+  return body.checkpoint ?? {};
+}
+
 export async function getChatSystemPrompt(sessionId: string): Promise<string> {
   try {
     const res = await api(

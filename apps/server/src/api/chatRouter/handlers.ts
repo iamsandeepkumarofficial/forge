@@ -15,6 +15,11 @@ import {
   startInteractiveChatTurn
 } from "../../orchestration/chatTemporalClient.js";
 
+export {
+  handleBranchSessionMessages,
+  handleDeleteMessagesFrom
+} from "./sessionCopyHandlers.js";
+
 const N_202 = 202;
 const N_250 = 250;
 const N_400 = 400;
@@ -136,7 +141,6 @@ async function launchTurn(options: {
   }
   return { turnId, workflowId };
 }
-
 
 async function reconcileRunningTurn(
   turns: ChatTurnRepository,

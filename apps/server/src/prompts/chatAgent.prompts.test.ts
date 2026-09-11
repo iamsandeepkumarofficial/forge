@@ -32,6 +32,28 @@ describe("composeChatAgentSystemPrompt", () => {
     assert.doesNotMatch(prompt, /create_subtask/);
   });
 
+  it("uses nested member paths for a single-repo project chat", () => {
+    const prompt = composeChatAgentSystemPrompt({
+      sessionRoot: "/workspace",
+      repoDir: "My-App",
+      workingDir: "/workspace",
+      executionTarget: "local",
+      worktrees: { "My-App": "/workspace/My-App" },
+      inventoryBlock: [
+        "## Workspace repos",
+        "Per-member inventory for this workspace session:",
+        "- `My-App/` → `/workspace/My-App`",
+        "- File tools: paths must start with a member repo name"
+      ].join("\n")
+    });
+    assert.match(prompt, /## Workspace repos/);
+    assert.match(prompt, /`My-App\/` → `\/workspace\/My-App`/);
+    assert.doesNotMatch(
+      prompt,
+      /The repository is mounted here directly — there is no extra repo folder/
+    );
+  });
+
   it("lists workspace members only under Workspace repos when inventory provided", () => {
     const prompt = composeChatAgentSystemPrompt({
       sessionRoot: "/workspace",

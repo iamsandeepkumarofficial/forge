@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { fetchChat, startSession } from "../lib/projects-api.js";
+import {
+  fetchChat,
+  getSessionStatus,
+  startSession
+} from "../lib/projects-api.js";
 import { Workbench } from "./chat-workbench/workbench-layout.js";
 import { SessionHeader } from "./chat-workbench/session-header.js";
-import { SessionBootScreen } from "./chat-workbench/session-boot.js";
+import {
+  bootExistingOrStartSession,
+  SessionBootScreen
+} from "./chat-workbench/session-boot.js";
 import type {
   LeftPaneMode,
   SandboxStatus,
@@ -70,13 +77,12 @@ function useChatWorkbenchSession(options: {
   const sessionId: string | undefined = chat?.sessionId;
   const startSandbox = useCallback(() => {
     if (!sessionId) return;
-    setSandboxStatus("starting");
-    void startSession(sessionId)
-      .then(() => setSandboxStatus("ready"))
-      .catch((err) => {
-        console.error("Failed to start session sandbox:", err);
-        setSandboxStatus("error");
-      });
+    void bootExistingOrStartSession({
+      sessionId,
+      getStatus: getSessionStatus,
+      start: startSession,
+      setStatus: setSandboxStatus
+    });
   }, [sessionId]);
   useEffect(() => {
     if (!sessionId) return;

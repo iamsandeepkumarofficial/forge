@@ -44,6 +44,10 @@ export async function handleCreateSessionMessage(options: {
   req: Request;
   res: Response;
   messages: SessionMessageRepository;
+  checkpointWorkspace?: (input: {
+    sessionId: string;
+    turnId: string;
+  }) => Promise<Record<string, string>>;
 }): Promise<void> {
   const { req, res, messages } = options;
   const sessionId = String(req.params.sessionId ?? "");
@@ -61,6 +65,13 @@ export async function handleCreateSessionMessage(options: {
     return;
   }
   try {
+    if (role === "user" && turnId) {
+      const checkpointWorkspace =
+        options.checkpointWorkspace ??
+        (await import("../../projects/workspaceCheckpoint.js"))
+          .checkpointSessionWorkspace;
+      await checkpointWorkspace({ sessionId, turnId });
+    }
     const created = await messages.create({
       sessionId,
       role: role as "user" | "assistant" | "system" | "tool",
@@ -191,6 +202,42 @@ export async function handleFinishTurn(options: {
       );
     }
     res.json(turn);
+  } catch (err) {
+    res
+      .status(N_500)
+      .json({ error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+export async function handleCheckpointTurn(options: {
+  req: Request;
+  res: Response;
+  turns: ChatTurnRepository;
+  checkpointWorkspace?: (input: {
+    sessionId: string;
+    turnId: string;
+  }) => Promise<Record<string, string>>;
+}): Promise<void> {
+  const { req, res, turns } = options;
+  const turnId = String(req.params.turnId ?? "");
+  const sessionId =
+    typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
+  if (!turnId || !sessionId) {
+    res.status(N_400).json({ error: "turnId and sessionId required" });
+    return;
+  }
+  try {
+    const turn = await turns.getById(turnId);
+    if (!turn || turn.sessionId !== sessionId) {
+      res.status(N_404).json({ error: "turn not found" });
+      return;
+    }
+    const checkpointWorkspace =
+      options.checkpointWorkspace ??
+      (await import("../../projects/workspaceCheckpoint.js"))
+        .checkpointSessionWorkspace;
+    const checkpoint = await checkpointWorkspace({ sessionId, turnId });
+    res.json({ checkpoint });
   } catch (err) {
     res
       .status(N_500)

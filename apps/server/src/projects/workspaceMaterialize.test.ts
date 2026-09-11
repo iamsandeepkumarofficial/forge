@@ -79,4 +79,26 @@ describe("workspaceMaterialize", () => {
     });
     assert.equal(second.memberDir, first.memberDir);
   });
+
+  it("inits a non-git canonical then clones", async () => {
+    const canonical = path.join(tmpRoot, "plain-canonical");
+    await fs.mkdir(canonical, { recursive: true });
+    await fs.writeFile(path.join(canonical, "app.js"), "ok\n");
+    const copied = await ensureWorkspaceMemberCopy({
+      workspaceId: "ws-plain",
+      repoName: "app",
+      canonicalKey: canonical,
+      sourceRef: null
+    });
+    const inside = await git(copied.memberDir, [
+      "rev-parse",
+      "--is-inside-work-tree"
+    ]);
+    assert.equal(inside, "true");
+    const src = await fs.readFile(
+      path.join(copied.memberDir, "app.js"),
+      "utf8"
+    );
+    assert.equal(src, "ok\n");
+  });
 });

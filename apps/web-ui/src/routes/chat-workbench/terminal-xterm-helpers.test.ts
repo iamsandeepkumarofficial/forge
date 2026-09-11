@@ -16,6 +16,9 @@ vi.mock("@xterm/xterm", () => {
     loadAddon = vi.fn();
     open = vi.fn();
     dispose = vi.fn();
+    constructor(opts: Record<string, unknown> = {}) {
+      this.options = { ...opts };
+    }
   }
   return { Terminal };
 });
@@ -55,6 +58,13 @@ describe("terminal-xterm-helpers", () => {
       cols: 40,
       rows: 12
     });
+  });
+
+  it("enables convertEol only for read-only follow panes", () => {
+    expect(createTerminal().term.options.convertEol).toBe(false);
+    expect(createTerminal({ convertEol: true }).term.options.convertEol).toBe(
+      true
+    );
   });
 
   it("creates a terminal with addons and stops wheel bubbling", () => {

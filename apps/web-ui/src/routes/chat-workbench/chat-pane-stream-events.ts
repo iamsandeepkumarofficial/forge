@@ -27,6 +27,7 @@ export function applyTurnStreamEvent(options: {
   setLiveToolParts: React.Dispatch<React.SetStateAction<ToolPart[]>>;
   setError: (e: Error | null) => void;
   onAppliedMode?: (mode: ComposerAgentMode) => void;
+  onLlmStart?: () => void;
 }): void {
   const {
     eventType,
@@ -35,9 +36,14 @@ export function applyTurnStreamEvent(options: {
     setStreamingReasoning,
     setLiveToolParts,
     setError,
-    onAppliedMode
+    onAppliedMode,
+    onLlmStart
   } = options;
   if (eventType === "llm_start") {
+    if (onLlmStart) {
+      onLlmStart();
+      return;
+    }
     setStreamingText("");
     setStreamingReasoning("");
     setLiveToolParts([]);

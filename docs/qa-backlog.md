@@ -14,6 +14,8 @@
 
 ## Workspace header idle/status chrome (2026-08-31)
 
+**Status:** resolved — header chips removed; title is centered; “Waiting on you” is a slim banner above the composer.
+
 **Observed:** Idle dot, turn status chips (Thinking / Running / Waiting on you), and sandbox chips (Starting sandbox / Sandbox error) on the workspace header bar look ugly and clutter the top chrome.
 
 **Verdict:** Remove from header.
@@ -29,6 +31,8 @@
 ---
 
 ## Browser preview stacks above modals (2026-08-31)
+
+**Status:** resolved — Electron preview hides while global modals are open.
 
 **Observed:** Once the web-app preview (browser surface) is open, it renders on top of everything — including the **Leave session** confirmation dialog, which appears underneath and is unusable.
 
@@ -70,6 +74,8 @@
 
 ## Unavailable / wrong DB blocks setup with no alternate path (2026-08-31)
 
+**Status:** partial — `ask_user` catalog now tells the agent to MCQ re-provision / paste an alternate URI / skip instead of looping `preview_start`. Full health-engine / `workspace_databases` plumbing is still deferred.
+
 **Observed:** Workspace setup assumes a provisioned DB engine (e.g. Mongo from `setup_project_infra` or workspace parameters). If the configured database is **stopped, wrong, or never provisioned**, the user/agent can be **blocked** with no clear way to connect to a **different** DB instance (local Docker, external URI, alternate engine) without manual env hacking.
 
 **Examples:**
@@ -90,6 +96,8 @@
 ---
 
 ## Fix/Analyze creates duplicate “Workspace setup” chats (2026-08-31)
+
+**Status:** resolved — `ensureSetupChat` coalesces concurrent creates with an in-flight mutex.
 
 **Observed:** Clicking **Fix** or **Analyze** on workspace settings (health CTA or databases tab) creates **two** “Workspace setup” chat rows in the workspace chat list. Session ids are nearly identical (e.g. `workbench-1788173015055` and `workbench-1788173015053`), both titled “Workspace setup”, both “Created today”.
 
@@ -117,6 +125,8 @@
 ---
 
 ## Revisit running chat: boot loader → empty chat → history pop-in (2026-08-31)
+
+**Status:** resolved — GET sandbox status skips the full boot screen when already ready; EmptyChat waits for `historyLoaded`.
 
 **Observed:** Opening an **existing, already-running** workspace chat later (from chat list) shows a jarring three-step sequence:
 
@@ -156,6 +166,8 @@ Feels like a brand-new session even though the sandbox was already up and the ch
 
 ## Temporal turn running with no clear progress (streaming suspect) (2026-08-31)
 
+**Status:** resolved — resume attaches the live stream; committed turn steps keep thinking/tools visible across `llm_start`; composer Stop/Thinking remains the turn affordance after header chips were removed.
+
 **Observed:** A Temporal chat turn is running while the user is in the chat workbench, but there is **no clear indicator of what is happening**. Composer shows only a tiny spinner next to the model picker; send control still looks idle/ready. No visible thinking/running copy, no live assistant token stream, no tool-progress surface the user can follow.
 
 **After reload:** Message history / progress that had already happened appears — so the run was advancing server-side, but the live UI was not reflecting it.
@@ -192,6 +204,8 @@ Feels like a brand-new session even though the sandbox was already up and the ch
 ---
 
 ## Node deps cache: do not reuse when lockfile signature mismatches (2026-09-01)
+
+**Status:** resolved — restore skips (no `already-*` / `restored-*`) when hashes differ or the cached hash is missing; live `node_modules` is left in place so a running process is not yanked.
 
 **Observed / required:** For Node-based repos, if the **lockfile + package.json signature** does not match the cached hash, Forge must **not** reuse the workspace `node_modules` cache. Soft-restore of a mismatched cache can leave chats with wrong dependency versions and subtle install/runtime failures.
 

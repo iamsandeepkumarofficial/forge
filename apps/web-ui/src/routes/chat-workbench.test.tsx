@@ -5,7 +5,8 @@ import { ChatWorkbench } from "./chat-workbench";
 
 vi.mock("../lib/projects-api.js", () => ({
   fetchChat: vi.fn(),
-  startSession: vi.fn(async () => ({ sessionId: "s1" }))
+  startSession: vi.fn(async () => ({ sessionId: "s1" })),
+  getSessionStatus: vi.fn(async () => ({ sessionId: "s1", status: "absent" }))
 }));
 vi.mock("../lib/tool-runner.js", () => ({
   fetchApps: vi.fn(),

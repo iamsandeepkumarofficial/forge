@@ -25,4 +25,31 @@ describe("RunSidebar", () => {
     expect(screen.getByText(/No \.forge\/launch\.json/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Auto-create" })).toBeTruthy();
   });
+
+  it("shows icon run and stop controls for each app", async () => {
+    vi.mocked(fetchApps).mockResolvedValue({
+      exists: true,
+      apps: [
+        {
+          name: "web",
+          cwd: ".",
+          command: "pnpm dev",
+          type: "web",
+          running: false
+        },
+        {
+          name: "api",
+          cwd: ".",
+          command: "pnpm start",
+          type: "api",
+          running: true
+        }
+      ]
+    });
+    render(<RunSidebar sessionId="s1" onShowPreview={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Run web" })).toBeTruthy();
+    });
+    expect(screen.getByRole("button", { name: "Stop api" })).toBeTruthy();
+  });
 });

@@ -6,6 +6,7 @@ import {
   ensureWorkspacesRoot,
   workspaceMemberDir
 } from "../services/project/projectsRoot.js";
+import { ensureCanonicalGitRepo } from "./localWorktree.js";
 
 const execFileAsync = promisify(execFile);
 const N_10 = 10;
@@ -86,9 +87,7 @@ export async function ensureWorkspaceMemberCopy(options: {
     );
   }
   if (!(await isGitRepo(canonicalKey))) {
-    throw new Error(
-      `Canonical path is not a git repo for workspace member "${repoName}": ${canonicalKey}`
-    );
+    await ensureCanonicalGitRepo(canonicalKey);
   }
 
   const defaultBranch = await resolveDefaultBranch(canonicalKey);

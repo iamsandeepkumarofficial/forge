@@ -48,6 +48,52 @@ describe("sessionAppLog", { concurrency: false }, () => {
       await import("./sessionAppLog.js"));
   });
 
+  it("does not finish until the job has been seen running, then after grace", async () => {
+    const { nextLogFollowPoll } = await import("./sessionAppLog.js");
+    const idle = nextLogFollowPoll({
+      running: false,
+      seenRunning: false,
+      notRunningSince: null,
+      now: 1000
+    });
+    assert.equal(idle.finish, false);
+    assert.equal(idle.seenRunning, false);
+    const live = nextLogFollowPoll({
+      running: true,
+      seenRunning: false,
+      notRunningSince: null,
+      now: 2000
+    });
+    assert.equal(live.finish, false);
+    assert.equal(live.seenRunning, true);
+    const restarting = nextLogFollowPoll({
+      running: false,
+      seenRunning: true,
+      notRunningSince: null,
+      now: 3000,
+      graceMs: 3000
+    });
+    assert.equal(restarting.finish, false);
+    assert.equal(restarting.notRunningSince, 3000);
+    const done = nextLogFollowPoll({
+      running: false,
+      seenRunning: true,
+      notRunningSince: 3000,
+      now: 6000,
+      graceMs: 3000
+    });
+    assert.equal(done.finish, true);
+    const neverStarted = nextLogFollowPoll({
+      running: false,
+      seenRunning: false,
+      notRunningSince: null,
+      now: 5000,
+      startedAt: 1000,
+      startWaitMs: 4000
+    });
+    assert.equal(neverStarted.finish, true);
+  });
+
   it("uses a single tail -F attach for app logs", async () => {
     chunks.length = 0;
     followClosed = false;

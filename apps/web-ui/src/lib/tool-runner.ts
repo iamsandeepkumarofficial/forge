@@ -175,6 +175,9 @@ export async function listSandboxDir(options: {
     args: { path },
     signal
   });
+  if (!res.success) {
+    throw new Error(res.output || "Failed to list directory");
+  }
   const entries = res.metadata?.entries;
   if (!Array.isArray(entries)) {
     return [];

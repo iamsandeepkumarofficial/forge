@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listTerminalTabs,
   type TerminalTab
@@ -19,6 +19,10 @@ export function useTerminalTabRefresh(sessionId: string) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const sessionRef = useRef(sessionId);
+  useEffect(() => {
+    sessionRef.current = sessionId;
+  }, [sessionId]);
 
   const syncTracked = useCallback(() => {
     setTabs((prev) =>
@@ -30,14 +34,16 @@ export function useTerminalTabRefresh(sessionId: string) {
   }, [sessionId]);
 
   const refreshTabsStable = useCallback(async () => {
-    const apiTabs = await listTerminalTabs(sessionId);
+    const sid = sessionId;
+    const apiTabs = await listTerminalTabs(sid);
+    if (sessionRef.current !== sid) return apiTabs;
     for (const tab of apiTabs) {
       if (tab.kind === "app" && tab.running) {
-        trackApp(sessionId, appNameFromTabId(tab.id));
+        trackApp(sid, appNameFromTabId(tab.id));
       }
     }
     const jobRunning = Object.fromEntries(
-      listTrackedBackgroundJobs(sessionId).map((name) => [name, true])
+      listTrackedBackgroundJobs(sid).map((name) => [name, true])
     );
     setTabs((prev) => {
       const merged = mergeApiTabsWithPinnedJobs({
@@ -46,8 +52,8 @@ export function useTerminalTabRefresh(sessionId: string) {
         jobRunning
       });
       return applyTrackedRunningState(merged, {
-        trackedApps: listTrackedApps(sessionId),
-        trackedJobs: listTrackedBackgroundJobs(sessionId)
+        trackedApps: listTrackedApps(sid),
+        trackedJobs: listTrackedBackgroundJobs(sid)
       });
     });
     return apiTabs;
@@ -60,21 +66,23 @@ export function useTerminalTabRefresh(sessionId: string) {
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      await Promise.resolve();
+    queueMicrotask(() => {
       if (cancelled) return;
+      setTabs([]);
       setLoading(true);
-      try {
-        await refreshTabsStable();
-        if (!cancelled) setError(null);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+      void refreshTabsStable()
+        .then(() => {
+          if (!cancelled) setError(null);
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : String(err));
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    });
     return () => {
       cancelled = true;
     };

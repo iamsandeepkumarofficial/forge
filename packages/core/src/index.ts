@@ -1,7 +1,8 @@
 export { parseGithubSlug } from "./utilities/github/slug.js";
 export {
   assertSafeRepoDirectoryName,
-  deriveRepoDirectoryName
+  deriveRepoDirectoryName,
+  sanitizeRepoDirectoryName
 } from "./utilities/git/names.js";
 export {
   parsePorcelain,

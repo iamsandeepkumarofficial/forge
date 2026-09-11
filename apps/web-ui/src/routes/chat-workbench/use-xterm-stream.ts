@@ -81,11 +81,15 @@ export function useLogFollowStream(options: {
   const [hasOutput, setHasOutput] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hadReadyRef = useRef(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const retryCountRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     if (!visible) {
       hadReadyRef.current = false;
+      retryCountRef.current = 0;
       void Promise.resolve().then(() => {
         if (!cancelled) setConnected(false);
       });
@@ -106,6 +110,7 @@ export function useLogFollowStream(options: {
           setHasOutput(false);
         }
         hadReadyRef.current = true;
+        retryCountRef.current = 0;
         setConnected(true);
         setError(null);
         if (active) fitTerminal({ fit, term, client: null, stream });
@@ -114,20 +119,30 @@ export function useLogFollowStream(options: {
         setConnected(true);
         setHasOutput(true);
         setError(null);
+        retryCountRef.current = 0;
         term.write(chunk);
       },
       onError: (message) => {
         setConnected(false);
         setError(message || "Log stream failed");
       },
-      onExited: () => setConnected(false)
+      onExited: () => {
+        setConnected(false);
+        if (cancelled || retryCountRef.current >= 3) return;
+        retryCountRef.current += 1;
+        const RETRY_MS = 1500;
+        retryTimer = setTimeout(() => {
+          if (!cancelled) setRetryTick((n) => n + 1);
+        }, RETRY_MS);
+      }
     });
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
       unsubscribe();
       setConnected(false);
     };
-  }, [client, stream, visible, active, termRef, fitRef]);
+  }, [client, stream, visible, active, termRef, fitRef, retryTick]);
 
   return { connected, hasOutput, error };
 }

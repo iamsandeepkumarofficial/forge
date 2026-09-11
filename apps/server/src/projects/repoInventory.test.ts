@@ -85,6 +85,23 @@ describe("repoInventory", () => {
     assert.match(block, /Do not install database servers/);
   });
 
+  it("treats a single nested member as workspace layout", () => {
+    const inv = buildRepoInventoryFromFacts({
+      members: [
+        {
+          repo: "solo",
+          mountPath: "/workspace/solo",
+          facts: facts({ packageJsonPaths: ["package.json"] })
+        }
+      ]
+    });
+    assert.equal(inv.isWorkspace, true);
+    const block = formatRepoInventoryBlock(inv);
+    assert.match(block, /`solo\/` → `\/workspace\/solo`/);
+    assert.match(block, /session-root/);
+    assert.doesNotMatch(block, /`solo\/` → `\/workspace`$/m);
+  });
+
   it("formatRepoInventoryBlock notes missing launch for single repos", () => {
     const inv = buildRepoInventoryFromFacts({
       members: [

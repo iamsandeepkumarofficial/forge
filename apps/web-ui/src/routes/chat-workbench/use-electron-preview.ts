@@ -4,15 +4,7 @@ import type {
   PreviewNavInfo,
   PreviewPickResult
 } from "../../lib/desktop-preview.js";
-
-const BLANK = "about:blank";
-
-async function blankPreview(
-  api: NonNullable<ReturnType<typeof electronPreview>>
-): Promise<void> {
-  await api.setVisible(false);
-  await api.loadURL(BLANK);
-}
+import { loadElectronPreviewPage } from "./electron-preview-ops.js";
 
 export function useElectronPreviewPage(options: {
   url: string;
@@ -28,24 +20,27 @@ export function useElectronPreviewPage(options: {
   const api = electronPreview();
   const loadedUrl = useRef("");
   useEffect(() => {
-    if (!api) return;
+    if (!api) return undefined;
     if (!url) {
       loadedUrl.current = "";
-      void blankPreview(api);
-      return;
+      loadElectronPreviewPage({ api, url: "" });
+      return undefined;
     }
-    if (loadedUrl.current === url) {
-      void api.reload(cacheBust > 0);
-      return;
-    }
+    const shouldReload = loadedUrl.current === url;
     loadedUrl.current = url;
-    void api.loadURL(url);
+    loadElectronPreviewPage({
+      api,
+      url,
+      reload: shouldReload,
+      ignoreCache: cacheBust > 0
+    });
+    return undefined;
   }, [api, url, reloadNonce, cacheBust]);
   useEffect(() => {
     if (!api) return undefined;
     return () => {
       loadedUrl.current = "";
-      void blankPreview(api);
+      loadElectronPreviewPage({ api, url: "" });
     };
   }, [api]);
   useEffect(() => {

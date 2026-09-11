@@ -6,6 +6,7 @@ import {
   setupCtaModeFromFindings,
   initialPromptForSetupMode,
   shouldSeedSetupPrompt,
+  ensureSetupChat,
   WORKSPACE_SETUP_ANALYZE_PROMPT,
   WORKSPACE_SETUP_FIX_PROMPT
 } from "./workspace-setup-drawer";
@@ -46,9 +47,7 @@ describe("setupCtaModeFromFindings", () => {
   it("returns analyze when no warning/error findings", () => {
     expect(setupCtaModeFromFindings([])).toBe("analyze");
     expect(
-      setupCtaModeFromFindings([
-        { code: "x", severity: "info", message: "ok" }
-      ])
+      setupCtaModeFromFindings([{ code: "x", severity: "info", message: "ok" }])
     ).toBe("analyze");
   });
 
@@ -184,7 +183,10 @@ describe("WorkspaceSetupDrawer", () => {
         "numbered task list"
       );
     });
-    expect(createWorkspaceChat).toHaveBeenCalledWith("w1", "Workspace setup");
+    expect(createWorkspaceChat).toHaveBeenCalledWith({
+      workspaceId: "w1",
+      title: "Workspace setup"
+    });
     expect(analyzeWorkspace).toHaveBeenCalledWith("w1");
     await waitFor(() => {
       expect(onHealthUpdated).toHaveBeenCalled();
@@ -324,5 +326,30 @@ describe("WorkspaceSetupDrawer", () => {
 
     await new Promise((r) => setTimeout(r, 50));
     expect(startSession.mock.calls.length).toBe(callsAfterReady);
+  });
+
+  it("coalesces concurrent ensureSetupChat calls into one create", async () => {
+    listWorkspaceChats.mockResolvedValue([]);
+    let releaseCreate: (() => void) | undefined;
+    createWorkspaceChat.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseCreate = () =>
+            resolve({
+              id: "c1",
+              sessionId: "s1",
+              title: "Workspace setup"
+            });
+        })
+    );
+    const first = ensureSetupChat("w-mutex");
+    const second = ensureSetupChat("w-mutex");
+    await waitFor(() => {
+      expect(createWorkspaceChat).toHaveBeenCalledTimes(1);
+    });
+    releaseCreate?.();
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toEqual(b);
+    expect(createWorkspaceChat).toHaveBeenCalledTimes(1);
   });
 });

@@ -11,7 +11,12 @@ describe("ThinkingBlock", () => {
   it("toggles collapsed reasoning", () => {
     render(<ThinkingBlock text="because reasons" defaultOpen={false} />);
     expect(screen.queryByText("because reasons")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /thought/i }));
+    fireEvent.click(screen.getByRole("button", { name: /thought briefly/i }));
+    expect(screen.getByText("because reasons")).toBeTruthy();
+  });
+
+  it("starts expanded when defaultOpen is set", () => {
+    render(<ThinkingBlock text="because reasons" defaultOpen />);
     expect(screen.getByText("because reasons")).toBeTruthy();
   });
 });

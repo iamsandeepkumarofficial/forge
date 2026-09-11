@@ -19,6 +19,10 @@ import { ChatPane } from "./chat-workbench/chat-pane.js";
 const SETUP_CHAT_TITLE = "Workspace setup";
 const HEALTH_POLL_ATTEMPTS = 60;
 const HEALTH_POLL_MS = 500;
+const setupChatInflight = new Map<
+  string,
+  Promise<{ chatId: string; sessionId: string }>
+>();
 
 export const WORKSPACE_SETUP_ANALYZE_PROMPT = [
   "Run a workspace setup turn.",
@@ -97,7 +101,22 @@ export function shouldSeedSetupPrompt(options: {
   return !alreadyForMode;
 }
 
-async function ensureSetupChat(workspaceId: string): Promise<{
+export async function ensureSetupChat(workspaceId: string): Promise<{
+  chatId: string;
+  sessionId: string;
+}> {
+  const existing = setupChatInflight.get(workspaceId);
+  if (existing) return existing;
+  const pending = openSetupChat(workspaceId).finally(() => {
+    if (setupChatInflight.get(workspaceId) === pending) {
+      setupChatInflight.delete(workspaceId);
+    }
+  });
+  setupChatInflight.set(workspaceId, pending);
+  return pending;
+}
+
+async function openSetupChat(workspaceId: string): Promise<{
   chatId: string;
   sessionId: string;
 }> {

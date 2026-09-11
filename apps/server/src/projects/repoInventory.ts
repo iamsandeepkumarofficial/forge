@@ -54,7 +54,9 @@ export function buildRepoInventoryFromFacts(options: {
     for (const s of m.facts.suggestedSkills) allSkills.add(s);
   }
   return {
-    isWorkspace: options.members.length > 1,
+    isWorkspace:
+      options.members.length > 1 ||
+      options.members.some((m) => m.mountPath !== "/workspace"),
     members: options.members,
     dependsOnGraph: options.dependsOnGraph ?? [],
     suggestedSkills: [...allSkills].sort()
@@ -108,11 +110,15 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
   }
   if (inventory.isWorkspace) {
     const first = inventory.members[0]?.repo ?? "repo";
+    const termCwd =
+      inventory.members.length === 1
+        ? `\`/workspace/${first}\` (the member git root)`
+        : `\`/workspace\`. Always pass \`workingDirectory\` as a member repo (e.g. \`${first}\`) or a subdirectory under it`;
     lines.push(
       "- Launch config: **only** `/workspace/.forge/launch.json` (session-root). Apps use `repo` + session-relative `cwd` (e.g. `bp-frontend`). Do not create per-member `.forge/launch.json`.",
       `- Session root \`/workspace\` is **not** a git repo; member folders are the git roots.`,
       `- File tools: paths are relative to \`/workspace\` and **must start with a member repo name** (example: \`${first}/package.json\`). Never use host paths.`,
-      `- \`run_terminal\` default cwd is \`/workspace\`. Always pass \`workingDirectory\` as a member repo (e.g. \`${first}\`) or a subdirectory under it.`
+      `- \`run_terminal\` default cwd is ${termCwd}.`
     );
   }
   if (inventory.dependsOnGraph.length > 0) {
@@ -139,8 +145,7 @@ export function loadRepoInventoryFromHost(options: {
   dependsOnGraph?: Array<{ repo: string; dependsOn: string[] }>;
 }): RepoInventory {
   const members = options.members.map(({ repo, hostPath, analyzable }) => {
-    const mountPath =
-      options.members.length > 1 ? `/workspace/${repo}` : "/workspace";
+    const mountPath = `/workspace/${repo}`;
     return {
       repo,
       mountPath,

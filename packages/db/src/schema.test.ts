@@ -15,7 +15,9 @@ import {
   workspaceHealth,
   workspaceParameters,
   workspaceProjects,
-  workspaces
+  workspaces,
+  chatTurns,
+  sessionMessages
 } from "./schema.js";
 
 describe("schema tables", () => {
@@ -78,5 +80,11 @@ describe("schema tables", () => {
     assert.ok(workspaceProjects.repoName);
     assert.ok(workspaceProjects.dependsOn);
     assert.ok(workspaceProjects.env);
+    assert.ok(chatTurns.rounds);
+    assert.ok(chatTurns.toolCallCount);
+    assert.ok(chatTurns.toolNames);
+    assert.ok(chatTurns.hitRoundCap);
+    assert.ok(chatTurns.workspaceCheckpoint);
+    assert.ok(sessionMessages.deletedAt);
   });
 });

@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ChatFeature, Project } from "@forge/db";
 import { WORKSPACE_MOUNT } from "./constants.js";
-import { assertLocalFolderPath } from "./materialize.js";
+import { assertLocalFolderPath, repoDirForProject } from "./materialize.js";
 import {
   canonicalGitContainerPath,
   ensureSessionWorktree
@@ -35,7 +35,9 @@ export async function provisionLocalProjectSandbox(options: {
   localPath: string;
 }): Promise<{ status: "ready"; workingDir: string; containerId: string }> {
   const { sessionId, chat, project, localPath } = options;
+  const repoDir = repoDirForProject(project);
   const workingDir = WORKSPACE_MOUNT;
+  const repoMount = `${WORKSPACE_MOUNT}/${repoDir}`;
   const hostPath = await assertLocalFolderPath(localPath);
   const wt = await ensureSessionWorktree({
     canonicalKey: hostPath,
@@ -51,7 +53,7 @@ export async function provisionLocalProjectSandbox(options: {
     await sandboxSessionCreateOpts({
       sessionId,
       bindMounts: [
-        { hostPath: wt.workDir, containerPath: WORKSPACE_MOUNT },
+        { hostPath: wt.workDir, containerPath: repoMount },
         {
           hostPath: wt.gitCanonicalHostPath,
           containerPath: canonicalGitContainerPath(project.id)
@@ -70,7 +72,7 @@ export async function provisionLocalProjectSandbox(options: {
   }
   await disableGitFileModeInContainer({
     containerName: handle.ref,
-    workingDir
+    workingDir: repoMount
   });
   return { status: "ready", workingDir, containerId: handle.ref };
 }

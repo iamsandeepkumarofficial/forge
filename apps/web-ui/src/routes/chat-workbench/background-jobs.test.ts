@@ -77,15 +77,18 @@ describe("background-jobs", () => {
         metadata: { app: { name: "api", running: true } }
       })
     ).toBe(true);
-    trackBackgroundJobsFromToolParts("s1", [
-      {
-        type: "tool-invocation",
-        toolName: "run_terminal",
-        args: { background: true, jobName: "install" },
-        metadata: { jobName: "install", running: true },
-        output: "ok"
-      }
-    ]);
+    trackBackgroundJobsFromToolParts({
+      sessionId: "s1",
+      parts: [
+        {
+          type: "tool-invocation",
+          toolName: "run_terminal",
+          args: { background: true, jobName: "install" },
+          metadata: { jobName: "install", running: true },
+          output: "ok"
+        }
+      ]
+    });
     expect(listTrackedBackgroundJobs("s1")).toEqual(["install"]);
   });
 });

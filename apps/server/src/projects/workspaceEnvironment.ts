@@ -136,11 +136,18 @@ export async function promoteLaunchToWorkspace(
 async function memberRepoNames(sessionId: string): Promise<string[]> {
   const chatRepo = new ChatFeatureRepository();
   const chat = await chatRepo.getBySessionId(sessionId);
-  if (!chat?.workspaceId) return [""];
-  const workspaceRepo = new WorkspaceRepository();
-  const members = await workspaceRepo.listMembers(chat.workspaceId);
-  if (members.length === 0) return [""];
-  return members.map((m) => m.repoName);
+  if (chat?.workspaceId) {
+    const workspaceRepo = new WorkspaceRepository();
+    const members = await workspaceRepo.listMembers(chat.workspaceId);
+    return members.map((m) => m.repoName);
+  }
+  const { getSessionRepoInfo } = await import("./sessionSandbox.js");
+  try {
+    const info = await getSessionRepoInfo(sessionId);
+    return info.repoDir ? [info.repoDir] : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function restoreWorkspaceDepsForSession(

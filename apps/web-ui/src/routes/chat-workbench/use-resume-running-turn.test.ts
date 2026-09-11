@@ -19,6 +19,8 @@ describe("useResumeRunningTurn", () => {
         setStreamingText: vi.fn(),
         setStreamingReasoning: vi.fn(),
         setLiveToolParts: vi.fn(),
+        flushLiveStep: vi.fn(),
+        clearLiveTurn: vi.fn(),
         setError: vi.fn(),
         setMessages: vi.fn()
       })
@@ -38,6 +40,8 @@ describe("useResumeRunningTurn", () => {
         setStreamingText: vi.fn(),
         setStreamingReasoning: vi.fn(),
         setLiveToolParts: vi.fn(),
+        flushLiveStep: vi.fn(),
+        clearLiveTurn: vi.fn(),
         setError: vi.fn(),
         setMessages: vi.fn()
       })

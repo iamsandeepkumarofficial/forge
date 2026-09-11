@@ -116,4 +116,36 @@ describe("useLogFollowStream", () => {
     expect(result.current.connected).toBe(true);
     expect(term.write).toHaveBeenCalledWith("log line\n");
   });
+
+  it("resubscribes after an early exit", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = mockClient();
+      const term = mockTerm();
+      const termRef = createRef<typeof term | null>();
+      const fitRef = createRef<{ fit: () => void } | null>();
+      (termRef as { current: unknown }).current = term;
+      (fitRef as { current: unknown }).current = { fit: vi.fn() };
+      renderHook(() =>
+        useLogFollowStream({
+          client: client as never,
+          stream: "app:web",
+          active: true,
+          visible: true,
+          termRef: termRef as never,
+          fitRef: fitRef as never
+        })
+      );
+      expect(client.subscribe).toHaveBeenCalledTimes(1);
+      act(() => {
+        client.emit.exited();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1600);
+      });
+      expect(client.subscribe.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

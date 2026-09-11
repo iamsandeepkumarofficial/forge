@@ -101,7 +101,7 @@ export async function listHostWorkspaceFiles(
       return;
     }
     for (const e of entries) {
-      if (e.name === ".git" || e.name === "node_modules") continue;
+      if (SKIP_DIR_NAMES.has(e.name)) continue;
       const childRel = rel ? `${rel}/${e.name}` : e.name;
       const abs = path.join(dir, e.name);
       if (e.isDirectory()) {
@@ -117,6 +117,29 @@ export async function listHostWorkspaceFiles(
 
 export type HostDirEntry = { name: string; path: string; isDir: boolean };
 
+const SKIP_DIR_NAMES = new Set([
+  ".git",
+  "node_modules",
+  ".next",
+  "dist",
+  "coverage",
+  ".forge-runtime"
+]);
+
+async function direntIsDir(
+  parent: string,
+  entry: { name: string; isDirectory(): boolean; isSymbolicLink(): boolean }
+): Promise<boolean> {
+  if (entry.isDirectory()) return true;
+  if (!entry.isSymbolicLink()) return false;
+  try {
+    const st = await fs.stat(path.join(parent, entry.name));
+    return st.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export async function listHostWorkspaceDir(options: {
   absPath: string;
   relPrefix: string;
@@ -129,17 +152,21 @@ export async function listHostWorkspaceDir(options: {
   } catch {
     return [];
   }
-  const mapped = entries
-    .filter((e) => e.name !== ".git" && e.name !== "node_modules")
-    .map((e) => {
-      const childPath = options.relPrefix
-        ? `${options.relPrefix}/${e.name}`
-        : e.name;
-      return { name: e.name, path: childPath, isDir: e.isDirectory() };
-    })
-    .sort((a, b) =>
-      a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1
-    );
+  const mapped: HostDirEntry[] = [];
+  for (const e of entries) {
+    if (SKIP_DIR_NAMES.has(e.name)) continue;
+    const childPath = options.relPrefix
+      ? `${options.relPrefix}/${e.name}`
+      : e.name;
+    mapped.push({
+      name: e.name,
+      path: childPath,
+      isDir: await direntIsDir(options.absPath, e)
+    });
+  }
+  mapped.sort((a, b) =>
+    a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1
+  );
   return mapped;
 }
 

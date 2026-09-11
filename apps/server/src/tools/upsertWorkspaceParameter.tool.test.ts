@@ -85,4 +85,38 @@ describe("executeUpsertWorkspaceParameter", () => {
     assert.equal(r.success, true);
     assert.equal(upserts[0]!.secret, false);
   });
+
+  it("upserts multiple items after validating all keys", async () => {
+    upserts.length = 0;
+    const r = await executeUpsertWorkspaceParameter({
+      sessionId: "s-ws",
+      args: {
+        items: [
+          { key: "CLIENT_URL", value: "http://x", secret: false },
+          { key: "JWT_SECRET", value: "tok" }
+        ]
+      }
+    });
+    assert.equal(r.success, true);
+    assert.deepEqual(r.metadata?.keys, ["CLIENT_URL", "JWT_SECRET"]);
+    assert.equal(upserts.length, 2);
+    assert.equal(upserts[0]!.key, "CLIENT_URL");
+    assert.equal(upserts[1]!.key, "JWT_SECRET");
+  });
+
+  it("rejects the whole batch when any key is invalid", async () => {
+    upserts.length = 0;
+    const r = await executeUpsertWorkspaceParameter({
+      sessionId: "s-ws",
+      args: {
+        items: [
+          { key: "CLIENT_URL", value: "http://x" },
+          { key: "bad-key", value: "x" }
+        ]
+      }
+    });
+    assert.equal(r.success, false);
+    assert.match(r.output, /ENV-style/);
+    assert.equal(upserts.length, 0);
+  });
 });

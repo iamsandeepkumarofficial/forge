@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { BindMount } from "../sandboxRuntime/types.js";
+import { ensureCanonicalGitRepo } from "../localWorktree.js";
 import { WORKSPACE_MOUNT } from "./constants.js";
 
 const execFileAsync = promisify(execFile);
@@ -27,6 +28,7 @@ export async function finalizeHostWorkspace(options: {
     );
   }
   for (const mount of options.bindMounts) {
+    await ensureCanonicalGitRepo(mount.hostPath);
     await disableGitFileModeOnHost(mount.hostPath);
   }
   return {

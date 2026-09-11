@@ -7,8 +7,9 @@ export type AskUserField = {
   label: string;
   secret?: boolean;
   placeholder?: string;
-
   value?: string;
+  group?: string;
+  type?: "text" | "secret" | "boolean";
 };
 
 export type AskUserProposal = {
@@ -43,7 +44,13 @@ function normalizeField(raw: unknown): AskUserField | null {
     ...(typeof f.placeholder === "string" && f.placeholder.trim()
       ? { placeholder: f.placeholder.trim() }
       : {}),
-    ...(typeof f.value === "string" ? { value: f.value } : {})
+    ...(typeof f.value === "string" ? { value: f.value } : {}),
+    ...(typeof f.group === "string" && f.group.trim()
+      ? { group: f.group.trim() }
+      : {}),
+    ...(f.type === "text" || f.type === "secret" || f.type === "boolean"
+      ? { type: f.type }
+      : {})
   };
 }
 
@@ -144,6 +151,10 @@ export function askUserMcqReply(option: AskUserOption): string {
   return `User answer (ask_user): chose "${option.id}" — ${option.label}`;
 }
 
+export function askUserSkipReply(): string {
+  return "User answer (ask_user): skipped";
+}
+
 export function askUserFormReply(options: {
   fields: AskUserField[];
   values: Record<string, string>;
@@ -170,6 +181,49 @@ export function askUserInitialValues(
   return init;
 }
 
+export function askUserDisplayPrompt(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("|") && /\n\s*\|?\s*-{3,}/.test(trimmed)) {
+    const first = trimmed.split(/\n\s*\n/)[0]?.trim() ?? trimmed;
+    const sentence = first.split(/(?<=[.!?])\s/)[0] ?? first;
+    return sentence.length > 0
+      ? `${sentence.replace(/\s+/g, " ").trim()} Details in the fields below.`
+      : "Details in the fields below.";
+  }
+  return trimmed;
+}
+
+export function groupAskUserFields(
+  fields: AskUserField[]
+): Array<{ group: string | null; fields: AskUserField[] }> {
+  const order: string[] = [];
+  const byGroup = new Map<string, AskUserField[]>();
+  const ungrouped: AskUserField[] = [];
+  for (const field of fields) {
+    const group = field.group?.trim();
+    if (!group) {
+      ungrouped.push(field);
+      continue;
+    }
+    if (!byGroup.has(group)) {
+      order.push(group);
+      byGroup.set(group, []);
+    }
+    byGroup.get(group)!.push(field);
+  }
+  const sections: Array<{ group: string | null; fields: AskUserField[] }> = [];
+  if (ungrouped.length > 0) sections.push({ group: null, fields: ungrouped });
+  for (const group of order) {
+    sections.push({ group, fields: byGroup.get(group) ?? [] });
+  }
+  return sections;
+}
+
 export function isWorkspaceParamFieldId(id: string): boolean {
   return /^[A-Z][A-Z0-9_]*$/.test(id);
+}
+
+export function askUserOtherReply(text: string): string {
+  return `User answer (ask_user): other — ${text.trim()}`;
 }

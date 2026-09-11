@@ -6,6 +6,8 @@ import {
   fetchSessionMessages,
   startChatTurn,
   cancelChatTurn,
+  deleteSessionMessagesFrom,
+  copySessionMessagesUntil,
   REASONING_CAPABLE_PROVIDERS
 } from "./chat-agent";
 
@@ -100,6 +102,34 @@ describe("chat-agent", () => {
     expect(fetch).toHaveBeenCalledWith(
       "http://127.0.0.1:4000/api/sessions/s1/turns/t1/cancel",
       expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("deleteSessionMessagesFrom DELETEs from a message", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: true } as Response);
+    await deleteSessionMessagesFrom("s1", "m2");
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:4000/api/sessions/s1/messages/from/m2",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("copySessionMessagesUntil POSTs a branch copy", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: true } as Response);
+    await copySessionMessagesUntil({
+      sourceSessionId: "s1",
+      targetSessionId: "s2",
+      untilMessageId: "m9"
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:4000/api/sessions/s1/branch",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          untilMessageId: "m9",
+          targetSessionId: "s2"
+        })
+      })
     );
   });
 });

@@ -19,12 +19,6 @@ export function normalizeLaunchCwd(options: {
   if (rel === ".") {
     return ".";
   }
-  const repo = String(options.repoDir || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
-  if (repo && rel === repo) {
-    return ".";
-  }
   return rel;
 }
 
@@ -56,23 +50,9 @@ export async function resolveLaunchAppDir(options: {
   ) {
     return { appDir: primary, relCwd: rel === "." ? "." : rel };
   }
-  const repo = String(options.repoDir || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
-  if (
-    repo &&
-    rel === repo &&
-    (await pathExistsInSandbox({
-      container: options.containerName,
-      absPath: options.workingDir,
-      sessionId: options.sessionId
-    }))
-  ) {
-    return { appDir: options.workingDir, relCwd: "." };
-  }
   return {
     appDir: primary,
     relCwd: rel,
-    error: `App cwd not found: ${primary} (launch cwd="${options.cwd}"). Use "." for the repo root.`
+    error: `App cwd not found: ${primary} (launch cwd="${options.cwd}"). Use "${options.repoDir || "."}" for the repo root.`
   };
 }

@@ -25,6 +25,7 @@ export type ChatTurnInput = {
 export {
   appendChatMessage,
   ensureChatSandbox,
+  checkpointChatWorkspace,
   finishChatTurn,
   getChatSystemPrompt,
   loadChatMessages

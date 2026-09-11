@@ -97,4 +97,23 @@ describe("hostWorkspaceFs", () => {
     assert.equal(hits.length, 1);
     assert.match(hits[0]!, /hello\.ts:2:/);
   });
+
+  it("treats directory symlinks as directories", async () => {
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "forge-hfs-link-"));
+    const real = path.join(tmp, "real-repo");
+    await fs.mkdir(real);
+    await fs.writeFile(path.join(real, "pkg.json"), "{}");
+    const view = path.join(tmp, "view");
+    await fs.mkdir(view);
+    await fs.symlink(real, path.join(view, "frontend"), "dir");
+    const entries = await listHostWorkspaceDir({
+      absPath: view,
+      relPrefix: "",
+      roots: [view, real]
+    });
+    assert.deepEqual(
+      entries.find((e) => e.name === "frontend"),
+      { name: "frontend", path: "frontend", isDir: true }
+    );
+  });
 });

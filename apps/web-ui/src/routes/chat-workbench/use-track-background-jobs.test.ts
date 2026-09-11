@@ -1,10 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useTrackBackgroundJobs } from "./use-track-background-jobs";
 import {
   listTrackedBackgroundJobs,
   resetTrackedTerminalsForTests
 } from "./tracked-terminals";
+
+const listTerminalJobs = vi.fn(async () => [{ name: "old", running: true }]);
+
+vi.mock("../../lib/session-terminal.js", () => ({
+  listTerminalJobs: (sessionId: string) => listTerminalJobs(sessionId)
+}));
 
 vi.mock("../../lib/terminal-session-client.js", () => ({
   streamIdForJobTab: (name: string) => `job:${name}`,
@@ -39,6 +45,11 @@ const historyMessages = [
 ];
 
 describe("useTrackBackgroundJobs", () => {
+  beforeEach(() => {
+    resetTrackedTerminalsForTests();
+    listTerminalJobs.mockReset();
+    listTerminalJobs.mockResolvedValue([{ name: "old", running: true }]);
+  });
   it("waits for historyLoaded before scanning messages", async () => {
     resetTrackedTerminalsForTests();
     const { rerender } = renderHook(
@@ -105,5 +116,21 @@ describe("useTrackBackgroundJobs", () => {
       ]
     });
     expect(listTrackedBackgroundJobs("s1")).toEqual(["old"]);
+  });
+
+  it("does not restore completed historical jobs", async () => {
+    listTerminalJobs.mockResolvedValue([]);
+    renderHook(() =>
+      useTrackBackgroundJobs({
+        sessionId: "s1",
+        messages: historyMessages,
+        historyLoaded: true,
+        liveToolParts: []
+      })
+    );
+    await waitFor(() => {
+      expect(listTerminalJobs).toHaveBeenCalled();
+    });
+    expect(listTrackedBackgroundJobs("s1")).toEqual([]);
   });
 });

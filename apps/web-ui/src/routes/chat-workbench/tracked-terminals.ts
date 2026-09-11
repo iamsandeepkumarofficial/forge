@@ -101,8 +101,14 @@ function track(options: {
 
   const client = retainTerminalSessionClient(id);
   const unsubscribe = client.subscribe(options.streamId, {
-    onExited: () => markExited(key),
-    onError: () => untrack(key)
+    onExited: () => {
+      if (options.kind === "app") return;
+      markExited(key);
+    },
+    onError: () => {
+      if (options.kind === "app") return;
+      untrack(key);
+    }
   });
   tracked.set(key, {
     sessionId: id,
@@ -282,6 +288,7 @@ export function trackTerminalsFromToolParts(options: {
   sessionId: string;
   parts: ToolPart[];
   openTabs?: boolean;
+  liveJobNames?: ReadonlySet<string>;
 }): void {
   const { sessionId, parts } = options;
   const openTabs = options.openTabs === true;
@@ -297,13 +304,17 @@ export function trackTerminalsFromToolParts(options: {
     if (shouldTrackBackgroundToolPart(part)) {
       const name = terminalJobNameFromToolPart(part);
       if (!name) continue;
-      const input = toolInput(part);
+      if (options.liveJobNames && !options.liveJobNames.has(name)) {
+        untrackBackgroundJob(sessionId, name);
+        continue;
+      }
+      const live = options.liveJobNames?.has(name) === true;
       const added = track({
         sessionId,
         kind: "job",
         rawName: name,
         streamId: streamIdForJobTab(name),
-        restart: input?.background === true
+        restart: openTabs || live
       });
       if (added && openTabs) {
         requestOpenTerminalTab({ id: `job:${name}`, kind: "job" });
@@ -312,6 +323,14 @@ export function trackTerminalsFromToolParts(options: {
     if (shouldTrackPreviewStartToolPart(part)) {
       const name = terminalAppNameFromToolPart(part);
       if (!name) continue;
+      const input = toolInput(part);
+      const alias =
+        typeof input?.name === "string" && input.name.trim()
+          ? input.name.trim()
+          : null;
+      if (alias && alias !== name) {
+        untrackApp(sessionId, alias);
+      }
       const added = track({
         sessionId,
         kind: "app",

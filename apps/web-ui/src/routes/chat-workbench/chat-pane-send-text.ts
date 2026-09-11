@@ -1,7 +1,8 @@
-import type {
-  ChatMode,
-  LlmProvider,
-  UiChatMessage
+import {
+  deleteSessionMessagesFrom,
+  type ChatMode,
+  type LlmProvider,
+  type UiChatMessage
 } from "../../lib/chat-agent.js";
 import type { ComposerAgentMode } from "../../components/chat-composer-shared.js";
 import type { ToolPart } from "../../lib/tool-display.js";
@@ -23,21 +24,22 @@ export type SendChatPaneTextOptions = {
   setStreamingText: React.Dispatch<React.SetStateAction<string>>;
   setStreamingReasoning: React.Dispatch<React.SetStateAction<string>>;
   setLiveToolParts: React.Dispatch<React.SetStateAction<ToolPart[]>>;
+  flushLiveStep: () => void;
+  clearLiveTurn: () => void;
   setStatus: (s: "ready" | "submitted" | "streaming" | "error") => void;
   setMessages: React.Dispatch<React.SetStateAction<UiChatMessage[]>>;
   setActiveTurnId: (id: string | null) => void;
   stickToBottomRef: { current: boolean };
   streamAbortRef: { current: AbortController | null };
   onAppliedMode?: (mode: ComposerAgentMode) => void;
+  truncateFromMessageId?: string;
 };
 
 function beginOptimisticSend(options: SendChatPaneTextOptions, text: string) {
   options.setInput("");
   options.setAttachments([]);
   options.setError(null);
-  options.setStreamingText("");
-  options.setStreamingReasoning("");
-  options.setLiveToolParts([]);
+  options.clearLiveTurn();
   options.setStatus("submitted");
   options.stickToBottomRef.current = true;
   options.setMessages((prev) => [
@@ -50,6 +52,14 @@ function beginOptimisticSend(options: SendChatPaneTextOptions, text: string) {
   ]);
 }
 
+function truncateLocalMessages(
+  prev: UiChatMessage[],
+  messageId: string
+): UiChatMessage[] {
+  const idx = prev.findIndex((m) => m.id === messageId);
+  return idx >= 0 ? prev.slice(0, idx) : prev;
+}
+
 export async function sendChatPaneText(
   options: SendChatPaneTextOptions
 ): Promise<void> {
@@ -58,6 +68,20 @@ export async function sendChatPaneText(
     .filter(Boolean)
     .join("\n\n");
   if (!text || options.status !== "ready") return;
+  if (options.truncateFromMessageId) {
+    try {
+      await deleteSessionMessagesFrom(
+        options.sessionId,
+        options.truncateFromMessageId
+      );
+    } catch (err) {
+      options.setError(err instanceof Error ? err : new Error(String(err)));
+      return;
+    }
+    options.setMessages((prev) =>
+      truncateLocalMessages(prev, options.truncateFromMessageId as string)
+    );
+  }
   beginOptimisticSend(options, text);
   const ac = new AbortController();
   options.streamAbortRef.current = ac;
@@ -81,14 +105,13 @@ export async function sendChatPaneText(
           setStreamingReasoning: options.setStreamingReasoning,
           setLiveToolParts: options.setLiveToolParts,
           setError: options.setError,
-          onAppliedMode: options.onAppliedMode
+          onAppliedMode: options.onAppliedMode,
+          onLlmStart: options.flushLiveStep
         });
       }
     });
     options.setMessages(rows);
-    options.setStreamingText("");
-    options.setStreamingReasoning("");
-    options.setLiveToolParts([]);
+    options.clearLiveTurn();
     options.setActiveTurnId(null);
     options.setStatus("ready");
   } catch (err) {

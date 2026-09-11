@@ -33,19 +33,24 @@ describe("BottomTerminal", () => {
   it("starts collapsed and expands like a bottom panel", () => {
     render(<BottomTerminal sessionId="s1" />);
     expect(
-      screen.getByRole("button", { name: "Expand panel" }).getAttribute("aria-expanded")
+      screen
+        .getByRole("button", { name: "Expand panel" })
+        .getAttribute("aria-expanded")
     ).toBe("false");
     expect(screen.getByTestId("terminal-body").hasAttribute("hidden")).toBe(
       true
     );
     fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
     expect(
-      screen.getByRole("button", { name: "Collapse panel" }).getAttribute("aria-expanded")
+      screen
+        .getByRole("button", { name: "Collapse panel" })
+        .getAttribute("aria-expanded")
     ).toBe("true");
     expect(screen.getByTestId("terminal-body").hasAttribute("hidden")).toBe(
       false
     );
     expect(screen.getByText("terminal-output")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "DevTools" })).toBeNull();
   });
 
   it("uses an Electron hole for official DevTools when the preview bridge exists", () => {
@@ -57,14 +62,19 @@ describe("BottomTerminal", () => {
       } as never
     };
     render(<BottomTerminal sessionId="s1" />);
-    fireEvent.click(screen.getByRole("button", { name: "DevTools" }));
+    act(() => {
+      requestDevtoolsToggle();
+    });
     expect(screen.getByTestId("electron-devtools-hole")).toBeTruthy();
     expect(screen.queryByTestId("preview-devtools")).toBeNull();
   });
 
   it("opens DevTools in place of the terminal", () => {
     render(<BottomTerminal sessionId="s1" />);
-    fireEvent.click(screen.getByRole("button", { name: "DevTools" }));
+    expect(screen.queryByRole("button", { name: "DevTools" })).toBeNull();
+    act(() => {
+      requestDevtoolsToggle();
+    });
     expect(screen.getByTestId("devtools-body").hasAttribute("hidden")).toBe(
       false
     );
@@ -80,6 +90,22 @@ describe("BottomTerminal", () => {
     expect(screen.getByTestId("devtools-body").hasAttribute("hidden")).toBe(
       true
     );
+    expect(screen.getByRole("button", { name: "DevTools" })).toBeTruthy();
+  });
+
+  it("closes DevTools and keeps Terminal pinned", () => {
+    render(<BottomTerminal sessionId="s1" />);
+    act(() => {
+      requestDevtoolsToggle();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close DevTools" }));
+    expect(screen.queryByRole("button", { name: "DevTools" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close DevTools" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Terminal" })).toBeTruthy();
+    expect(screen.getByTestId("terminal-body").hasAttribute("hidden")).toBe(
+      false
+    );
+    expect(screen.queryByTestId("devtools-body")).toBeNull();
   });
 
   it("opens DevTools from the preview toolbar event", () => {
@@ -109,7 +135,9 @@ describe("BottomTerminal", () => {
       false
     );
     expect(
-      screen.getByRole("button", { name: "Collapse panel" }).getAttribute("aria-expanded")
+      screen
+        .getByRole("button", { name: "Collapse panel" })
+        .getAttribute("aria-expanded")
     ).toBe("true");
   });
 

@@ -524,6 +524,7 @@ export const sessionMessages = pgTable(
     role: sessionMessageRoleEnum("role").notNull(),
     parts: jsonb("parts").$type<unknown[]>().notNull().default([]),
     turnId: uuid("turn_id"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull()
@@ -546,6 +547,14 @@ export const chatTurns = pgTable(
     provider: varchar("provider", { length: 32 }),
     model: varchar("model", { length: 128 }),
     error: text("error"),
+    rounds: integer("rounds"),
+    toolCallCount: integer("tool_call_count"),
+    toolNames: jsonb("tool_names").$type<string[]>(),
+    hitRoundCap: boolean("hit_round_cap"),
+    workspaceCheckpoint: jsonb("workspace_checkpoint").$type<Record<
+      string,
+      string
+    > | null>(),
     startedAt: timestamp("started_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

@@ -11,6 +11,7 @@ import {
   handleGetTurn,
   handleCreateTurn,
   handleFinishTurn,
+  handleCheckpointTurn,
   handleAppendChunk,
   handleListChunks
 } from "./chat.handlers.js";
@@ -39,6 +40,9 @@ function mountChatTurnRoutes(router: Router) {
   });
   router.post("/chat/turns/:turnId/finish", (req, res) => {
     return handleFinishTurn({ req, res, turns });
+  });
+  router.post("/chat/turns/:turnId/checkpoint", (req, res) => {
+    return handleCheckpointTurn({ req, res, turns });
   });
   router.post("/chat/turns/:turnId/chunks", (req, res) => {
     return handleAppendChunk({ req, res, chunks });

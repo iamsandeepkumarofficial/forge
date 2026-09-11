@@ -4,7 +4,10 @@ import {
   askUserInitialValues,
   askUserMcqReply,
   findPendingAskUser,
-  isWorkspaceParamFieldId
+  isWorkspaceParamFieldId,
+  askUserSkipReply,
+  askUserDisplayPrompt,
+  groupAskUserFields
 } from "./ask-user";
 import type { ToolPart } from "./tool-display";
 
@@ -77,6 +80,68 @@ describe("ask-user", () => {
     ).toEqual({ NODE_ENV: "development", EMPTY: "" });
     expect(isWorkspaceParamFieldId("JWT_SECRET")).toBe(true);
     expect(isWorkspaceParamFieldId("provision_mongo")).toBe(false);
+    expect(askUserSkipReply()).toBe("User answer (ask_user): skipped");
+  });
+
+  it("parses group and type on form fields and groups sections", () => {
+    const pending = findPendingAskUser({
+      messages: [],
+      liveToolParts: [
+        {
+          type: "tool-invocation",
+          toolCallId: "g1",
+          toolName: "ask_user",
+          state: "result",
+          metadata: {
+            needsUserInput: true,
+            kind: "form",
+            prompt: "Env?",
+            fields: [
+              {
+                id: "NODE_ENV",
+                label: "Env",
+                group: "Environment",
+                type: "text",
+                value: "development"
+              },
+              {
+                id: "JWT_SECRET",
+                label: "JWT",
+                group: "Secrets",
+                type: "secret"
+              },
+              {
+                id: "SETUP",
+                label: "Setup DB",
+                type: "boolean",
+                value: "true"
+              }
+            ]
+          }
+        }
+      ],
+      dismissedIds: new Set()
+    });
+    expect(pending?.fields[0]).toMatchObject({
+      group: "Environment",
+      type: "text"
+    });
+    expect(pending?.fields[1]).toMatchObject({
+      group: "Secrets",
+      type: "secret"
+    });
+    expect(pending?.fields[2]).toMatchObject({ type: "boolean" });
+    expect(
+      groupAskUserFields(pending?.fields ?? []).map((s) => s.group)
+    ).toEqual([null, "Environment", "Secrets"]);
+  });
+
+  it("collapses markdown table prompts to a short hint", () => {
+    expect(
+      askUserDisplayPrompt(
+        "Set these keys.\n\n| Name | Example |\n| --- | --- |\n| A | 1 |"
+      )
+    ).toMatch(/Details in the fields below/);
   });
 
   it("hides ask_user after a User answer message in history", () => {

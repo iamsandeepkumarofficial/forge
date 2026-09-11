@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { UiChatMessage } from "../../lib/chat-agent.js";
+import { listTerminalJobs } from "../../lib/session-terminal.js";
 import { toolPartsOf, type ToolPart } from "../../lib/tool-display.js";
 import { trackTerminalsFromToolParts } from "./tracked-terminals.js";
 
@@ -29,11 +30,29 @@ export function useTrackBackgroundJobs(options: {
   useEffect(() => {
     if (!historyLoaded) return;
     if (historyScannedFor.current === sessionId) return;
-    historyScannedFor.current = sessionId;
-    trackTerminalsFromToolParts({
-      sessionId,
-      parts: historyToolParts(messages)
-    });
+    const parts = historyToolParts(messages);
+    let cancelled = false;
+    void (async () => {
+      let liveJobNames: Set<string> | undefined;
+      try {
+        const jobs = await listTerminalJobs(sessionId);
+        liveJobNames = new Set(
+          jobs.filter((job) => job.running).map((job) => job.name)
+        );
+      } catch {
+        liveJobNames = undefined;
+      }
+      if (cancelled) return;
+      trackTerminalsFromToolParts({
+        sessionId,
+        parts,
+        liveJobNames
+      });
+      historyScannedFor.current = sessionId;
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, historyLoaded, messages]);
 
   useEffect(() => {
