@@ -25,9 +25,12 @@ describe("sandboxHostFs.tool", () => {
     const wrote = await executeHostSandboxFsTool({
       info,
       toolName: "write_file",
-      args: { path: "a.txt", content: "hello" }
+      args: { files: [{ path: "a.txt", content: "hello" }] }
     });
     assert.equal(wrote?.success, true);
+    assert.deepEqual(wrote?.metadata?.files, [
+      { path: "a.txt", op: "create", before: null }
+    ]);
     const read = await executeHostSandboxFsTool({
       info,
       toolName: "read_file",
@@ -91,5 +94,40 @@ describe("sandboxHostFs.tool", () => {
     });
     assert.equal(read?.success, true);
     assert.equal(read?.metadata?.content, "{}");
+  });
+
+  it("deletes and moves files with before metadata", async () => {
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "forge-sfs-mv-"));
+    const info: SessionRepoInfo = {
+      containerName: tmp,
+      repoDir: "repo",
+      workingDir: "/workspace",
+      sessionRoot: "/workspace",
+      hostWorkingDir: tmp
+    };
+    await executeHostSandboxFsTool({
+      info,
+      toolName: "write_file",
+      args: { files: [{ path: "old.ts", content: "keep" }] }
+    });
+    const moved = await executeHostSandboxFsTool({
+      info,
+      toolName: "move_files",
+      args: { moves: [{ from: "old.ts", to: "new.ts" }] }
+    });
+    assert.equal(moved?.success, true);
+    assert.deepEqual(moved?.metadata?.files, [
+      { path: "old.ts", op: "delete", before: "keep" },
+      { path: "new.ts", op: "create", before: null }
+    ]);
+    const deleted = await executeHostSandboxFsTool({
+      info,
+      toolName: "delete_files",
+      args: { paths: ["new.ts"] }
+    });
+    assert.equal(deleted?.success, true);
+    assert.deepEqual(deleted?.metadata?.files, [
+      { path: "new.ts", op: "delete", before: "keep" }
+    ]);
   });
 });

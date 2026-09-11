@@ -71,9 +71,27 @@ function FileDiffPreview({
 }
 function toolFilePath(part: ToolPart): string | null {
   const input = part.input ?? part.args;
-  if (input && typeof input === "object" && !Array.isArray(input)) {
-    const path = (input as { path?: unknown }).path;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const rec = input as Record<string, unknown>;
+  if (typeof rec.path === "string" && rec.path.trim()) return rec.path;
+  if (
+    Array.isArray(rec.files) &&
+    rec.files[0] &&
+    typeof rec.files[0] === "object"
+  ) {
+    const path = (rec.files[0] as { path?: unknown }).path;
     if (typeof path === "string" && path.trim()) return path;
+  }
+  if (Array.isArray(rec.paths) && typeof rec.paths[0] === "string") {
+    return rec.paths[0];
+  }
+  if (
+    Array.isArray(rec.moves) &&
+    rec.moves[0] &&
+    typeof rec.moves[0] === "object"
+  ) {
+    const from = (rec.moves[0] as { from?: unknown }).from;
+    if (typeof from === "string" && from.trim()) return from;
   }
   return null;
 }

@@ -10,5 +10,7 @@ describe("workspaceFileTools", () => {
     assert.ok(tools.read_file);
     assert.ok(tools.write_file);
     assert.ok(tools.edit_file);
+    assert.ok(tools.delete_files);
+    assert.ok(tools.move_files);
   });
 });

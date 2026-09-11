@@ -3,11 +3,11 @@ import {
   resolveWorkspacePath,
   dockerExec,
   shInSandbox,
-  readFileFromSandbox,
-  writeFileToSandbox
+  readFileFromSandbox
 } from "../projects/sandboxExec.js";
 import { getSessionRepoInfo } from "../projects/sessionSandbox.js";
 import type { ToolResult } from "./types.js";
+import { executeSandboxFsMutate } from "./sandboxFsMutate.js";
 import {
   parseTerminalAction,
   runTerminalInSession
@@ -21,6 +21,8 @@ export const SANDBOX_TOOL_NAMES = new Set([
   "read_file",
   "write_file",
   "edit_file",
+  "delete_files",
+  "move_files",
   "run_terminal",
   "search_codebase",
   "list_files",
@@ -111,79 +113,6 @@ async function handleReadFile(options: {
       output: `Read ${rel} (${totalLines} lines):\n${clipped}`,
       metadata: { content: clipped, totalLines }
     };
-  } catch (err) {
-    return {
-      success: false,
-      output: err instanceof Error ? err.message : String(err)
-    };
-  }
-}
-async function handleWriteFile(options: {
-  containerName: string;
-  sessionId: string;
-  args: Record<string, unknown>;
-  knownRepos?: Set<string>;
-}): Promise<ToolResult> {
-  const rel = String(options.args.path ?? "");
-  try {
-    const abs = resolveWorkspacePath(rel, {
-      knownRepos: options.knownRepos
-    });
-    await writeFileToSandbox({
-      container: options.containerName,
-      sessionId: options.sessionId,
-      absPath: abs,
-      content: String(options.args.content ?? "")
-    });
-    return { success: true, output: `Wrote ${rel}` };
-  } catch (err) {
-    return {
-      success: false,
-      output: err instanceof Error ? err.message : String(err)
-    };
-  }
-}
-async function handleEditFile(options: {
-  containerName: string;
-  sessionId: string;
-  args: Record<string, unknown>;
-  knownRepos?: Set<string>;
-}): Promise<ToolResult> {
-  const rel = String(options.args.path ?? "");
-  const oldString = String(options.args.oldString ?? "");
-  const newString = String(options.args.newString ?? "");
-  const replaceAll = Boolean(options.args.replaceAll);
-  try {
-    const abs = resolveWorkspacePath(rel, {
-      knownRepos: options.knownRepos
-    });
-    const content = await readFileFromSandbox({
-      container: options.containerName,
-      absPath: abs,
-      sessionId: options.sessionId
-    });
-    if (content === null) {
-      return { success: false, output: `File not found: ${rel}` };
-    }
-    let updated: string;
-    if (replaceAll) {
-      updated = content.split(oldString).join(newString);
-    } else {
-      if (!content.includes(oldString)) {
-        return {
-          success: false,
-          output: `Could not find the exact text to replace in ${rel}`
-        };
-      }
-      updated = content.replace(oldString, newString);
-    }
-    await writeFileToSandbox({
-      container: options.containerName,
-      sessionId: options.sessionId,
-      absPath: abs,
-      content: updated
-    });
-    return { success: true, output: `Successfully edited ${rel}.` };
   } catch (err) {
     return {
       success: false,
@@ -329,9 +258,18 @@ export async function executeSandboxTool(options: {
     case "read_file":
       return handleReadFile({ containerName, sessionId, args, ...known });
     case "write_file":
-      return handleWriteFile({ containerName, sessionId, args, ...known });
     case "edit_file":
-      return handleEditFile({ containerName, sessionId, args, ...known });
+    case "delete_files":
+    case "move_files": {
+      const mutated = await executeSandboxFsMutate({
+        toolName,
+        containerName,
+        sessionId,
+        args,
+        ...known
+      });
+      return mutated ?? { success: false, output: `Unknown tool: ${toolName}` };
+    }
     case "run_terminal":
       return runTerminalInSession({
         sessionId,

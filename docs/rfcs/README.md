@@ -15,7 +15,7 @@ Design decisions for Forge are recorded as RFCs in this directory. Accepted RFCs
 | [0007](./0007-stack-adapters.md)                 | Stack Adapters for Multi-Language Workspaces   | Accepted | Language detection/probe/skills behind `StackAdapter` registry; git-only host bootstrap; cloud deps cache under `projects/cloud/`.                                                       |
 | [0008](./0008-infra-adapter-runtime-install.md)  | Infra Adapters and Keep-Folder Runtime Install | Accepted | `install_project_infra` / `setup_project_infra` resolve adapter facets; keep-folder under `~/.forge/runtime/<dep>/<version>/`; session PATH via sandbox env; Node install + pins.        |
 | [0009](./0009-sandbox-runtime-port-adapters.md)  | SandboxRuntime Port Adapters                   | Accepted | Listen/publish ports owned by host vs Docker/K8s adapters; host uses registry `40xxx`, Docker keeps `3000–3009` + mapped publish. Amends 0006.                                           |
-| [0010](./0010-interactive-chat-revert.md)        | Interactive Chat Revert                        | Accepted | Soft-delete messages from a user prompt; hidden-ref git checkpoints at turn start; restore files then hide transcript. Amends 0005.                                                      |
+| [0010](./0010-interactive-chat-revert.md)        | Interactive Chat Revert                        | Accepted | Soft-delete from a user prompt; Cursor-style touched-file sidecar (not git reset); batch `write_file` / `edit_file` / `delete_files` / `move_files`; `run_terminal` denies `rm`/`mv`.    |
 
 ## Process
 

@@ -1,6 +1,8 @@
 const ACTIVITY_LABELS: Record<string, { pending: string; done: string }> = {
   edit_file: { pending: "Editing", done: "Edited" },
   write_file: { pending: "Writing", done: "Wrote" },
+  delete_files: { pending: "Deleting", done: "Deleted" },
+  move_files: { pending: "Moving", done: "Moved" },
   read_file: { pending: "Reading", done: "Read" },
   list_files: { pending: "Searching", done: "Searched" },
   list_dir: { pending: "Searching", done: "Searched" },

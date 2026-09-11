@@ -4,11 +4,11 @@ import {
   listHostWorkspaceFiles,
   readHostWorkspaceFile,
   resolveHostFsPath,
-  searchHostWorkspace,
-  writeHostWorkspaceFile
+  searchHostWorkspace
 } from "../projects/hostWorkspaceFs.js";
 import { resolveWorkspacePath } from "../projects/sandboxExec.js";
 import type { SessionRepoInfo } from "../projects/sessionSandbox.js";
+import { executeHostFsMutate } from "./sandboxHostFsMutate.js";
 import type { ToolResult } from "./types.js";
 
 const MAX_READ_CHARS = 40000;
@@ -58,9 +58,10 @@ export async function executeHostSandboxFsTool(options: {
       case "read_file":
         return await hostReadFile({ info, roots, args });
       case "write_file":
-        return await hostWriteFile({ info, roots, args });
       case "edit_file":
-        return await hostEditFile({ info, roots, args });
+      case "delete_files":
+      case "move_files":
+        return await executeHostFsMutate({ info, roots, toolName, args });
       case "search_codebase":
         return await hostSearch({ info, roots, args });
       case "list_files":
@@ -99,61 +100,6 @@ async function hostReadFile(options: {
     output: `Read ${rel} (${totalLines} lines):\n${clipped}`,
     metadata: { content: clipped, totalLines }
   };
-}
-
-async function hostWriteFile(options: {
-  info: SessionRepoInfo;
-  roots: string[];
-  args: Record<string, unknown>;
-}): Promise<ToolResult> {
-  const rel = String(options.args.path ?? "");
-  const abs = resolveHostFsPath({
-    info: options.info,
-    logicalAbsPath: logicalPath(rel, options.info)
-  });
-  await writeHostWorkspaceFile({
-    absPath: abs,
-    content: String(options.args.content ?? ""),
-    roots: options.roots
-  });
-  return { success: true, output: `Wrote ${rel}` };
-}
-
-async function hostEditFile(options: {
-  info: SessionRepoInfo;
-  roots: string[];
-  args: Record<string, unknown>;
-}): Promise<ToolResult> {
-  const rel = String(options.args.path ?? "");
-  const oldString = String(options.args.oldString ?? "");
-  const newString = String(options.args.newString ?? "");
-  const replaceAll = Boolean(options.args.replaceAll);
-  const abs = resolveHostFsPath({
-    info: options.info,
-    logicalAbsPath: logicalPath(rel, options.info)
-  });
-  const content = await readHostWorkspaceFile(abs, options.roots);
-  if (content === null) {
-    return { success: false, output: `File not found: ${rel}` };
-  }
-  let updated: string;
-  if (replaceAll) {
-    updated = content.split(oldString).join(newString);
-  } else {
-    if (!content.includes(oldString)) {
-      return {
-        success: false,
-        output: `Could not find the exact text to replace in ${rel}`
-      };
-    }
-    updated = content.replace(oldString, newString);
-  }
-  await writeHostWorkspaceFile({
-    absPath: abs,
-    content: updated,
-    roots: options.roots
-  });
-  return { success: true, output: `Successfully edited ${rel}.` };
 }
 
 async function hostSearch(options: {

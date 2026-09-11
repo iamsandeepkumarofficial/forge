@@ -6,7 +6,9 @@ import {
   resetTrackedTerminalsForTests
 } from "./tracked-terminals";
 
-const listTerminalJobs = vi.fn(async () => [{ name: "old", running: true }]);
+const listTerminalJobs = vi.fn(async (_sessionId?: string) => [
+  { name: "old", running: true }
+]);
 
 vi.mock("../../lib/session-terminal.js", () => ({
   listTerminalJobs: (sessionId: string) => listTerminalJobs(sessionId)

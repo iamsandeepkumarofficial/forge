@@ -23,6 +23,8 @@ import { executeGetWorkspaceHealth } from "./getWorkspaceHealth.tool.js";
 import { executeDockerImageLookup } from "./dockerImageLookup.tool.js";
 import { executeSetupProjectInfra } from "./setupProjectInfra.tool.js";
 import { executeInstallProjectInfra } from "./installProjectInfra.tool.js";
+import { parseTouchedFilesMetadata } from "./fileBatch.js";
+import { recordTouchedFiles } from "../projects/workspaceCheckpoint.js";
 
 const N_200 = 200;
 const N_400 = 400;
@@ -58,19 +60,48 @@ export class ToolService {
       chatFeatureRepo: this.chatFeatureRepo,
       chatFeatureService: this.chatFeatureService
     });
-    if (routed) return routed;
-    if (SANDBOX_TOOL_NAMES.has(params.toolName)) {
-      return executeSandboxToolCall({
+    let outcome: ToolExecuteOutcome;
+    if (routed) {
+      outcome = routed;
+    } else if (SANDBOX_TOOL_NAMES.has(params.toolName)) {
+      outcome = await executeSandboxToolCall({
         sessionId: params.sessionId,
         toolName: params.toolName,
         args: params.args
       });
+    } else {
+      outcome = {
+        kind: "error",
+        status: N_400,
+        body: { error: `unknown tool: ${params.toolName}` }
+      };
     }
-    return {
-      kind: "error",
-      status: N_400,
-      body: { error: `unknown tool: ${params.toolName}` }
-    };
+    await maybeRecordTouchedFiles(params, outcome);
+    return outcome;
+  }
+}
+
+async function maybeRecordTouchedFiles(
+  params: ToolExecuteParams,
+  outcome: ToolExecuteOutcome
+): Promise<void> {
+  if (outcome.kind !== "result") return;
+  const turnId = params.turnId?.trim();
+  if (!turnId) return;
+  const files = parseTouchedFilesMetadata(outcome.body.metadata?.files);
+  if (files.length === 0) return;
+  try {
+    await recordTouchedFiles({
+      sessionId: params.sessionId,
+      turnId,
+      files
+    });
+  } catch (err) {
+    console.warn(
+      `[checkpoint] failed to record touched files for ${turnId}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
   }
 }
 

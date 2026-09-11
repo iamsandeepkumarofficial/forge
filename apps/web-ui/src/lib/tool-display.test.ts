@@ -30,6 +30,13 @@ describe("synthesizeToolDiff", () => {
     expect(preview?.diffText).toContain("+hello");
     expect(preview?.diffText).toContain("+world");
   });
+  it("builds a write preview from files[]", () => {
+    const preview = synthesizeToolDiff("write_file", {
+      files: [{ path: "README.md", content: "hello" }]
+    });
+    expect(preview?.path).toBe("README.md");
+    expect(preview?.diffText).toContain("+hello");
+  });
   it("returns null for non-file tools", () => {
     expect(synthesizeToolDiff("run_command", { command: "ls" })).toBeNull();
   });
@@ -187,6 +194,10 @@ describe("toolActivityLabel", () => {
   it("uses verb labels for known tools", () => {
     expect(toolActivityLabel("edit_file", { pending: true })).toBe("Editing");
     expect(toolActivityLabel("edit_file")).toBe("Edited");
+    expect(toolActivityLabel("delete_files", { pending: true })).toBe(
+      "Deleting"
+    );
+    expect(toolActivityLabel("move_files")).toBe("Moved");
     expect(toolActivityLabel("read_file")).toBe("Read");
     expect(toolActivityLabel("run_terminal", { pending: true })).toBe(
       "Running terminal"

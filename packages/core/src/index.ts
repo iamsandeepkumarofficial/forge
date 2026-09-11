@@ -26,6 +26,10 @@ export {
   longRunningDevServerDeniedMessage
 } from "./chat/devServerCommand.js";
 export {
+  blockedWorkspaceMutationMessage,
+  isBlockedWorkspaceMutationCommand
+} from "./chat/fileMutationCommand.js";
+export {
   chatToolCatalogIds,
   formatToolDescription,
   getChatToolCatalogItem,

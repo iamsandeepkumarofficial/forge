@@ -144,6 +144,14 @@ export class ChatTurnRepository {
       .where(eq(chatTurns.status, "running"));
     return [...new Set(rows.map((row) => row.sessionId))];
   }
+  async listBySessionId(sessionId: string): Promise<ChatTurn[]> {
+    const db = getDb();
+    return db
+      .select()
+      .from(chatTurns)
+      .where(eq(chatTurns.sessionId, sessionId))
+      .orderBy(asc(chatTurns.startedAt), asc(chatTurns.id));
+  }
   async finish(options: {
     id: string;
     status: "completed" | "cancelled" | "failed";
@@ -164,7 +172,14 @@ export class ChatTurnRepository {
   }
   async setWorkspaceCheckpoint(
     id: string,
-    checkpoint: Record<string, string>
+    checkpoint: {
+      version: 1;
+      files: Array<{
+        path: string;
+        op: "create" | "update" | "delete";
+        blob: string | null;
+      }>;
+    }
   ): Promise<ChatTurn | null> {
     const db = getDb();
     const [updated] = await db

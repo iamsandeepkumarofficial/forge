@@ -1,107 +1,168 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  checkpointGitRepo,
-  checkpointRefForTurn,
-  createLocalGitRunner,
-  parseWorkspaceCheckpoint,
-  restoreGitRepo
+  parseTouchedFileCheckpoint,
+  recordTouchedFiles,
+  restorePlanFromTurn,
+  restoreSessionWorkspace,
+  sessionCheckpointDir
 } from "./workspaceCheckpoint.js";
+import type { SessionRepoInfo } from "./sessionSandbox.js";
 
-const execFileAsync = promisify(execFile);
+const TURN_1 = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const TURN_2 = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
 
-async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["-C", cwd, ...args]);
-  return stdout.trim();
+function memoryTurns() {
+  const rows = new Map<
+    string,
+    { id: string; sessionId: string; workspaceCheckpoint: unknown }
+  >();
+  return {
+    seed(row: { id: string; sessionId: string; workspaceCheckpoint: unknown }) {
+      rows.set(row.id, row);
+    },
+    getById: async (id: string) => rows.get(id) ?? null,
+    setWorkspaceCheckpoint: async (id: string, checkpoint: unknown) => {
+      const prev = rows.get(id) ?? {
+        id,
+        sessionId: "s1",
+        workspaceCheckpoint: null
+      };
+      rows.set(id, { ...prev, workspaceCheckpoint: checkpoint });
+      return rows.get(id);
+    },
+    listBySessionId: async (sessionId: string) =>
+      [...rows.values()].filter((row) => row.sessionId === sessionId)
+  };
 }
 
-const TURN_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
-
 describe("workspaceCheckpoint", () => {
-  let tmpRoot: string;
+  let tmp: string;
+  let prevRoot: string | undefined;
 
   before(async () => {
-    tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "forge-ckpt-"));
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "forge-ckpt-"));
+    prevRoot = process.env.FORGE_SESSIONS_ROOT;
+    process.env.FORGE_SESSIONS_ROOT = tmp;
   });
 
   after(async () => {
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    if (prevRoot === undefined) delete process.env.FORGE_SESSIONS_ROOT;
+    else process.env.FORGE_SESSIONS_ROOT = prevRoot;
+    await fs.rm(tmp, { recursive: true, force: true });
   });
 
-  it("parses repo-to-sha maps and rejects junk", () => {
-    assert.deepEqual(
-      parseWorkspaceCheckpoint({
-        portfolio: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        skip: "not-a-sha",
-        empty: ""
+  it("ignores legacy repo-to-sha maps", () => {
+    assert.equal(
+      parseTouchedFileCheckpoint({
+        portfolio: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }),
-      { portfolio: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      null
     );
-    assert.deepEqual(parseWorkspaceCheckpoint(null), {});
-    assert.deepEqual(parseWorkspaceCheckpoint(["x"]), {});
-  });
-
-  it("snapshots via hidden ref without moving HEAD, then restore discards later edits", async () => {
-    const cwd = path.join(tmpRoot, "repo");
-    await fs.mkdir(cwd, { recursive: true });
-    await fs.writeFile(path.join(cwd, "README.md"), "base\n");
-    await fs.writeFile(path.join(cwd, ".gitignore"), "node_modules\n");
-    await git(cwd, ["init"]);
-    await git(cwd, ["config", "user.email", "t@t"]);
-    await git(cwd, ["config", "user.name", "t"]);
-    await git(cwd, ["add", "-A"]);
-    await git(cwd, ["commit", "-m", "init"]);
-    await fs.writeFile(path.join(cwd, "app.js"), "console.log(1)\n");
-    await fs.mkdir(path.join(cwd, "node_modules"), { recursive: true });
-    await fs.writeFile(path.join(cwd, "node_modules", "keep.txt"), "deps\n");
-
-    const headBefore = await git(cwd, ["rev-parse", "HEAD"]);
-    const runner = createLocalGitRunner(cwd);
-    const sha = await checkpointGitRepo({ git: runner, turnId: TURN_ID });
-    assert.ok(sha);
-    assert.equal(await git(cwd, ["rev-parse", "HEAD"]), headBefore);
-    assert.equal(
-      await git(cwd, ["rev-parse", checkpointRefForTurn(TURN_ID)]),
-      sha
-    );
-    const log = await git(cwd, ["log", "--format=%s"]);
-    assert.equal(log.includes("forge-checkpoint"), false);
-    const staged = await git(cwd, ["diff", "--cached", "--name-only"]);
-    assert.equal(staged, "");
-
-    await fs.writeFile(path.join(cwd, "app.js"), "console.log(2)\n");
-    await fs.writeFile(path.join(cwd, "extra.txt"), "later\n");
-    await restoreGitRepo({ git: runner, sha: sha as string });
-
-    assert.equal(await git(cwd, ["rev-parse", "HEAD"]), sha);
-    assert.equal(
-      await fs.readFile(path.join(cwd, "app.js"), "utf8"),
-      "console.log(1)\n"
-    );
-    await fs.access(path.join(cwd, "extra.txt")).then(
-      () => {
-        throw new Error("extra.txt should be removed by git clean -fd");
-      },
-      () => undefined
-    );
-    assert.equal(
-      await fs.readFile(path.join(cwd, "node_modules", "keep.txt"), "utf8"),
-      "deps\n"
+    assert.equal(parseTouchedFileCheckpoint(null), null);
+    assert.deepEqual(
+      parseTouchedFileCheckpoint({
+        version: 1,
+        files: [{ path: "a.ts", op: "update", blob: "a".repeat(64) }]
+      }),
+      {
+        version: 1,
+        files: [{ path: "a.ts", op: "update", blob: "a".repeat(64) }]
+      }
     );
   });
 
-  it("skips a folder that is not a git repo", async () => {
-    const cwd = path.join(tmpRoot, "plain");
-    await fs.mkdir(cwd, { recursive: true });
-    const sha = await checkpointGitRepo({
-      git: createLocalGitRunner(cwd),
-      turnId: TURN_ID
+  it("records first touch of a path and keeps that before across later edits", async () => {
+    const turns = memoryTurns();
+    turns.seed({
+      id: TURN_1,
+      sessionId: "s1",
+      workspaceCheckpoint: null
     });
-    assert.equal(sha, null);
+    await recordTouchedFiles({
+      sessionId: "s1",
+      turnId: TURN_1,
+      files: [{ path: "app.ts", op: "update", before: "v1\n" }],
+      turns
+    });
+    const second = await recordTouchedFiles({
+      sessionId: "s1",
+      turnId: TURN_1,
+      files: [{ path: "app.ts", op: "update", before: "v2\n" }],
+      turns
+    });
+    assert.equal(second.files.length, 1);
+    assert.equal(second.files[0]?.op, "update");
+    const plan = await restorePlanFromTurn({
+      sessionId: "s1",
+      turnId: TURN_1,
+      turns
+    });
+    assert.deepEqual(plan, [{ path: "app.ts", before: "v1\n" }]);
+    const meta = await fs.readFile(
+      path.join(sessionCheckpointDir("s1", TURN_1), "metadata.json"),
+      "utf8"
+    );
+    assert.match(meta, /app\.ts/);
+  });
+
+  it("restore plan uses the earliest before across later turns", async () => {
+    const turns = memoryTurns();
+    turns.seed({ id: TURN_1, sessionId: "s1", workspaceCheckpoint: null });
+    turns.seed({ id: TURN_2, sessionId: "s1", workspaceCheckpoint: null });
+    await recordTouchedFiles({
+      sessionId: "s1",
+      turnId: TURN_1,
+      files: [{ path: "a.ts", op: "update", before: "A0" }],
+      turns
+    });
+    await recordTouchedFiles({
+      sessionId: "s1",
+      turnId: TURN_2,
+      files: [
+        { path: "a.ts", op: "update", before: "A1" },
+        { path: "b.ts", op: "create", before: null }
+      ],
+      turns
+    });
+    const plan = await restorePlanFromTurn({
+      sessionId: "s1",
+      turnId: TURN_1,
+      turns
+    });
+    const byPath = Object.fromEntries(plan.map((e) => [e.path, e.before]));
+    assert.equal(byPath["a.ts"], "A0");
+    assert.equal(byPath["b.ts"], null);
+  });
+
+  it("writes earliest before bytes and unlinks created files on host restore", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "forge-restore-"));
+    try {
+      await fs.writeFile(path.join(dir, "a.ts"), "A1", "utf8");
+      await fs.writeFile(path.join(dir, "b.ts"), "new", "utf8");
+      const info: SessionRepoInfo = {
+        containerName: dir,
+        repoDir: "repo",
+        workingDir: "/workspace",
+        sessionRoot: "/workspace",
+        hostWorkingDir: dir
+      };
+      await restoreSessionWorkspace({
+        sessionId: "s1",
+        plan: [
+          { path: "a.ts", before: "A0" },
+          { path: "b.ts", before: null }
+        ],
+        info,
+        host: true
+      });
+      assert.equal(await fs.readFile(path.join(dir, "a.ts"), "utf8"), "A0");
+      await assert.rejects(fs.stat(path.join(dir, "b.ts")), /ENOENT/);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });

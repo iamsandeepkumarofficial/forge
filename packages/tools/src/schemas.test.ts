@@ -3,10 +3,32 @@ import { describe, it } from "node:test";
 import {
   readFileInputSchema,
   askUserInputSchema,
-  upsertWorkspaceParameterInputSchema
+  deleteFilesInputSchema,
+  moveFilesInputSchema,
+  upsertWorkspaceParameterInputSchema,
+  writeFileInputSchema
 } from "./schemas.js";
 
 describe("schemas", () => {
+  it("parses batch write_file and delete_files", () => {
+    assert.deepEqual(
+      writeFileInputSchema.parse({
+        files: [{ path: "a.ts", content: "x" }]
+      }),
+      { files: [{ path: "a.ts", content: "x" }] }
+    );
+    assert.deepEqual(deleteFilesInputSchema.parse({ paths: ["a.ts"] }), {
+      paths: ["a.ts"]
+    });
+    assert.deepEqual(
+      moveFilesInputSchema.parse({ moves: [{ from: "a.ts", to: "b.ts" }] }),
+      { moves: [{ from: "a.ts", to: "b.ts" }] }
+    );
+    assert.throws(() =>
+      writeFileInputSchema.parse({ path: "a.ts", content: "x" })
+    );
+  });
+
   it("parses read_file and ask_user inputs", () => {
     assert.deepEqual(readFileInputSchema.parse({ path: "a.ts" }), {
       path: "a.ts"

@@ -12,19 +12,40 @@ export type CreateSubtaskInput = z.infer<typeof createSubtaskInputSchema>;
 export const readFileInputSchema = z.object({ path: z.string() });
 export type ReadFileInput = z.infer<typeof readFileInputSchema>;
 
-export const writeFileInputSchema = z.object({
+const MAX_FILE_TOOL_BATCH = 20;
+
+export const writeFileEntrySchema = z.object({
   path: z.string(),
   content: z.string()
 });
+export const writeFileInputSchema = z.object({
+  files: z.array(writeFileEntrySchema).min(1).max(MAX_FILE_TOOL_BATCH)
+});
 export type WriteFileInput = z.infer<typeof writeFileInputSchema>;
 
-export const editFileInputSchema = z.object({
+export const editFileEntrySchema = z.object({
   path: z.string(),
   oldString: z.string(),
   newString: z.string(),
   replaceAll: z.boolean().optional()
 });
+export const editFileInputSchema = z.object({
+  files: z.array(editFileEntrySchema).min(1).max(MAX_FILE_TOOL_BATCH)
+});
 export type EditFileInput = z.infer<typeof editFileInputSchema>;
+
+export const deleteFilesInputSchema = z.object({
+  paths: z.array(z.string()).min(1).max(MAX_FILE_TOOL_BATCH)
+});
+export type DeleteFilesInput = z.infer<typeof deleteFilesInputSchema>;
+
+export const moveFilesInputSchema = z.object({
+  moves: z
+    .array(z.object({ from: z.string(), to: z.string() }))
+    .min(1)
+    .max(MAX_FILE_TOOL_BATCH)
+});
+export type MoveFilesInput = z.infer<typeof moveFilesInputSchema>;
 
 export const listFilesInputSchema = z.object({});
 export type ListFilesInput = z.infer<typeof listFilesInputSchema>;

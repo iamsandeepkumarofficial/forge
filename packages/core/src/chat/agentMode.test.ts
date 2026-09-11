@@ -30,6 +30,14 @@ describe("agentMode", () => {
       false
     );
     assert.equal(
+      isToolAllowedForMode({ agentMode: "ask", toolName: "delete_files" }),
+      false
+    );
+    assert.equal(
+      isToolAllowedForMode({ agentMode: "ask", toolName: "move_files" }),
+      false
+    );
+    assert.equal(
       isToolAllowedForMode({ agentMode: "ask", toolName: "preview_start" }),
       false
     );
@@ -61,6 +69,14 @@ describe("agentMode", () => {
   it("Agent allows write and not create_subtask", () => {
     assert.equal(
       isToolAllowedForMode({ agentMode: "agent", toolName: "write_file" }),
+      true
+    );
+    assert.equal(
+      isToolAllowedForMode({ agentMode: "agent", toolName: "delete_files" }),
+      true
+    );
+    assert.equal(
+      isToolAllowedForMode({ agentMode: "agent", toolName: "move_files" }),
       true
     );
     assert.equal(

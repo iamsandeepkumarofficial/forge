@@ -367,10 +367,6 @@ export async function interactiveChatTurnWorkflow(
       parts: [{ type: "text", text: args.userText }],
       turnId: args.turnId
     });
-    await sandbox.checkpointChatWorkspace({
-      sessionId: args.sessionId,
-      turnId: args.turnId
-    });
     const loop = await runToolRoundLoop({
       args,
       currentMode: { value: args.mode },

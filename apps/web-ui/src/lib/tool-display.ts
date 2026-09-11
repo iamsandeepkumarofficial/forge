@@ -225,8 +225,13 @@ export function synthesizeToolDiff(
   toolName: string,
   args: unknown
 ): ToolDiffPreview | null {
-  const record = asRecord(args);
-  if (!record) return null;
+  const raw = asRecord(args);
+  if (!raw) return null;
+  const firstFile =
+    Array.isArray(raw.files) && raw.files.length > 0
+      ? asRecord(raw.files[0])
+      : null;
+  const record = firstFile ? { ...raw, ...firstFile } : raw;
   const path = typeof record.path === "string" ? record.path : "";
   if (!path) return null;
   if (toolName === "edit_file") {

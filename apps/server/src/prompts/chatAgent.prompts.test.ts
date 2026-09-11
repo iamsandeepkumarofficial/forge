@@ -24,6 +24,7 @@ describe("composeChatAgentSystemPrompt", () => {
     assert.doesNotMatch(prompt, /repo\/package\.json/);
     assert.match(prompt, /## Starting apps/);
     assert.match(prompt, /preview_start/);
+    assert.match(prompt, /delete_files/);
     assert.match(prompt, /40000–49999/);
     assert.doesNotMatch(prompt, /Eval: not agent-ready/);
     assert.doesNotMatch(prompt, /## Workspace health/);

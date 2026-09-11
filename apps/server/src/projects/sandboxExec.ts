@@ -192,17 +192,34 @@ export async function runtimeExec(
     ...opts
   });
 }
+async function sandboxTest(options: {
+  container: string;
+  absPath: string;
+  sessionId: string;
+  flag: "-e" | "-f" | "-d";
+}): Promise<boolean> {
+  const r = await dockerExec({
+    container: options.container,
+    sessionId: options.sessionId,
+    argv: ["test", options.flag, options.absPath]
+  });
+  return r.code === 0;
+}
+
 export async function pathExistsInSandbox(options: {
   container: string;
   absPath: string;
   sessionId: string;
 }): Promise<boolean> {
-  const r = await dockerExec({
-    container: options.container,
-    sessionId: options.sessionId,
-    argv: ["test", "-e", options.absPath]
-  });
-  return r.code === 0;
+  return sandboxTest({ ...options, flag: "-e" });
+}
+
+export async function isFileInSandbox(options: {
+  container: string;
+  absPath: string;
+  sessionId: string;
+}): Promise<boolean> {
+  return sandboxTest({ ...options, flag: "-f" });
 }
 export async function readFileFromSandbox(options: {
   container: string;
@@ -235,5 +252,61 @@ export async function writeFileToSandbox(options: {
   });
   if (r.code !== 0) {
     throw new Error(r.stderr.trim() || `failed to write ${absPath}`);
+  }
+}
+
+export async function deleteFileFromSandbox(options: {
+  container: string;
+  absPath: string;
+  sessionId: string;
+}): Promise<void> {
+  const isFile = await isFileInSandbox(options);
+  if (!isFile) {
+    if (await pathExistsInSandbox(options)) {
+      throw new Error("Not a file");
+    }
+    return;
+  }
+  const r = await dockerExec({
+    container: options.container,
+    sessionId: options.sessionId,
+    argv: ["rm", "-f", "--", options.absPath]
+  });
+  if (r.code !== 0) {
+    throw new Error(r.stderr.trim() || `failed to delete ${options.absPath}`);
+  }
+}
+
+export async function moveFileInSandbox(options: {
+  container: string;
+  fromAbs: string;
+  toAbs: string;
+  sessionId: string;
+}): Promise<void> {
+  const isFile = await isFileInSandbox({
+    container: options.container,
+    absPath: options.fromAbs,
+    sessionId: options.sessionId
+  });
+  if (!isFile) {
+    throw new Error("Not a file");
+  }
+  const destIsDir = await sandboxTest({
+    container: options.container,
+    absPath: options.toAbs,
+    sessionId: options.sessionId,
+    flag: "-d"
+  });
+  if (destIsDir) {
+    throw new Error("Not a file");
+  }
+  const r = await shInSandbox({
+    container: options.container,
+    sessionId: options.sessionId,
+    script: 'mkdir -p "$(dirname "$TO")" && mv -- "$FROM" "$TO"',
+    env: { FROM: options.fromAbs, TO: options.toAbs }
+  });
+  if (r.code !== 0) {
+    throw new Error(r.stderr.trim() || `failed to move ${options.fromAbs}`);
   }
 }

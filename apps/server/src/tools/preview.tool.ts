@@ -10,9 +10,14 @@ import {
   type AppType,
   type ForgeApp
 } from "../projects/appRunner.js";
+import {
+  readFileFromSandbox,
+  resolveSandbox
+} from "../projects/sandboxExec.js";
 import type { ToolResult } from "./types.js";
 
 const N_300 = 300;
+const LAUNCH_REL = ".forge/launch.json";
 
 const APP_TYPES = new Set<AppType>(["web", "api", "worker"]);
 
@@ -185,12 +190,28 @@ export class PreviewToolService {
     if (typeof parsed === "string") {
       return { success: false, output: parsed };
     }
+    const sandbox = await resolveSandbox(sessionId);
+    const before = await readFileFromSandbox({
+      container: sandbox.containerName,
+      absPath: `${sandbox.workingDir}/${LAUNCH_REL}`,
+      sessionId
+    });
     const config = await upsertLaunchApp(sessionId, parsed);
     const written = config.apps.find((a) => a.name === parsed.name) ?? parsed;
     return {
       success: true,
       output: `Updated .forge/launch.json with app "${written.name}" (cwd: ${written.cwd}).`,
-      metadata: { app: written, apps: config.apps }
+      metadata: {
+        app: written,
+        apps: config.apps,
+        files: [
+          {
+            path: LAUNCH_REL,
+            op: before === null ? "create" : "update",
+            before
+          }
+        ]
+      }
     };
   }
 }

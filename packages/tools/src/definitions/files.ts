@@ -3,8 +3,10 @@ import { formatToolDescription } from "@forge/core";
 import type { ToolRun } from "../types.js";
 import {
   createSubtaskInputSchema,
+  deleteFilesInputSchema,
   editFileInputSchema,
   listFilesInputSchema,
+  moveFilesInputSchema,
   readFileInputSchema,
   searchCodebaseInputSchema,
   writeFileInputSchema
@@ -31,6 +33,16 @@ export function workspaceFileTools(run: ToolRun): Record<string, Tool> {
       description: formatToolDescription("edit_file"),
       inputSchema: editFileInputSchema,
       execute: async (input) => run("edit_file", input)
+    }),
+    delete_files: tool({
+      description: formatToolDescription("delete_files"),
+      inputSchema: deleteFilesInputSchema,
+      execute: async (input) => run("delete_files", input)
+    }),
+    move_files: tool({
+      description: formatToolDescription("move_files"),
+      inputSchema: moveFilesInputSchema,
+      execute: async (input) => run("move_files", input)
     }),
     list_files: tool({
       description: formatToolDescription("list_files"),

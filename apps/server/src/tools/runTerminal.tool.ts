@@ -1,4 +1,6 @@
 import {
+  blockedWorkspaceMutationMessage,
+  isBlockedWorkspaceMutationCommand,
   isLongRunningDevServerCommand,
   longRunningDevServerDeniedMessage
 } from "@forge/core";
@@ -68,6 +70,12 @@ async function handleTerminalRun(options: {
   const commandTrimmed = options.command.trim();
   if (!commandTrimmed) {
     return { success: false, output: "command is required" };
+  }
+  if (isBlockedWorkspaceMutationCommand(commandTrimmed)) {
+    return {
+      success: false,
+      output: blockedWorkspaceMutationMessage()
+    };
   }
   if (isLongRunningDevServerCommand(commandTrimmed)) {
     return {

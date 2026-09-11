@@ -117,7 +117,7 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
     lines.push(
       "- Launch config: **only** `/workspace/.forge/launch.json` (session-root). Apps use `repo` + session-relative `cwd` (e.g. `bp-frontend`). Do not create per-member `.forge/launch.json`.",
       `- Session root \`/workspace\` is **not** a git repo; member folders are the git roots.`,
-      `- File tools: paths are relative to \`/workspace\` and **must start with a member repo name** (example: \`${first}/package.json\`). Never use host paths.`,
+      `- File tools: paths are relative to \`/workspace\` and **must start with a member repo name** (example: \`${first}/package.json\`). Never use host paths. Delete/rename with delete_files / move_files, not run_terminal rm/mv.`,
       `- \`run_terminal\` default cwd is ${termCwd}.`
     );
   }

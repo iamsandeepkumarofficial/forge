@@ -132,9 +132,9 @@ export function RevertChatDialog(options: {
           Revert this chat?
         </h2>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Later messages after this prompt will be removed, and git workspace
-          files from that prompt onward will be rolled back when a checkpoint
-          exists. Then the assistant will answer the edited prompt.
+          Later messages after this prompt will be removed, and files the
+          assistant changed from that prompt onward will be rolled back. Then
+          the assistant will answer the edited prompt.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button

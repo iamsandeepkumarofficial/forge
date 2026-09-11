@@ -10,7 +10,13 @@ export const AGENT_MODE_IDS = [
 export type AgentMode = (typeof AGENT_MODE_IDS)[number];
 
 const READ_TOOLS = ["read_file", "list_files", "search_codebase"] as const;
-const WRITE_TOOLS = ["write_file", "edit_file", "run_terminal"] as const;
+const WRITE_TOOLS = [
+  "write_file",
+  "edit_file",
+  "delete_files",
+  "move_files",
+  "run_terminal"
+] as const;
 const PREVIEW_INSPECT_TOOLS = ["preview_status", "preview_logs"] as const;
 const PREVIEW_RUN_TOOLS = ["preview_start", "preview_stop"] as const;
 const LAUNCH_TOOLS = ["upsert_launch_app"] as const;

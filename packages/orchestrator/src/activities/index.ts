@@ -2,7 +2,6 @@ export {
   loadChatMessages,
   appendChatMessage,
   ensureChatSandbox,
-  checkpointChatWorkspace,
   getChatSystemPrompt,
   finishChatTurn,
   runLlmStep,

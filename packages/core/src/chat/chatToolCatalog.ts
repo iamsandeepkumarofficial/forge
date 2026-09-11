@@ -23,22 +23,56 @@ const CATALOG: ChatToolCatalogItem[] = [
   {
     toolId: "write_file",
     toolName: "Write file",
-    description: "Create or overwrite a file under the session workspace.",
-    exampleUsecases: ["Creating a new file or replacing an entire file."],
+    description:
+      "Create or overwrite one or more files under the session workspace. Pass files: [{ path, content }]. One file is an array of length 1. This is full-file rewrite — do not use a separate rewrite tool.",
+    exampleUsecases: [
+      "Creating a new file or replacing an entire file.",
+      "Writing several files in one call."
+    ],
     negativeUsecases: [
       "A small patch in an existing file — use edit_file.",
+      "Deleting a file — use delete_files.",
+      "Renaming a file — use move_files.",
       "Do not edit `.forge/launch.json` — use upsert_launch_app."
     ]
   },
   {
     toolId: "edit_file",
     toolName: "Edit file",
-    description: "Replace an exact string in an existing file.",
-    exampleUsecases: ["Surgical edits when you already know oldString."],
+    description:
+      "Replace an exact string in one or more existing files. Pass files: [{ path, oldString, newString, replaceAll? }]. One file is an array of length 1.",
+    exampleUsecases: [
+      "Surgical edits when you already know oldString.",
+      "The same replacement across several files in one call."
+    ],
     negativeUsecases: [
-      "Creating a new file — use write_file.",
+      "Creating a new file or replacing the whole file — use write_file.",
       "oldString is unknown — read_file first.",
+      "Deleting or renaming — use delete_files / move_files.",
       "Do not edit `.forge/launch.json` — use upsert_launch_app."
+    ]
+  },
+  {
+    toolId: "delete_files",
+    toolName: "Delete files",
+    description:
+      "Delete one or more files under the session workspace. Pass paths: string[]. Files only — not directories.",
+    exampleUsecases: ["Removing a file the agent created or no longer needs."],
+    negativeUsecases: [
+      "Do not use run_terminal rm.",
+      "Renaming — use move_files.",
+      "Editing contents — use edit_file or write_file."
+    ]
+  },
+  {
+    toolId: "move_files",
+    toolName: "Move files",
+    description:
+      "Rename or move one or more files. Pass moves: [{ from, to }]. Files only — not directories.",
+    exampleUsecases: ["Renaming a module or moving a file to a new path."],
+    negativeUsecases: [
+      "Do not use run_terminal mv.",
+      "Copying while keeping the source — write_file the dest, leave the source."
     ]
   },
   {
@@ -61,13 +95,14 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "run_terminal",
     toolName: "Run terminal",
     description:
-      "Run a finite shell command (installs, git, tests, builds). Optional workingDirectory; set background:true for long jobs, then action=logs or stop. Not for declared forever-running apps — those use preview_* (managed app jobs).",
+      "Run a finite shell command (installs, git, tests, builds). Optional workingDirectory; set background:true for long jobs, then action=logs or stop. Not for declared forever-running apps — those use preview_* (managed app jobs). rm and mv are blocked — use delete_files / move_files.",
     exampleUsecases: [
       "Package install, migration, typecheck, test, or git.",
       "Long install/test: background:true, then action=logs."
     ],
     negativeUsecases: [
       "Reading or editing files — use read_file / write_file / edit_file.",
+      "Deleting or moving files — use delete_files / move_files (rm and mv are denied).",
       "Starting a long-lived web/api/dev server — upsert_launch_app then preview_start (even with background:true, run_terminal will hang or time out)."
     ]
   },
@@ -130,7 +165,7 @@ const CATALOG: ChatToolCatalogItem[] = [
       "App missing or incomplete in launch.json before preview_start."
     ],
     negativeUsecases: [
-      "Editing source files — use write_file / edit_file.",
+      "Editing source files — use write_file / edit_file / delete_files / move_files.",
       "Ask mode — switch_mode first.",
       "Ports outside 3000–3009 — they are not published for preview.",
       "Installing databases — use setup_project_infra / install_project_infra, not this tool."
@@ -275,7 +310,7 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "ask_user",
     toolName: "Ask user",
     description:
-      "Pause the turn and show an interactive MCQ or form widget. Keep `prompt` to 1–2 sentences — never dump markdown tables or long env docs in prompt. Split infra consent (MCQ) from env/secrets (form). Form fields may set group and type (text|secret|boolean). After a multi-field form, upsert_workspace_parameter once with items[]. When a DB is unreachable, MCQ: re-provision / paste an alternate URI / skip — do not loop preview_start.",
+      "Pause the turn and show an interactive MCQ or form widget. Keep `prompt` to 1–2 sentences — never dump markdown tables or long env docs in prompt. Split infra consent (MCQ) from env/secrets (form). Form fields may set group and type (text|secret|boolean). After a multi-field form, upsert_workspace_parameter once with items[]. When a DB is unreachable, MCQ: re-provision / paste an alternate URI / skip — do not loop preview_start. Missing host binaries: MCQ including install_project_infra.",
     exampleUsecases: [
       "Ask which Mongo connection string to store before upsert_workspace_parameter — prefill value from .env.example or a local mongo URL.",
       "Confirm setup_project_infra (Postgres/Mongo) with an MCQ before calling with userApproved: true.",

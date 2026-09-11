@@ -551,10 +551,14 @@ export const chatTurns = pgTable(
     toolCallCount: integer("tool_call_count"),
     toolNames: jsonb("tool_names").$type<string[]>(),
     hitRoundCap: boolean("hit_round_cap"),
-    workspaceCheckpoint: jsonb("workspace_checkpoint").$type<Record<
-      string,
-      string
-    > | null>(),
+    workspaceCheckpoint: jsonb("workspace_checkpoint").$type<{
+      version: 1;
+      files: Array<{
+        path: string;
+        op: "create" | "update" | "delete";
+        blob: string | null;
+      }>;
+    } | null>(),
     startedAt: timestamp("started_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

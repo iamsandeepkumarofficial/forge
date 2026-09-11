@@ -2,115 +2,169 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-11
+- **Revision:** 2026-09-11 — file restore is a sidecar of files the agent touched, not git `commit-tree` / `reset --hard`. Batch file tools + `run_terminal` deny `rm`/`mv`.
 - **Authors:** Forge contributors
-- **Depends on:** [RFC 0005](./0005-local-session-git-worktrees.md)
-- **Amends:** chat transcript delete-from-message; session worktrees gain hidden checkpoint refs
+- **Depends on:** [RFC 0005](./0005-local-session-git-worktrees.md) (session worktrees / member paths only)
+- **Amends:** chat transcript delete-from-message; mutating file tools emit restore metadata; `run_terminal` cannot `rm`/`mv`
 
 ## Summary
 
 Undo on a user prompt reverts **two layers**:
 
 1. **Transcript** — later `session_messages` are soft-deleted (`deleted_at`). UI and LLM history omit them.
-2. **Workspace files** — each member git root is restored to a hidden-ref checkpoint taken at the **start** of that prompt’s turn (`write-tree` + `commit-tree` + `refs/forge/checkpoints/<turnId>`), then `git reset --hard` + `git clean -fd` in the same session worktree.
+2. **Workspace files** — restore every path the agent touched from this prompt’s turn **through later turns**, using saved **pre-mutation bytes**. Write `before` back, or delete the file if `before` is null (it was created in that range). **Do not** `git reset`, `commit-tree`, or move `HEAD`.
 
-Chat revert does not require git. File restore does. Forge initializes member folders that are not already git repos at **sandbox provision**. There is no non-git file snapshot (no copy/tarball/overlay).
+Chat revert does not require git. File restore does not require git.
 
 ## Motivation
 
-Today `DELETE /api/sessions/:id/messages/from/:messageId` hard-deletes that row and later rows, then a new turn appends the edited prompt. The LLM prefix is correct **if** delete succeeded. The session worktree is untouched, so agent file edits from later turns stay dirty. Users expect Undo to roll back files as well as chat.
+`DELETE /api/sessions/:id/messages/from/:messageId` can hide the transcript, but later agent edits stay on disk. Users expect Undo to roll files back too.
 
-File tools do not `git commit`. Without a per-turn snapshot there is no SHA for “files when this prompt was sent.”
+A whole-tree git checkpoint (`write-tree` / hidden ref / `reset --hard`) pollutes the session repo, moves `HEAD` on restore, and snapshots files the agent never touched. Cursor stores **files the agent wrote/edited/deleted/moved**. Forge does the same.
+
+That only works if mutating tools report **path + op + prior content**. `write_file` / `edit_file` must not return only a one-line `output`. `run_terminal` must not `rm`/`mv`.
 
 ## Goals
 
 1. Soft-delete messages from the chosen user prompt onward; do not `DELETE` rows.
-2. Snapshot each member git root at the start of every interactive turn without moving `HEAD`.
-3. On revert, restore those roots to the snapshot, then hide messages, then send the edited prompt.
-4. At provision, `git init` + initial commit any `/workspace/<member>/` that is not a repo (so `commit-tree -p HEAD` has a parent).
-5. Keep Undo available when git is missing; skip file restore for that folder.
+2. Snapshot **only files the agent touched**, on each mutating tool call (first touch of a path in a turn stores `before`).
+3. On revert, restore those paths (this turn ∪ later turns), then hide messages, then send the edited prompt.
+4. File tools are **batch**: one call may touch one file or many.
+5. Add `delete_files` and `move_files`. Do **not** add `rewrite_files` — `write_file` already creates or overwrites.
+6. `run_terminal` **refuses** `rm` and `mv` (including `git rm` / `git mv`).
+7. Restore never runs git. `HEAD` / session branch / `git log` are unchanged.
 
 ## Non-goals
 
-- Restarting `preview_start` after restore (running `next dev` / Vite may go stale).
-- Non-git snapshots (copy the tree, tarball, overlay).
+- Restarting `preview_start` after restore.
+- Whole-tree snapshot at prompt time (walk, tarball, overlay, git `write-tree`).
+- Snapshotting hand-edits or shell mutations that never went through file tools (`sed -i`, `>`, `python -c`, `find -delete`).
 - Cloning the source worktree when branching a chat (see `docs/tech-debt.md`).
-- Pushing `refs/forge/*`, committing on `main`, or `git clean -fdx` (would wipe `node_modules`).
 - Undelete UI.
+- `git clean -fdx` / wiping `node_modules`.
+- Recursive directory delete/move in v1.
 
 ## Concepts
 
-| Term              | Definition                                                                                                                        |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Live messages** | `session_messages` with `deleted_at IS NULL`. UI list, LLM `loadChatMessages`, and branch `copyUntil` use only these.             |
-| **Hidden ref**    | `refs/forge/checkpoints/<turnId>` pointing at a commit object. Not the session branch; not shown by `git log` on `HEAD`.          |
-| **Checkpoint**    | `git add -A` → `write-tree` → `commit-tree -p HEAD` → `update-ref` → mixed `git reset HEAD`. `HEAD` / `workbench-…` do not move.  |
-| **Restore**       | In the **same** worktree: `git reset --hard <sha>` then `git clean -fd`. This **does** move the session branch to the checkpoint. |
+| Term              | Definition                                                                                                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Live messages** | `session_messages` with `deleted_at IS NULL`. UI list, LLM `loadChatMessages`, and branch `copyUntil` use only these.                                                             |
+| **Touched file**  | A path a mutating file tool created, updated, deleted, or moved in a turn.                                                                                                        |
+| **Checkpoint**    | Sidecar for one `turnId`: `metadata.json` + content-addressed `blobs/{sha256}` of each path’s **first** `before` in that turn. Thin pointer on `chat_turns.workspace_checkpoint`. |
+| **Restore**       | For each path in this turn and **later** turns, apply the **earliest** `before` in that range (write bytes, or unlink if `before` is null). Same worktrees. No git.               |
 
 ## Transcript
 
-Add `deleted_at timestamptz null` on `session_messages`.
-
-Revert sets `deleted_at` on message **M** and every later live row (order `createdAt, id`). New edited prompt is a **new** row. `chat_turns` / chunks stay for audit and are not sent to the model.
+`deleted_at` on `session_messages`. Revert sets it on **M** and every later live row. New edited prompt is a **new** row. `chat_turns` / chunks stay for audit and are not sent to the model.
 
 `partsToModelMessages` is unchanged: it only sees the filtered list.
 
+## File tools (batch)
+
+One schema per tool. A single file is an array of length 1. Cap 20 entries.
+
+```ts
+write_file:   { files: [{ path, content }] }
+edit_file:    { files: [{ path, oldString, newString, replaceAll? }] }
+delete_files: { paths: string[] }
+move_files:   { moves: [{ from, to }] }
+```
+
+- **`write_file`** — create or **overwrite** the whole file. This is rewrite. No `rewrite_files` tool.
+- **`edit_file`** — search-replace in an existing file.
+- **`delete_files`** / **`move_files`** — structured delete and rename. Files only in v1.
+
+Keep tool ids `write_file` / `edit_file`. Ask/plan stay denied.
+
+Per-path results: succeed what you can; `success` is false if any path failed. `metadata.files` lists only paths that actually changed.
+
+```ts
+metadata.files: Array<{
+  path: string;
+  op: "create" | "update" | "delete";
+  before: string | null; // full prior bytes; null iff the file did not exist
+}>
+```
+
+`move_files` emits two records per move: `delete` on `from` (with source `before`) and `create` or `update` on `to`.
+
+Do not put this payload in the model-facing `output` string.
+
+Host and docker both implement the same ops. Paths stay workspace-relative.
+
+`upsert_launch_app` treats `.forge/launch.json` as one touched file.
+
+## `run_terminal`
+
+After the long-running-server check, **deny** commands whose **command word** is `rm` or `mv` (also `sudo rm`, `/bin/rm`, chained `ls && rm …`, and `git rm` / `git mv`).
+
+Do **not** match `\brm\b` anywhere: `npm rm`, `docker rm`, `podman rm` stay allowed.
+
+Denied message: use `delete_files` or `move_files`.
+
 ## Workspace checkpoint
 
-After `ensureChatSandbox` and appending the user message, before tools:
+Not taken as a full tree at turn start. On each **successful** mutating file-tool result for this `turnId`:
 
-```text
-git add -A
-tree=$(git write-tree)
-commit=$(git commit-tree "$tree" -p HEAD -m "forge-checkpoint ${TURN_ID}")
-git update-ref "refs/forge/checkpoints/${TURN_ID}" "$commit"
-git reset HEAD
+1. For each `metadata.files[]` path **not yet** in this turn’s snapshot, persist `before` (content-addressed blob; null marker for create).
+2. Later touches of the same path in the same turn do not overwrite that original `before`.
+3. `chat_turns.workspace_checkpoint` stores a pointer + file list, not full file bodies:
+
+```json
+{
+  "version": 1,
+  "files": [{ "path": "web/src/app.ts", "op": "update", "blob": "<sha256>" }]
+}
 ```
 
-Author/committer: Forge Agent (`forge@local`). Skip a root that is not a git repo or has no `HEAD`. Store `{ repoName: sha }` on `chat_turns.workspace_checkpoint`.
+On-disk: `~/.forge/sessions/_checkpoints/{sessionId}/{turnId}/metadata.json` and `blobs/{sha256}`.
+
+Ignore legacy `{ repoName: sha }` maps on restore (do not `git reset`).
+
+## Restore
+
+Revert of user message **M** (`M.turnId` = T):
+
+1. Collect checkpoints for T and every later turn on this session.
+2. Union of paths. For each path, take the **earliest** `before` in that range.
+3. `before !== null` → write those bytes (create parents if needed). `before === null` → unlink if present.
+4. If restore fails, **do not** hide messages (request fails).
+5. Soft-delete M and later live rows.
+6. Client sends the edited prompt; the new turn records its own touches.
 
 ```text
-  C0  <--  workbench-T (HEAD)
-   \
-    Ckpt2  <--  refs/forge/checkpoints/turn2
+Turn 2: write a.ts (before A0)
+Turn 3: write a.ts (before A1), create b.ts (before null)
 
-  working tree still matches Ckpt2 (turn-1 dirty files); turn-2 edits are not in Ckpt2
+Revert M2: a.ts ← A0, delete b.ts
+HEAD unchanged
 ```
 
-Revert of M2: `reset --hard Ckpt2` + `clean -fd`, then soft-delete from M2, then send M2′. The new turn takes its own checkpoint.
-
-## Provision git init
-
-Every member mount `/workspace/<repoName>` must be a git repo with `HEAD` after provision.
-
-- Local connect already calls `ensureCanonicalGitRepo`.
-- `ensureWorkspaceMemberCopy` must call that helper instead of throwing when canonical is not a repo.
-- After mount/clone, if a member dir is still not a repo (or has no `HEAD`), init + `forge: initial import`.
-- Do not `git init` nested folders or `/workspace` itself.
-
-If init still fails, revert skips files for that folder and still hides messages.
+If no file tools ran from T onward, restore is a no-op; transcript still hides.
 
 ## Restore policy
 
-| Situation                         | Files     | Messages                       |
-| --------------------------------- | --------- | ------------------------------ |
-| Git root + SHA, reset succeeds    | Restored  | Soft-deleted                   |
-| Git root + SHA, reset/clean fails | Unchanged | **Not** hidden (request fails) |
-| Not a git repo, or no checkpoint  | Unchanged | Soft-deleted                   |
+| Situation                      | Files     | Messages                       |
+| ------------------------------ | --------- | ------------------------------ |
+| Checkpoint blobs apply cleanly | Restored  | Soft-deleted                   |
+| Restore fails (IO / allowlist) | Unchanged | **Not** hidden (request fails) |
+| No touched files in range      | Unchanged | Soft-deleted                   |
 
-Do not hide Undo. Do not fail the whole request merely because a member has no git.
+Do not hide Undo. Missing git is irrelevant.
 
 ## API
 
 `DELETE /api/sessions/:sessionId/messages/from/:messageId` (unchanged URL):
 
 1. 404 if M is missing or already hidden.
-2. Restore from `M.turnId`’s `workspace_checkpoint` when SHAs exist.
+2. Restore touched files from `M.turnId` through later turns.
 3. Soft-delete M and later live rows.
 4. `{ deleted, workspaceRestored }`.
 
-`POST /internal/chat/turns/:turnId/checkpoint` `{ sessionId }` writes the jsonb map.
+Persist the sidecar when file tools return `metadata.files`. There is no turn-start git checkpoint API.
 
 ## Out of scope (accepted)
 
 - Preview process restart after restore.
-- Branch-chat worktree clone (document in `docs/tech-debt.md`).
+- Branch-chat worktree clone (document in `docs/tech-debt.md`; branch still does not copy blobs).
+- Terminal before/after inventory for non-`rm`/`mv` shell mutations.

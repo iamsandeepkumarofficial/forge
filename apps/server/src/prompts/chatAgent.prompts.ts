@@ -82,8 +82,8 @@ function singleRepoFilesystemBlock(paths: ChatAgentPromptPaths): string {
   return [
     "## Working repository (authoritative)",
     `- Workspace and git root: \`${root}\`. The repository is mounted here directly — there is no extra repo folder.`,
-    `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` (example: \`package.json\`, \`src/app.ts\`). Never use host paths (\`/Users/…\`, \`/home/…\`), never prefix with a repo folder name, never use absolute paths outside this sandbox.`,
-    `- \`run_terminal\` default cwd is \`${root}\`. Pass \`workingDirectory\` only for a subdirectory (e.g. \`apps/web\`). Long installs/tests: \`background: true\`, then poll \`action: "logs"\`. Dev servers: preview_start.`,
+    `- File tools (\`read_file\`, \`write_file\`, \`edit_file\`, \`delete_files\`, \`move_files\`, \`list_files\`, \`search_codebase\`): paths are relative to \`${root}\` (example: \`package.json\`, \`src/app.ts\`). Never use host paths (\`/Users/…\`, \`/home/…\`), never prefix with a repo folder name, never use absolute paths outside this sandbox.`,
+    `- \`run_terminal\` default cwd is \`${root}\`. Pass \`workingDirectory\` only for a subdirectory (e.g. \`apps/web\`). Long installs/tests: \`background: true\`, then poll \`action: "logs"\`. Dev servers: preview_start. Do not \`rm\` or \`mv\` — use delete_files / move_files.`,
     `- \`.forge/launch.json\`, \`AGENTS.md\`, \`.forge/skills/\`, and project source live under \`${root}\`.`,
     "- There is exactly one connected repository in this session. Do not look for sibling repos or alternate roots."
   ].join("\n");

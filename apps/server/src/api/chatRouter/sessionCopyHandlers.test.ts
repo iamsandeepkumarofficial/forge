@@ -96,7 +96,7 @@ describe("sessionCopyHandlers", () => {
         }
       } as never,
       restoreFromTurn: async () => {
-        throw new Error("git reset failed");
+        throw new Error("restore failed");
       }
     });
     assert.equal(hidden, false);

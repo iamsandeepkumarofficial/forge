@@ -13,7 +13,7 @@ Multi-repo workspaces already materialize each member at `/workspace/<repoName>`
 
 Always materialize a member under `/workspace/<repoDirForProject>` (same helper as multi-repo). Host FS allowlist / resolve require the first path segment to be a member name when `hostWorktrees` is set. Launch CWD and repo inventory walk member dirs rather than treating `/workspace` as the git root.
 
-Git init for checkpoints (RFC 0010) runs **inside** the member folder, not on `/workspace`.
+Member folders stay the workspace roots for file tools. RFC 0010 file restore uses touched-file blobs, not git init on `/workspace`.
 
 ## Key files
 

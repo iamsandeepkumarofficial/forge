@@ -13,6 +13,8 @@ describe("chatToolCatalog", () => {
       "read_file",
       "write_file",
       "edit_file",
+      "delete_files",
+      "move_files",
       "preview_start",
       "upsert_launch_app",
       "create_subtask",
@@ -44,6 +46,7 @@ describe("chatToolCatalog", () => {
   it("run_terminal forbids long-running app servers", () => {
     const item = getChatToolCatalogItem("run_terminal");
     assert.match(item?.negativeUsecases.join(" ") ?? "", /preview_start/);
+    assert.match(item?.negativeUsecases.join(" ") ?? "", /delete_files/);
     assert.match(item?.description ?? "", /background:true/);
     assert.doesNotMatch(item?.description ?? "", /\/workspace/);
     assert.doesNotMatch(item?.description ?? "", /bp-frontend/);

@@ -1,242 +1,338 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { createHash } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { ChatTurnRepository } from "../catalog/sessionChatRepository.js";
-import { FORGE_GIT_IDENTITY } from "./localWorktree.js";
-import { dockerExec, type ExecResult } from "./sandboxExec.js";
+import { resolveSessionsRoot } from "../services/project/projectsRoot.js";
+import { sanitizeSessionFsName } from "./sandboxRuntime/hostSessionPaths.js";
 import {
-  provisionSessionSandbox,
-  getSessionRepoInfo
-} from "./sessionSandbox.js";
+  deleteFileFromSandbox,
+  resolveSandbox,
+  resolveWorkspacePath,
+  writeFileToSandbox
+} from "./sandboxExec.js";
+import {
+  assertUnderAllowlist,
+  hostFsAllowlistRoots,
+  resolveHostFsPath,
+  writeHostWorkspaceFile
+} from "./hostWorkspaceFs.js";
+import type { SessionRepoInfo } from "./sessionSandbox.js";
+import type { TouchedFile } from "../tools/fileBatch.js";
 
-const execFileAsync = promisify(execFile);
-
-const SHA_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/i;
 const TURN_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SHA256_RE = /^[0-9a-f]{64}$/i;
 
-export type GitExecResult = { code: number; stdout: string; stderr: string };
-
-export type GitRunner = (
-  args: string[],
-  options?: { env?: Record<string, string> }
-) => Promise<GitExecResult>;
-
-export const FORGE_CHECKPOINT_REF_PREFIX = "refs/forge/checkpoints/";
-
-const CHECKPOINT_ENV: Record<string, string> = {
-  GIT_AUTHOR_NAME: FORGE_GIT_IDENTITY.name,
-  GIT_AUTHOR_EMAIL: FORGE_GIT_IDENTITY.email,
-  GIT_COMMITTER_NAME: FORGE_GIT_IDENTITY.name,
-  GIT_COMMITTER_EMAIL: FORGE_GIT_IDENTITY.email
+export type WorkspaceCheckpointFile = {
+  path: string;
+  op: "create" | "update" | "delete";
+  blob: string | null;
 };
 
-export function checkpointRefForTurn(turnId: string): string {
-  return `${FORGE_CHECKPOINT_REF_PREFIX}${turnId}`;
-}
+export type WorkspaceCheckpointV1 = {
+  version: 1;
+  files: WorkspaceCheckpointFile[];
+};
 
-export function parseWorkspaceCheckpoint(raw: unknown): Record<string, string> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (!key.trim() || typeof value !== "string") continue;
-    const sha = value.trim();
-    if (!SHA_RE.test(sha)) continue;
-    out[key] = sha;
+type RestoreEntry = { path: string; before: string | null };
+
+export function parseTouchedFileCheckpoint(
+  raw: unknown
+): WorkspaceCheckpointV1 | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const rec = raw as Record<string, unknown>;
+  if (rec.version !== 1 || !Array.isArray(rec.files)) return null;
+  const files: WorkspaceCheckpointFile[] = [];
+  for (const item of rec.files) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    const filePath = typeof row.path === "string" ? row.path.trim() : "";
+    const op = row.op;
+    if (!filePath) continue;
+    if (op !== "create" && op !== "update" && op !== "delete") continue;
+    const blob =
+      row.blob === null
+        ? null
+        : typeof row.blob === "string" && SHA256_RE.test(row.blob)
+          ? row.blob
+          : null;
+    if (row.blob != null && blob === null) continue;
+    files.push({ path: filePath, op, blob });
   }
-  return out;
+  return { version: 1, files };
 }
 
-function gitFailed(result: GitExecResult, label: string): Error {
-  const detail = (result.stderr || result.stdout).trim();
-  return new Error(
-    `${label} failed (${result.code})${detail ? `: ${detail}` : ""}`
-  );
-}
-
-export async function checkpointGitRepo(options: {
-  git: GitRunner;
-  turnId: string;
-}): Promise<string | null> {
-  const { git, turnId } = options;
+export function sessionCheckpointDir(
+  sessionId: string,
+  turnId: string
+): string {
   if (!TURN_ID_RE.test(turnId)) {
     throw new Error(`Unsafe checkpoint turn id: ${turnId}`);
   }
-  const inside = await git(["rev-parse", "--is-inside-work-tree"]);
-  if (inside.code !== 0 || inside.stdout.trim() !== "true") return null;
-  const head = await git(["rev-parse", "HEAD"]);
-  if (head.code !== 0) return null;
-  const add = await git(["add", "-A"]);
-  if (add.code !== 0) throw gitFailed(add, "git add -A");
-  const tree = await git(["write-tree"]);
-  if (tree.code !== 0) throw gitFailed(tree, "git write-tree");
-  const treeSha = tree.stdout.trim();
-  const commit = await git(
-    ["commit-tree", treeSha, "-p", "HEAD", "-m", `forge-checkpoint ${turnId}`],
-    { env: CHECKPOINT_ENV }
+  return path.join(
+    resolveSessionsRoot(),
+    "_checkpoints",
+    sanitizeSessionFsName(sessionId),
+    turnId
   );
-  if (commit.code !== 0) throw gitFailed(commit, "git commit-tree");
-  const sha = commit.stdout.trim();
-  if (!SHA_RE.test(sha)) {
-    throw new Error(`git commit-tree returned an invalid sha: ${sha}`);
+}
+
+function blobPath(dir: string, sha: string): string {
+  return path.join(dir, "blobs", sha);
+}
+
+function hashBlob(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+async function writeBlob(dir: string, content: string): Promise<string> {
+  const sha = hashBlob(content);
+  const dest = blobPath(dir, sha);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  try {
+    await fs.writeFile(dest, content, { encoding: "utf8", flag: "wx" });
+  } catch (err) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as { code?: unknown }).code)
+        : "";
+    if (code !== "EEXIST") throw err;
   }
-  const upd = await git(["update-ref", checkpointRefForTurn(turnId), sha]);
-  if (upd.code !== 0) throw gitFailed(upd, "git update-ref");
-  const reset = await git(["reset", "HEAD"]);
-  if (reset.code !== 0) throw gitFailed(reset, "git reset HEAD");
   return sha;
 }
 
-export async function restoreGitRepo(options: {
-  git: GitRunner;
-  sha: string;
-}): Promise<void> {
-  const { git, sha } = options;
-  if (!SHA_RE.test(sha)) {
-    throw new Error(`Invalid checkpoint sha: ${sha}`);
-  }
-  const reset = await git(["reset", "--hard", sha]);
-  if (reset.code !== 0) throw gitFailed(reset, "git reset --hard");
-  const clean = await git(["clean", "-fd"]);
-  if (clean.code !== 0) throw gitFailed(clean, "git clean -fd");
+async function readBlob(dir: string, sha: string): Promise<string> {
+  return fs.readFile(blobPath(dir, sha), "utf8");
 }
 
-export function createLocalGitRunner(cwd: string): GitRunner {
-  return async (args, options) => {
-    try {
-      const { stdout, stderr } = await execFileAsync(
-        "git",
-        ["-C", cwd, ...args],
-        {
-          env: { ...process.env, ...(options?.env ?? {}) },
-          encoding: "utf8"
-        }
-      );
-      return { code: 0, stdout: String(stdout), stderr: String(stderr) };
-    } catch (err) {
-      const e = err as {
-        code?: number | string;
-        stdout?: string;
-        stderr?: string;
-        message?: string;
-      };
-      return {
-        code: typeof e.code === "number" ? e.code : 1,
-        stdout: e.stdout ?? "",
-        stderr: e.stderr ?? e.message ?? String(err)
-      };
-    }
-  };
+type CheckpointTurnStore = {
+  getById: (id: string) => Promise<{
+    id: string;
+    sessionId: string;
+    workspaceCheckpoint: unknown;
+  } | null>;
+  setWorkspaceCheckpoint: (
+    id: string,
+    checkpoint: WorkspaceCheckpointV1
+  ) => Promise<unknown>;
+  listBySessionId: (sessionId: string) => Promise<
+    Array<{
+      id: string;
+      sessionId: string;
+      workspaceCheckpoint: unknown;
+    }>
+  >;
+};
+
+function defaultTurnStore(): CheckpointTurnStore {
+  return new ChatTurnRepository() as CheckpointTurnStore;
 }
 
-function createSandboxGitRunner(options: {
-  sessionId: string;
-  containerName: string;
-  cwd: string;
-}): GitRunner {
-  const { sessionId, containerName, cwd } = options;
-  return async (args, extra) => {
-    const result: ExecResult = await dockerExec({
-      container: containerName,
-      sessionId,
-      cwd,
-      argv: ["git", ...args],
-      env: extra?.env
-    });
-    return result;
-  };
-}
-
-function memberWorktrees(options: {
-  worktrees: Record<string, string> | undefined;
-  repoDir: string;
-  workingDir: string;
-}): Record<string, string> {
-  const { worktrees, repoDir, workingDir } = options;
-  if (worktrees && Object.keys(worktrees).length > 0) return worktrees;
-  return { [repoDir]: `${workingDir}/${repoDir}` };
-}
-
-export async function checkpointSessionWorkspace(options: {
+export async function recordTouchedFiles(options: {
   sessionId: string;
   turnId: string;
-}): Promise<Record<string, string>> {
-  const { sessionId, turnId } = options;
-  const turns = new ChatTurnRepository();
-  const existing = await turns.getById(turnId);
-  const already = parseWorkspaceCheckpoint(existing?.workspaceCheckpoint);
-  if (Object.keys(already).length > 0) return already;
-  await provisionSessionSandbox(sessionId);
-  const info = await getSessionRepoInfo(sessionId);
-  const worktrees = memberWorktrees({
-    worktrees: info.worktrees,
-    repoDir: info.repoDir,
-    workingDir: info.workingDir
-  });
-  const checkpoint: Record<string, string> = {};
-  for (const [repoName, cwd] of Object.entries(worktrees)) {
-    const git = createSandboxGitRunner({
-      sessionId,
-      containerName: info.containerName,
-      cwd
-    });
-    const sha = await checkpointGitRepo({ git, turnId });
-    if (sha) checkpoint[repoName] = sha;
+  files: TouchedFile[];
+  turns?: CheckpointTurnStore;
+}): Promise<WorkspaceCheckpointV1> {
+  const { sessionId, turnId, files } = options;
+  if (!TURN_ID_RE.test(turnId)) {
+    throw new Error(`Unsafe checkpoint turn id: ${turnId}`);
   }
+  const turns = options.turns ?? defaultTurnStore();
+  if (files.length === 0) {
+    const existing = await turns.getById(turnId);
+    return (
+      parseTouchedFileCheckpoint(existing?.workspaceCheckpoint) ?? {
+        version: 1,
+        files: []
+      }
+    );
+  }
+  const existingTurn = await turns.getById(turnId);
+  const current = parseTouchedFileCheckpoint(
+    existingTurn?.workspaceCheckpoint
+  ) ?? {
+    version: 1,
+    files: []
+  };
+  const seen = new Set(current.files.map((f) => f.path));
+  const dir = sessionCheckpointDir(sessionId, turnId);
+  const nextFiles = [...current.files];
+  for (const file of files) {
+    if (seen.has(file.path)) continue;
+    seen.add(file.path);
+    let blob: string | null = null;
+    if (file.before !== null) {
+      blob = await writeBlob(dir, file.before);
+    }
+    nextFiles.push({ path: file.path, op: file.op, blob });
+  }
+  const checkpoint: WorkspaceCheckpointV1 = { version: 1, files: nextFiles };
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    path.join(dir, "metadata.json"),
+    `${JSON.stringify(checkpoint, null, 2)}\n`,
+    "utf8"
+  );
   await turns.setWorkspaceCheckpoint(turnId, checkpoint);
   return checkpoint;
 }
 
-export async function restoreSessionWorkspace(options: {
-  sessionId: string;
-  checkpoint: Record<string, string>;
-}): Promise<{ restored: string[]; skipped: string[] }> {
-  const { sessionId, checkpoint } = options;
-  await provisionSessionSandbox(sessionId);
-  const info = await getSessionRepoInfo(sessionId);
-  const worktrees = memberWorktrees({
-    worktrees: info.worktrees,
-    repoDir: info.repoDir,
-    workingDir: info.workingDir
-  });
-  const restored: string[] = [];
-  const skipped: string[] = [];
-  for (const [repoName, sha] of Object.entries(checkpoint)) {
-    const cwd = worktrees[repoName];
-    if (!cwd) {
-      skipped.push(repoName);
-      continue;
-    }
-    const git = createSandboxGitRunner({
-      sessionId,
-      containerName: info.containerName,
-      cwd
-    });
-    const inside = await git(["rev-parse", "--is-inside-work-tree"]);
-    if (inside.code !== 0 || inside.stdout.trim() !== "true") {
-      skipped.push(repoName);
-      continue;
-    }
-    await restoreGitRepo({ git, sha });
-    restored.push(repoName);
+function knownRepos(info: SessionRepoInfo): Set<string> | undefined {
+  if (!info.worktrees) return undefined;
+  const keys = Object.keys(info.worktrees);
+  return keys.length > 0 ? new Set(keys) : undefined;
+}
+
+function sandboxAbs(info: SessionRepoInfo, rel: string): string {
+  try {
+    return resolveWorkspacePath(rel, { knownRepos: knownRepos(info) });
+  } catch {
+    return resolveWorkspacePath(rel);
   }
-  return { restored, skipped };
+}
+
+export async function restorePlanFromTurn(options: {
+  sessionId: string;
+  turnId: string;
+  turns?: CheckpointTurnStore;
+}): Promise<RestoreEntry[]> {
+  const { sessionId, turnId } = options;
+  const turns = options.turns ?? defaultTurnStore();
+  const rows = await turns.listBySessionId(sessionId);
+  const start = rows.findIndex((row) => row.id === turnId);
+  const range = start >= 0 ? rows.slice(start) : [];
+  if (range.length === 0) {
+    const single = await turns.getById(turnId);
+    if (single && single.sessionId === sessionId) range.push(single);
+  }
+  const earliest = new Map<string, RestoreEntry>();
+  for (const row of range) {
+    const parsed = parseTouchedFileCheckpoint(row.workspaceCheckpoint);
+    if (!parsed) continue;
+    const dir = sessionCheckpointDir(sessionId, row.id);
+    for (const file of parsed.files) {
+      if (earliest.has(file.path)) continue;
+      if (file.blob === null) {
+        earliest.set(file.path, { path: file.path, before: null });
+        continue;
+      }
+      const before = await readBlob(dir, file.blob);
+      earliest.set(file.path, { path: file.path, before });
+    }
+  }
+  return [...earliest.values()];
+}
+
+async function applyRestoredFile(options: {
+  sessionId: string;
+  info: SessionRepoInfo;
+  host: boolean;
+  entry: RestoreEntry;
+}): Promise<void> {
+  const { sessionId, info, host, entry } = options;
+  if (host) {
+    await applyHostRestore({ info, entry });
+    return;
+  }
+  let abs: string;
+  try {
+    abs = sandboxAbs(info, entry.path);
+  } catch {
+    abs = resolveWorkspacePath(entry.path);
+  }
+  if (entry.before === null) {
+    await deleteFileFromSandbox({
+      container: info.containerName,
+      absPath: abs,
+      sessionId
+    });
+    return;
+  }
+  await writeFileToSandbox({
+    container: info.containerName,
+    sessionId,
+    absPath: abs,
+    content: entry.before
+  });
+}
+
+async function applyHostRestore(options: {
+  info: SessionRepoInfo;
+  entry: RestoreEntry;
+}): Promise<void> {
+  const { info, entry } = options;
+  const memberRoots = hostFsAllowlistRoots(info);
+  const sessionRoot = path.resolve(info.hostWorkingDir ?? info.containerName);
+  let abs: string;
+  try {
+    abs = resolveHostFsPath({
+      info,
+      logicalAbsPath: sandboxAbs(info, entry.path)
+    });
+  } catch {
+    const segments = entry.path.split("/").filter((s) => s && s !== ".");
+    if (segments.some((s) => s === "..")) {
+      throw new Error(`Invalid restore path: ${entry.path}`);
+    }
+    abs = path.resolve(sessionRoot, ...segments);
+    assertUnderAllowlist(abs, [sessionRoot]);
+  }
+  if (entry.before === null) {
+    try {
+      await fs.unlink(abs);
+    } catch (err) {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code?: unknown }).code)
+          : "";
+      if (code !== "ENOENT") throw err;
+    }
+    return;
+  }
+  const roots = memberRoots.some(
+    (root) => abs === root || abs.startsWith(`${root}${path.sep}`)
+  )
+    ? memberRoots
+    : [sessionRoot];
+  await writeHostWorkspaceFile({
+    absPath: abs,
+    content: entry.before,
+    roots
+  });
 }
 
 export async function restoreSessionWorkspaceFromTurn(options: {
   sessionId: string;
   turnId: string | null;
+  turns?: CheckpointTurnStore;
 }): Promise<{ workspaceRestored: boolean }> {
   const { sessionId, turnId } = options;
   if (!turnId) return { workspaceRestored: false };
-  const turns = new ChatTurnRepository();
-  const turn = await turns.getById(turnId);
-  const checkpoint = parseWorkspaceCheckpoint(turn?.workspaceCheckpoint);
-  if (Object.keys(checkpoint).length === 0) {
-    return { workspaceRestored: false };
-  }
-  const { restored } = await restoreSessionWorkspace({
+  const plan = await restorePlanFromTurn({
     sessionId,
-    checkpoint
+    turnId,
+    turns: options.turns
   });
-  return { workspaceRestored: restored.length > 0 };
+  if (plan.length === 0) return { workspaceRestored: false };
+  await restoreSessionWorkspace({ sessionId, plan });
+  return { workspaceRestored: true };
+}
+
+export async function restoreSessionWorkspace(options: {
+  sessionId: string;
+  plan: RestoreEntry[];
+  info?: SessionRepoInfo;
+  host?: boolean;
+}): Promise<void> {
+  const { sessionId, plan } = options;
+  const info = options.info ?? (await resolveSandbox(sessionId));
+  const host =
+    options.host ??
+    (await (
+      await import("./sandboxRuntime/resolve.js")
+    ).isHostSession(sessionId));
+  for (const entry of plan) {
+    await applyRestoredFile({ sessionId, info, host, entry });
+  }
 }

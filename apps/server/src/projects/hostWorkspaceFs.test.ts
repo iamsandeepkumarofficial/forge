@@ -5,8 +5,10 @@ import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import {
   assertUnderAllowlist,
+  deleteHostWorkspaceFile,
   hostFsAllowlistRoots,
   listHostWorkspaceDir,
+  moveHostWorkspaceFile,
   readHostWorkspaceFile,
   resolveHostFsPath,
   searchHostWorkspace,
@@ -114,6 +116,29 @@ describe("hostWorkspaceFs", () => {
     assert.deepEqual(
       entries.find((e) => e.name === "frontend"),
       { name: "frontend", path: "frontend", isDir: true }
+    );
+  });
+
+  it("deletes and moves files but refuses directories", async () => {
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "forge-hfs-mv-"));
+    const roots = [tmp];
+    const src = path.join(tmp, "a.ts");
+    const dest = path.join(tmp, "nested", "b.ts");
+    await writeHostWorkspaceFile({ absPath: src, content: "keep", roots });
+    await moveHostWorkspaceFile({ fromAbs: src, toAbs: dest, roots });
+    assert.equal(await readHostWorkspaceFile(dest, roots), "keep");
+    await deleteHostWorkspaceFile(dest, roots);
+    assert.equal(await readHostWorkspaceFile(dest, roots), null);
+    const dir = path.join(tmp, "folder");
+    await fs.mkdir(dir);
+    await assert.rejects(deleteHostWorkspaceFile(dir, roots), /Not a file/);
+    await assert.rejects(
+      moveHostWorkspaceFile({
+        fromAbs: dir,
+        toAbs: path.join(tmp, "other"),
+        roots
+      }),
+      /Not a file/
     );
   });
 });

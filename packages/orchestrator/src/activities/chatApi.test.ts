@@ -2,7 +2,6 @@ import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   appendChatMessage,
-  checkpointChatWorkspace,
   ensureChatSandbox,
   finishChatTurn,
   getChatSystemPrompt,
@@ -59,27 +58,6 @@ describe("chatApi", () => {
     }) as typeof fetch;
     await ensureChatSandbox("s");
     assert.equal(called, true);
-  });
-
-  it("checkpointChatWorkspace posts sessionId", async () => {
-    const calls: Array<{ url: string; body: unknown }> = [];
-    globalThis.fetch = (async (input, init) => {
-      calls.push({
-        url: String(input),
-        body: init?.body ? JSON.parse(String(init.body)) : null
-      });
-      return new Response(
-        JSON.stringify({ checkpoint: { app: "a".repeat(40) } }),
-        { status: 200 }
-      );
-    }) as typeof fetch;
-    const map = await checkpointChatWorkspace({
-      sessionId: "s1",
-      turnId: "t1"
-    });
-    assert.equal(map.app, "a".repeat(40));
-    assert.ok(calls[0]?.url.includes("/checkpoint"));
-    assert.deepEqual(calls[0]?.body, { sessionId: "s1" });
   });
 
   it("finishChatTurn posts finish payload", async () => {

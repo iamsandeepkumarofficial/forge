@@ -87,6 +87,46 @@ export async function writeHostWorkspaceFile(options: {
   await fs.writeFile(options.absPath, options.content, "utf8");
 }
 
+export async function deleteHostWorkspaceFile(
+  absPath: string,
+  roots: string[]
+): Promise<void> {
+  assertUnderAllowlist(absPath, roots);
+  const st = await fs.lstat(absPath);
+  if (!st.isFile()) {
+    throw new Error("Not a file");
+  }
+  await fs.unlink(absPath);
+}
+
+export async function moveHostWorkspaceFile(options: {
+  fromAbs: string;
+  toAbs: string;
+  roots: string[];
+}): Promise<void> {
+  assertUnderAllowlist(options.fromAbs, options.roots);
+  assertUnderAllowlist(options.toAbs, options.roots);
+  const st = await fs.lstat(options.fromAbs);
+  if (!st.isFile()) {
+    throw new Error("Not a file");
+  }
+  await fs.mkdir(path.dirname(options.toAbs), { recursive: true });
+  await fs.rename(options.fromAbs, options.toAbs);
+}
+
+export async function hostWorkspaceFileExists(
+  absPath: string,
+  roots: string[]
+): Promise<boolean> {
+  assertUnderAllowlist(absPath, roots);
+  try {
+    const st = await fs.lstat(absPath);
+    return st.isFile();
+  } catch {
+    return false;
+  }
+}
+
 export async function listHostWorkspaceFiles(
   root: string,
   roots: string[]
