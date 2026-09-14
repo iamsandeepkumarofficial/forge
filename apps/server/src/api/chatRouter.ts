@@ -12,7 +12,14 @@ import {
   handlePutLlmSettings
 } from "./settingsHandlers.js";
 import {
+  handleGetRuntimeActivity,
+  handleStopRuntimeApp,
+  handleStopRuntimeSession
+} from "./runtimeActivityHandlers.js";
+import {
   handleListChatMessages,
+  handleDeleteMessagesFrom,
+  handleBranchSessionMessages,
   handleGetRunningTurn,
   handleStartChat,
   handleStreamTurn,
@@ -32,6 +39,19 @@ export function createChatRouter(): Router {
   router.put("/settings/llm", pocAuth, (req, res) => {
     return handlePutLlmSettings(req, res);
   });
+  router.get("/runtime/activity", pocAuth, (req, res) => {
+    return handleGetRuntimeActivity(req, res);
+  });
+  router.post(
+    "/runtime/activity/sessions/:sessionId/stop",
+    pocAuth,
+    (req, res) => {
+      return handleStopRuntimeSession(req, res);
+    }
+  );
+  router.post("/runtime/activity/apps/stop", pocAuth, (req, res) => {
+    return handleStopRuntimeApp(req, res);
+  });
   router.get("/models", pocAuth, (req, res) => {
     return handleModelsList(req, res);
   });
@@ -40,6 +60,16 @@ export function createChatRouter(): Router {
   });
   router.get("/sessions/:sessionId/messages", pocAuth, (req, res) => {
     return handleListChatMessages({ req, res, features, messages });
+  });
+  router.delete(
+    "/sessions/:sessionId/messages/from/:messageId",
+    pocAuth,
+    (req, res) => {
+      return handleDeleteMessagesFrom({ req, res, features, messages });
+    }
+  );
+  router.post("/sessions/:sessionId/branch", pocAuth, (req, res) => {
+    return handleBranchSessionMessages({ req, res, features, messages });
   });
   router.get("/sessions/:sessionId/turns/running", pocAuth, (req, res) => {
     return handleGetRunningTurn({ req, res, features, turns });

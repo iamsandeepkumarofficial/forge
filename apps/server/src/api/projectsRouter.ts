@@ -47,11 +47,11 @@ router.post("/", pocAuth, async (req, res) => {
   }
   try {
     if (localPath) {
-      const result = await projectService.connectLocalFolder(
+      const result = await projectService.connectLocalFolder({
         localPath,
-        (req as AuthedRequest).forgeUser.id,
-        name || undefined
-      );
+        userId: (req as AuthedRequest).forgeUser.id,
+        name: name || undefined
+      });
       return res.json(result);
     }
     const result = await projectService.connectGitUrl(
@@ -61,7 +61,11 @@ router.post("/", pocAuth, async (req, res) => {
     return res.json(result);
   } catch (error: unknown) {
     const message = errorMessage(error);
-    if (/Local folder path|does not exist|not a directory|Failed to copy/i.test(message)) {
+    if (
+      /Local folder path|does not exist|not a directory|Failed to copy/i.test(
+        message
+      )
+    ) {
       return res.status(N_400).json({ error: message });
     }
     if (message.includes("already")) {
@@ -209,9 +213,8 @@ router.get("/:projectId/parameters", pocAuth, async (req, res) => {
     if (!project) {
       return res.status(N_404).json({ error: "Project not found" });
     }
-    const { ParameterRepository } = await import(
-      "../catalog/parameterRepository.js"
-    );
+    const { ParameterRepository } =
+      await import("../catalog/parameterRepository.js");
     const paramRepo = new ParameterRepository();
     const parameters = await paramRepo.listProjectParameters(projectId);
     res.json({
@@ -238,9 +241,8 @@ router.put("/:projectId/parameters", pocAuth, async (req, res) => {
     if (!project) {
       return res.status(N_404).json({ error: "Project not found" });
     }
-    const { ParameterRepository } = await import(
-      "../catalog/parameterRepository.js"
-    );
+    const { ParameterRepository } =
+      await import("../catalog/parameterRepository.js");
     const paramRepo = new ParameterRepository();
     const saved = await paramRepo.upsertProjectParameter({
       projectId,
@@ -264,9 +266,8 @@ router.delete("/:projectId/parameters/:key", pocAuth, async (req, res) => {
     if (!project) {
       return res.status(N_404).json({ error: "Project not found" });
     }
-    const { ParameterRepository } = await import(
-      "../catalog/parameterRepository.js"
-    );
+    const { ParameterRepository } =
+      await import("../catalog/parameterRepository.js");
     const paramRepo = new ParameterRepository();
     await paramRepo.deleteProjectParameter(projectId, String(req.params.key));
     res.status(N_204).end();

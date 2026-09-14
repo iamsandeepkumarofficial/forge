@@ -53,7 +53,7 @@ export async function writeForgeLlmConfig(
   return next;
 }
 
-/** Prefer ~/.forge/config.json over process.env for OpenAI-compatible settings. */
+
 export async function resolveOpenAiCompatibleRuntime(): Promise<{
   baseUrl?: string;
   apiKey?: string;

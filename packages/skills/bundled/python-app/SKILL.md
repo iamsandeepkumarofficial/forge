@@ -33,13 +33,19 @@ Use `run_terminal` with `background: true` for large installs; poll logs until s
 ## Forge launch.json
 
 ```json
-{ "name": "api", "cwd": ".", "command": "python manage.py runserver 0.0.0.0:$PORT", "port": 3001, "type": "api" }
+{
+  "name": "api",
+  "cwd": ".",
+  "command": "python manage.py runserver 0.0.0.0:$PORT",
+  "port": 3001,
+  "type": "api"
+}
 ```
 
 In workspaces set `cwd` under the member (e.g. `bp-backend`). Use `upsert_launch_app` then `preview_start`. See `backend-app`, `db-migrations`.
 
 ## Env / DB
 
-- Prefer injected `DATABASE_URL` / `MONGODB_URI` after user-approved `provision_app_engine`.
+- Prefer injected `DATABASE_URL` / `MONGODB_URI` after user-approved `setup_project_infra` (and `install_project_infra` on local when binaries are missing).
 - Map Django `DATABASES` via env if the project supports it.
 - Run migrations via `run_terminal` before `preview_start` for APIs.

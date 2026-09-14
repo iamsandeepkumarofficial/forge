@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import type { Server } from "node:http";
 import { createGateway } from "./gateway.js";
 import { previewInternalRouter } from "./routes.js";
 import { defaultRouteStore, type RouteStore } from "./routeStore.js";
@@ -38,6 +39,15 @@ export function createPreviewApp(options: PreviewAppOptions = {}): Express {
       previewBaseDomain
     })
   );
-  app.use(createGateway({ store, token: "" }));
+  const gateway = createGateway({ store, token: "" });
+  app.use(gateway.web);
+  const listen = app.listen.bind(app);
+  app.listen = ((...args: unknown[]) => {
+    const server = (listen as (...listenArgs: unknown[]) => Server)(...args);
+    server.on("upgrade", (req, ...rest) => {
+      gateway.upgrade({ req, socket: rest[0], head: rest[1] });
+    });
+    return server;
+  }) as Express["listen"];
   return app;
 }

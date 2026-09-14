@@ -7,12 +7,20 @@ import type {
 import { ProjectRepository } from "../../catalog/projectRepository.js";
 import { WorkspaceRepository } from "../../catalog/workspaceRepository.js";
 import {
-  findDependsOnCycle,
   normalizeRepoName,
   validateWorkspaceRoutes
 } from "./workspaceWiring.js";
 import { scheduleWorkspaceHealthAnalysis } from "./workspaceHealthJob.js";
+import {
+  assertNoDependsCycle,
+  buildProposedDependsGraph,
+  resolveNextRepoName,
+  rewriteDependsOnForRename,
+  rewriteRoutesForRename,
+  validateDependsOn
+} from "./workspaceMemberUpdate.js";
 
+const N_400 = 400;
 const N_403 = 403;
 const N_404 = 404;
 const N_409 = 409;
@@ -25,10 +33,36 @@ export type WorkspaceDetail = Workspace & {
   members: WorkspaceMemberView[];
 };
 
-function httpError(status: number, message: string): Error & { status: number } {
+function httpError(
+  status: number,
+  message: string
+): Error & { status: number } {
   const err = new Error(message) as Error & { status: number };
   err.status = status;
   return err;
+}
+
+function memberPatchFromUpdate(options: {
+  nextRepoName: string;
+  nextDependsOn: string[];
+  patch: {
+    env?: Record<string, string>;
+    sortOrder?: number;
+    sourceRef?: string | null;
+  };
+}) {
+  const { nextRepoName, nextDependsOn, patch } = options;
+  return {
+    repoName: nextRepoName,
+    dependsOn: nextDependsOn,
+    ...(patch.env != null ? { env: patch.env } : {}),
+    ...(typeof patch.sortOrder === "number"
+      ? { sortOrder: patch.sortOrder }
+      : {}),
+    ...(patch.sourceRef !== undefined
+      ? { sourceRef: patch.sourceRef?.trim() || null }
+      : {})
+  };
 }
 
 function defaultRepoNameFromProject(project: Project): string {
@@ -58,7 +92,7 @@ export class WorkspaceService {
   ): Promise<WorkspaceDetail> {
     const trimmed = name.trim();
     if (!trimmed) {
-      throw httpError(400, "name is required");
+      throw httpError(N_400, "name is required");
     }
     const ws = await this.workspaceRepo.create({
       userId,
@@ -85,47 +119,51 @@ export class WorkspaceService {
   async deleteWorkspace(workspaceId: string, userId: string): Promise<void> {
     await this.requireOwnedWorkspace(workspaceId, userId);
     await this.workspaceRepo.delete(workspaceId);
+    const { removeEntireWorkspaceCopies } =
+      await import("../../projects/workspaceMaterialize.js");
+    await removeEntireWorkspaceCopies(workspaceId);
   }
 
-  async renameWorkspace(
-    workspaceId: string,
-    userId: string,
-    name: string
-  ): Promise<WorkspaceDetail> {
-    const trimmed = name.trim();
+  async renameWorkspace(options: {
+    workspaceId: string;
+    userId: string;
+    name: string;
+  }): Promise<WorkspaceDetail> {
+    const trimmed = options.name.trim();
     if (!trimmed) {
-      throw httpError(400, "name is required");
+      throw httpError(N_400, "name is required");
     }
-    await this.requireOwnedWorkspace(workspaceId, userId);
-    await this.workspaceRepo.updateName(workspaceId, trimmed);
-    return this.getWorkspaceDetail(workspaceId, userId);
+    await this.requireOwnedWorkspace(options.workspaceId, options.userId);
+    await this.workspaceRepo.updateName(options.workspaceId, trimmed);
+    return this.getWorkspaceDetail(options.workspaceId, options.userId);
   }
 
-  async setRoutes(
-    workspaceId: string,
-    userId: string,
-    routes: WorkspaceRoute[]
-  ): Promise<WorkspaceDetail> {
-    await this.requireOwnedWorkspace(workspaceId, userId);
-    const members = await this.workspaceRepo.listMembers(workspaceId);
+  async setRoutes(options: {
+    workspaceId: string;
+    userId: string;
+    routes: WorkspaceRoute[];
+  }): Promise<WorkspaceDetail> {
+    await this.requireOwnedWorkspace(options.workspaceId, options.userId);
+    const members = await this.workspaceRepo.listMembers(options.workspaceId);
     const names = new Set(members.map((m) => m.repoName));
-    const normalized = validateWorkspaceRoutes(routes, names);
-    await this.workspaceRepo.updateRoutes(workspaceId, normalized);
-    scheduleWorkspaceHealthAnalysis(workspaceId);
-    return this.getWorkspaceDetail(workspaceId, userId);
+    const normalized = validateWorkspaceRoutes(options.routes, names);
+    await this.workspaceRepo.updateRoutes(options.workspaceId, normalized);
+    scheduleWorkspaceHealthAnalysis(options.workspaceId);
+    return this.getWorkspaceDetail(options.workspaceId, options.userId);
   }
 
-  async addProject(
-    workspaceId: string,
-    userId: string,
+  async addProject(options: {
+    workspaceId: string;
+    userId: string;
     input: {
       projectId: string;
       repoName?: string;
       dependsOn?: string[];
       env?: Record<string, string>;
       sortOrder?: number;
-    }
-  ): Promise<WorkspaceDetail> {
+    };
+  }): Promise<WorkspaceDetail> {
+    const { workspaceId, userId, input } = options;
     await this.requireOwnedWorkspace(workspaceId, userId);
     const project = await this.projectRepo.getById(input.projectId);
     if (!project) {
@@ -155,10 +193,10 @@ export class WorkspaceService {
       );
     }
     const members = await this.workspaceRepo.listMembers(workspaceId);
-    const dependsOn = this.validateDependsOn(
-      input.dependsOn ?? [],
-      new Set(members.map((m) => m.repoName))
-    );
+    const dependsOn = validateDependsOn({
+      dependsOn: input.dependsOn ?? [],
+      memberNames: new Set(members.map((m) => m.repoName))
+    });
     const sortOrder =
       typeof input.sortOrder === "number"
         ? input.sortOrder
@@ -178,23 +216,33 @@ export class WorkspaceService {
     return this.getWorkspaceDetail(workspaceId, userId);
   }
 
-  async removeProject(
-    workspaceId: string,
-    userId: string,
-    projectId: string
-  ): Promise<WorkspaceDetail> {
+  async removeProject(options: {
+    workspaceId: string;
+    userId: string;
+    projectId: string;
+  }): Promise<WorkspaceDetail> {
+    const { workspaceId, userId, projectId } = options;
     await this.requireOwnedWorkspace(workspaceId, userId);
     const member = await this.workspaceRepo.getMember(workspaceId, projectId);
     if (!member) {
       throw httpError(N_404, "Project is not a member of this workspace");
     }
     await this.workspaceRepo.removeMember(workspaceId, projectId);
-    // Drop dependsOn / route references to the removed repo.
+    const { removeWorkspaceMemberCopy } =
+      await import("../../projects/workspaceMaterialize.js");
+    await removeWorkspaceMemberCopy({
+      workspaceId,
+      repoName: member.repoName
+    });
     const remaining = await this.workspaceRepo.listMembers(workspaceId);
     for (const m of remaining) {
       if (m.dependsOn.includes(member.repoName)) {
-        await this.workspaceRepo.updateMember(workspaceId, m.projectId, {
-          dependsOn: m.dependsOn.filter((d) => d !== member.repoName)
+        await this.workspaceRepo.updateMember({
+          workspaceId,
+          projectId: m.projectId,
+          patch: {
+            dependsOn: m.dependsOn.filter((d) => d !== member.repoName)
+          }
         });
       }
     }
@@ -213,39 +261,31 @@ export class WorkspaceService {
     return this.getWorkspaceDetail(workspaceId, userId);
   }
 
-  async updateMember(
-    workspaceId: string,
-    userId: string,
-    projectId: string,
+  async updateMember(options: {
+    workspaceId: string;
+    userId: string;
+    projectId: string;
     patch: {
       repoName?: string;
       dependsOn?: string[];
       env?: Record<string, string>;
       sortOrder?: number;
-    }
-  ): Promise<WorkspaceDetail> {
+      sourceRef?: string | null;
+    };
+  }): Promise<WorkspaceDetail> {
+    const { workspaceId, userId, projectId, patch } = options;
     await this.requireOwnedWorkspace(workspaceId, userId);
     const member = await this.workspaceRepo.getMember(workspaceId, projectId);
     if (!member) {
       throw httpError(N_404, "Project is not a member of this workspace");
     }
     const members = await this.workspaceRepo.listMembers(workspaceId);
-    const nextRepoName =
-      patch.repoName != null
-        ? normalizeRepoName(patch.repoName)
-        : member.repoName;
-    if (nextRepoName !== member.repoName) {
-      const clash = await this.workspaceRepo.findMemberByRepoName(
-        workspaceId,
-        nextRepoName
-      );
-      if (clash) {
-        throw httpError(
-          N_409,
-          `repoName "${nextRepoName}" is already used in this workspace`
-        );
-      }
-    }
+    const nextRepoName = await resolveNextRepoName({
+      workspaceRepo: this.workspaceRepo,
+      workspaceId,
+      member,
+      patchRepoName: patch.repoName
+    });
     const memberNames = new Set(
       members.map((m) =>
         m.projectId === projectId ? nextRepoName : m.repoName
@@ -253,90 +293,48 @@ export class WorkspaceService {
     );
     const nextDependsOn =
       patch.dependsOn != null
-        ? this.validateDependsOn(patch.dependsOn, memberNames, nextRepoName)
+        ? validateDependsOn({
+            dependsOn: patch.dependsOn,
+            memberNames,
+            selfName: nextRepoName
+          })
         : member.dependsOn.map((d) =>
             d === member.repoName ? nextRepoName : d
           );
-    const proposed = members.map((m) =>
-      m.projectId === projectId
-        ? {
-            repoName: nextRepoName,
-            dependsOn: nextDependsOn
-          }
-        : {
-            repoName:
-              m.repoName === member.repoName && nextRepoName !== member.repoName
-                ? m.repoName
-                : m.repoName,
-            dependsOn: m.dependsOn.map((d) =>
-              d === member.repoName ? nextRepoName : d
-            )
-          }
-    );
-    // When renaming, rewrite other members' dependsOn references.
-    if (nextRepoName !== member.repoName) {
-      for (const m of members) {
-        if (m.projectId === projectId) continue;
-        if (!m.dependsOn.includes(member.repoName)) continue;
-        await this.workspaceRepo.updateMember(workspaceId, m.projectId, {
-          dependsOn: m.dependsOn.map((d) =>
-            d === member.repoName ? nextRepoName : d
-          )
-        });
-      }
-    }
-    const cycle = findDependsOnCycle(proposed);
-    if (cycle) {
-      throw httpError(400, `dependsOn cycle: ${cycle.join(" -> ")}`);
-    }
-    await this.workspaceRepo.updateMember(workspaceId, projectId, {
-      repoName: nextRepoName,
-      dependsOn: nextDependsOn,
-      ...(patch.env != null ? { env: patch.env } : {}),
-      ...(typeof patch.sortOrder === "number"
-        ? { sortOrder: patch.sortOrder }
-        : {})
+    const proposed = buildProposedDependsGraph({
+      members,
+      projectId,
+      member,
+      nextRepoName,
+      nextDependsOn
     });
-    if (nextRepoName !== member.repoName) {
-      const ws = await this.workspaceRepo.getById(workspaceId);
-      if (ws?.routes?.length) {
-        const routes = ws.routes.map((r) =>
-          r.target === member.repoName
-            ? { ...r, target: nextRepoName }
-            : r
-        );
-        await this.workspaceRepo.updateRoutes(workspaceId, routes);
-      }
-    }
+    await rewriteDependsOnForRename({
+      workspaceRepo: this.workspaceRepo,
+      workspaceId,
+      members,
+      projectId,
+      oldRepoName: member.repoName,
+      nextRepoName
+    });
+    assertNoDependsCycle(proposed);
+    await this.workspaceRepo.updateMember({
+      workspaceId,
+      projectId,
+      patch: memberPatchFromUpdate({
+        nextRepoName,
+        nextDependsOn,
+        patch
+      })
+    });
+    await rewriteRoutesForRename({
+      workspaceRepo: this.workspaceRepo,
+      workspaceId,
+      oldRepoName: member.repoName,
+      nextRepoName
+    });
     await this.workspaceRepo.updateLastActivity(workspaceId);
     scheduleWorkspaceHealthAnalysis(workspaceId);
     return this.getWorkspaceDetail(workspaceId, userId);
-  }
-
-  private validateDependsOn(
-    dependsOn: string[],
-    memberNames: Set<string>,
-    selfName?: string
-  ): string[] {
-    if (!Array.isArray(dependsOn)) {
-      throw httpError(400, "dependsOn must be an array of repoNames");
-    }
-    const out: string[] = [];
-    for (const raw of dependsOn) {
-      const name = typeof raw === "string" ? raw.trim() : "";
-      if (!name) continue;
-      if (selfName && name === selfName) {
-        throw httpError(400, "A member cannot dependOn itself");
-      }
-      if (!memberNames.has(name)) {
-        throw httpError(
-          400,
-          `dependsOn "${name}" is not a member of this workspace`
-        );
-      }
-      if (!out.includes(name)) out.push(name);
-    }
-    return out;
   }
 
   private async requireOwnedWorkspace(

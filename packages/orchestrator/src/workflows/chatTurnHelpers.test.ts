@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  assistantTextForFinalize,
+  EMPTY_ASSISTANT_PLACEHOLDER,
   buildResult,
   failureMessage,
   isLocalChatProvider,
@@ -64,6 +66,41 @@ describe("chatTurnHelpers", () => {
       toolNames: ["read_file"],
       finalTextPreview: "hello"
     });
+  });
+
+  it("assistantTextForFinalize keeps a placeholder only when the turn is empty", () => {
+    assert.equal(
+      assistantTextForFinalize({
+        text: "hello",
+        reasoningText: "thinking",
+        toolCallCount: 1
+      }),
+      "hello"
+    );
+    assert.equal(
+      assistantTextForFinalize({
+        text: "  ",
+        reasoningText: "Perfect, I retrieved it.",
+        toolCallCount: 0
+      }),
+      ""
+    );
+    assert.equal(
+      assistantTextForFinalize({
+        text: "",
+        reasoningText: "",
+        toolCallCount: 1
+      }),
+      ""
+    );
+    assert.equal(
+      assistantTextForFinalize({
+        text: "",
+        reasoningText: "  ",
+        toolCallCount: 0
+      }),
+      EMPTY_ASSISTANT_PLACEHOLDER
+    );
   });
 
   it("parseAppliedMode accepts known modes", () => {

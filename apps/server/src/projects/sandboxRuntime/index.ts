@@ -1,13 +1,17 @@
 export type {
   BindMount,
   CreateOpts,
+  EnsurePublishedPortReadyInput,
   ExecOpts,
   ExecResult,
   PreviewBinding,
+  ResolveListenPortInput,
   RuntimeExecInput,
   SandboxRuntime,
   SandboxRuntimeErrorCode,
   SandboxRuntimeKind,
+  SessionRuntimeStatus,
+  SessionRuntimeStatusKind,
   WorkspaceHandle
 } from "./types.js";
 export { SandboxRuntimeError } from "./types.js";
@@ -19,9 +23,42 @@ export {
   sessionPreviewHostnameForPort
 } from "./hostnames.js";
 export { createDockerSandboxRuntime } from "./dockerAdapter.js";
+export {
+  createHostSandboxRuntime,
+  listHostActiveSessionIds,
+  mapHostLogicalPath,
+  workspaceMountsFromBinds,
+  extraWritableRootsForHostRoot
+} from "./hostAdapter.js";
 export { createK8sSandboxRuntime, sandboxResourceName } from "./k8sAdapter.js";
 export {
+  hostSandboxEnabled,
+  wrapHostCommand,
+  defaultWritableRoots,
+  resolveWrappedArgv
+} from "./osSandbox.js";
+export {
+  allocateSessionPort,
+  HOST_PORT_CEILING,
+  HOST_PORT_FLOOR,
+  hostPublishedAppPortsEnv,
+  isHostRegistryPort,
+  listSessionPortAllocations,
+  loadSessionPortRegistry,
+  portsForSession,
+  releaseSessionPort,
+  releaseSessionPorts,
+  resetSessionPortRegistryForTests
+} from "./sessionPortRegistry.js";
+export {
+  cloudSandboxKindFromEnv,
+  executionTargetToKind,
+  forgetSessionRuntimeKind,
   getSandboxRuntime,
+  getSandboxRuntimeByKind,
+  isHostSession,
+  parseExecutionTarget,
+  rememberSessionExecutionTarget,
   resetSandboxRuntimeCache,
-  resolveSandboxRuntimeKind
+  resolveSandboxRuntimeKindForSession
 } from "./resolve.js";

@@ -101,7 +101,7 @@ export async function fetchWithCurlFallback(options: {
     return {
       success: false,
       output:
-        "web_fetch failed: Playwright is not installed in the session sandbox image, and curl/wget fetch also failed. Install Playwright in FORGE_SANDBOX_IMAGE.",
+        "web_fetch failed: Playwright is not available, and curl/wget fetch also failed. In host mode install Playwright browsers (e.g. `npx playwright install`) or ensure curl/wget is on PATH.",
       metadata: { url, code: "empty", engine: "none", sessionId }
     };
   }
@@ -117,7 +117,7 @@ export async function fetchWithCurlFallback(options: {
       truncated,
       engine: "curl-html",
       sessionId,
-      note: "Playwright not found in sandbox image; used in-container curl fallback"
+      note: "Playwright not found; used curl/wget fallback"
     }
   };
 }

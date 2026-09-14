@@ -5,17 +5,15 @@ import { stopChatTurn } from "./chat-pane-stop.js";
 import { useChatHistory } from "./use-chat-history.js";
 import { useInitialPromptSend } from "./use-initial-prompt-send.js";
 import { useChatPaneSessionState } from "./use-chat-pane-session-state.js";
+import { useResumeRunningTurn } from "./use-resume-running-turn.js";
 import { useScrollStick } from "./use-scroll-stick.js";
 
 type SessionOptions = {
   sessionId: string;
   projectId: string;
   chatId: string;
-  /** When set (workspace chats), used for initial-prompt state clear path. */
   workspaceId?: string;
-  /** Skip location replace (embedded drawer). */
   skipInitialPromptNavigate?: boolean;
-  /** Send CTA prompt even when the chat already has messages. */
   sendInitialPromptEvenIfNotEmpty?: boolean;
   initialPrompt?: string;
   provider: LlmProvider;
@@ -25,17 +23,53 @@ type SessionOptions = {
   onAppliedMode?: (mode: ComposerAgentMode) => void;
 };
 
-export function useChatPaneSession(options: SessionOptions) {
-  const o = options;
+function clearStatePathFor(options: SessionOptions): string | undefined {
+  if (options.skipInitialPromptNavigate) return undefined;
+  if (options.projectId) {
+    return `/projects/${options.projectId}/chats/${options.chatId}`;
+  }
+  if (options.workspaceId) {
+    return `/workspaces/${options.workspaceId}/chats/${options.chatId}`;
+  }
+  return undefined;
+}
+
+function useSessionTransport(o: SessionOptions) {
   const s = useChatPaneSessionState();
   const history = useChatHistory(o.sessionId);
-  const { scrollerRef, stickToBottomRef } = useScrollStick({
+  const scroll = useScrollStick({
     messageCount: history.messages.length,
     streamingText: s.streamingText,
+    streamingReasoning: s.streamingReasoning,
     isStreaming: s.isStreaming,
     toolPartCount: s.liveToolParts.length
   });
-  const sendText = (raw: string, sendOpts?: { mode?: ChatMode }) =>
+  const { resumeChecked } = useResumeRunningTurn({
+    sessionId: o.sessionId,
+    historyLoaded: history.historyLoaded,
+    status: s.status,
+    streamAbortRef: s.streamAbortRef,
+    setStatus: s.setStatus,
+    setActiveTurnId: s.setActiveTurnId,
+    setStreamingText: s.setStreamingText,
+    setStreamingReasoning: s.setStreamingReasoning,
+    setLiveToolParts: s.setLiveToolParts,
+    flushLiveStep: s.flushLiveStep,
+    clearLiveTurn: s.clearLiveTurn,
+    setError: s.setError,
+    setMessages: history.setMessages,
+    onAppliedMode: o.onAppliedMode
+  });
+  return { s, history, scroll, resumeChecked };
+}
+
+export function useChatPaneSession(options: SessionOptions) {
+  const o = options;
+  const { s, history, scroll, resumeChecked } = useSessionTransport(o);
+  const sendText = (
+    raw: string,
+    sendOpts?: { mode?: ChatMode; truncateFromMessageId?: string }
+  ) =>
     sendChatPaneText({
       raw,
       attachments: s.attachments,
@@ -49,46 +83,36 @@ export function useChatPaneSession(options: SessionOptions) {
       setAttachments: s.setAttachments,
       setError: s.setError,
       setStreamingText: s.setStreamingText,
+      setStreamingReasoning: s.setStreamingReasoning,
       setLiveToolParts: s.setLiveToolParts,
+      flushLiveStep: s.flushLiveStep,
+      clearLiveTurn: s.clearLiveTurn,
       setStatus: s.setStatus,
       setMessages: history.setMessages,
       setActiveTurnId: s.setActiveTurnId,
-      stickToBottomRef,
+      stickToBottomRef: scroll.stickToBottomRef,
       streamAbortRef: s.streamAbortRef,
-      onAppliedMode: o.onAppliedMode
+      onAppliedMode: o.onAppliedMode,
+      truncateFromMessageId: sendOpts?.truncateFromMessageId
     });
   useInitialPromptSend({
     initialPrompt: o.initialPrompt,
-    historyLoaded: history.historyLoaded,
+    historyLoaded: history.historyLoaded && resumeChecked,
     status: s.status,
     messageCount: history.messages.length,
     sendEvenIfNotEmpty: o.sendInitialPromptEvenIfNotEmpty,
-    clearStatePath: o.skipInitialPromptNavigate
-      ? undefined
-      : o.projectId
-        ? `/projects/${o.projectId}/chats/${o.chatId}`
-        : o.workspaceId
-          ? `/workspaces/${o.workspaceId}/chats/${o.chatId}`
-          : undefined,
+    clearStatePath: clearStatePathFor(o),
     sendText: (raw) => {
       void sendText(raw);
     }
   });
   return {
-    input: s.input,
-    setInput: s.setInput,
-    attachments: s.attachments,
-    setAttachments: s.setAttachments,
+    ...s,
     messages: history.messages,
-    status: s.status,
-    error: s.error,
+    historyLoaded: history.historyLoaded,
     clearError: () => s.setError(null),
-    streamingText: s.streamingText,
-    liveToolParts: s.liveToolParts,
-    scrollerRef,
-    stickToBottomRef,
-    isStreaming: s.isStreaming,
-    canSend: s.canSend,
+    scrollerRef: scroll.scrollerRef,
+    stickToBottomRef: scroll.stickToBottomRef,
     sendText,
     handleSend: async () => {
       if (!s.canSend) return;
@@ -103,7 +127,9 @@ export function useChatPaneSession(options: SessionOptions) {
         setStatus: s.setStatus,
         setMessages: history.setMessages,
         setStreamingText: s.setStreamingText,
-        setLiveToolParts: s.setLiveToolParts
-      })
+        setStreamingReasoning: s.setStreamingReasoning,
+        setLiveToolParts: s.setLiveToolParts,
+        clearLiveTurn: s.clearLiveTurn
+      }) as Promise<void>
   };
 }

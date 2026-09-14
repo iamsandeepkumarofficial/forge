@@ -1,37 +1,122 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   appLogsByStream,
-  buildAppStreams,
-  buildJobStreams,
-  countRunningStreams,
-  formatShellEntry,
-  jobNameFromCommand,
-  shouldRunInBackground
+  applyTrackedRunningState,
+  countRunningTabs,
+  mergeApiTabsWithPinnedJobs,
+  pickActiveTab,
+  pinnedJobTab,
+  pruneHiddenTabs,
+  visibleTabs
 } from "./terminal-model";
 
 describe("terminal-model", () => {
-  it("treats watch/tail as long-running", () => {
-    expect(shouldRunInBackground("pnpm test --watch")).toBe(true);
-    expect(shouldRunInBackground("tail -f /tmp/out")).toBe(true);
-    expect(shouldRunInBackground("pnpm test")).toBe(false);
-    expect(shouldRunInBackground("grep -w foo")).toBe(false);
-  });
-
-  it("names user jobs from the command", () => {
-    vi.spyOn(Date, "now").mockReturnValue(0xabc);
-    expect(jobNameFromCommand("pnpm test")).toMatch(/^u-pnpm-test-/);
-  });
-
-  it("builds app and job streams and counts running ones", () => {
-    const streams = [
-      ...buildAppStreams([{ name: "web", running: true }]),
-      ...buildJobStreams([
-        { name: "install", running: true, command: "pnpm i" }
-      ])
-    ];
-    expect(streams.map((s) => s.id)).toEqual(["app:web", "job:install"]);
-    expect(countRunningStreams(streams)).toBe(2);
+  it("maps app logs by stream id", () => {
     expect(appLogsByStream({ web: "ok" })).toEqual({ "app:web": "ok" });
-    expect(formatShellEntry("ls", "a\n")).toBe("$ ls\na");
+  });
+
+  it("picks active tab and prunes hidden ids", () => {
+    const tabs = [
+      {
+        id: "main",
+        kind: "shell" as const,
+        label: "Shell",
+        running: false,
+        closable: false
+      },
+      {
+        id: "app:web",
+        kind: "app" as const,
+        label: "web",
+        running: true,
+        closable: true
+      }
+    ];
+    expect(
+      pickActiveTab({ tabs, preferredId: "app:web", hidden: new Set() })
+    ).toBe("app:web");
+    expect(
+      pickActiveTab({ tabs, preferredId: "missing", hidden: new Set() })
+    ).toBe("main");
+    const hidden = new Set(["app:web"]);
+    expect(visibleTabs(tabs, hidden).map((tab) => tab.id)).toEqual(["main"]);
+    expect(pruneHiddenTabs(hidden, [{ ...tabs[0]! }]).has("app:web")).toBe(
+      false
+    );
+  });
+
+  it("counts running app and job tabs", () => {
+    expect(
+      countRunningTabs([
+        {
+          id: "main",
+          kind: "shell",
+          label: "Shell",
+          running: false,
+          closable: false
+        },
+        {
+          id: "app:web",
+          kind: "app",
+          label: "web",
+          running: true,
+          closable: true
+        },
+        pinnedJobTab("install", true)
+      ])
+    ).toBe(2);
+  });
+
+  it("keeps pinned jobs when merging API tabs", () => {
+    const merged = mergeApiTabsWithPinnedJobs({
+      apiTabs: [
+        {
+          id: "main",
+          kind: "shell",
+          label: "Shell",
+          running: false,
+          closable: false
+        }
+      ],
+      previous: [pinnedJobTab("install", true)],
+      jobRunning: { install: false }
+    });
+    expect(merged.map((tab) => tab.id)).toEqual(["main", "job:install"]);
+    expect(merged[1]?.running).toBe(false);
+  });
+
+  it("applies tracked app/job running state without HTTP", () => {
+    const next = applyTrackedRunningState(
+      [
+        {
+          id: "main",
+          kind: "shell",
+          label: "Shell",
+          running: false,
+          closable: false
+        },
+        pinnedJobTab("install", true)
+      ],
+      { trackedApps: ["web"], trackedJobs: [] }
+    );
+    expect(next.map((tab) => tab.id).sort()).toEqual(["app:web", "main"]);
+    expect(next.find((tab) => tab.id === "app:web")?.running).toBe(true);
+  });
+
+  it("adds tracked job tabs and drops finished jobs", () => {
+    const next = applyTrackedRunningState(
+      [
+        {
+          id: "main",
+          kind: "shell",
+          label: "Shell",
+          running: false,
+          closable: false
+        }
+      ],
+      { trackedApps: [], trackedJobs: ["install"] }
+    );
+    expect(next.map((tab) => tab.id)).toEqual(["main", "job:install"]);
+    expect(next.find((tab) => tab.id === "job:install")?.running).toBe(true);
   });
 });

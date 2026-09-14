@@ -24,17 +24,20 @@ describe("DashboardEmptyStateView", () => {
       handleSelectFolder: vi.fn(),
       handleConnectPath: vi.fn()
     };
+    const onShowActivity = vi.fn();
     render(
       <MemoryRouter>
         <DashboardEmptyStateView
           state={state as never}
           onImportSectionRef={vi.fn()}
+          onShowActivity={onShowActivity}
         />
       </MemoryRouter>
     );
     expect(screen.getByPlaceholderText(/I want to build/i)).toBeTruthy();
     expect(screen.getByLabelText("Select folder")).toBeTruthy();
     expect(screen.getByLabelText("Settings")).toBeTruthy();
+    expect(screen.getByLabelText("Activity")).toBeTruthy();
     expect(screen.queryByText(/Workspaces/i)).toBeNull();
   });
 });

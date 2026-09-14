@@ -18,6 +18,8 @@ import {
 import type { BindMount, NamedVolumeMount } from "../sandboxRuntime/types.js";
 
 const execFileAsync = promisify(execFile);
+const N_20 = 20;
+const N_250 = 250;
 
 function sandboxDockerfilePath(image: string): string {
   const here = fileURLToPath(import.meta.url);
@@ -42,9 +44,7 @@ async function imageExists(image: string): Promise<boolean> {
   }
 }
 
-export async function resolveSandboxImage(
-  preferred?: string
-): Promise<string> {
+export async function resolveSandboxImage(preferred?: string): Promise<string> {
   const configured = process.env.FORGE_SANDBOX_IMAGE?.trim();
   if (configured) {
     return configured;
@@ -100,7 +100,9 @@ export async function ensureVolume(sessionId: string): Promise<string> {
   return name;
 }
 
-async function bootstrapSandboxTools(containerName: string): Promise<void> {
+async function bootstrapSandboxToolsRequired(
+  containerName: string
+): Promise<void> {
   await docker([
     "exec",
     containerName,
@@ -109,11 +111,26 @@ async function bootstrapSandboxTools(containerName: string): Promise<void> {
     "(command -v git >/dev/null 2>&1 || " +
       "(command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y --no-install-recommends git) || " +
       "apk add --no-cache git >/dev/null 2>&1 || true); " +
-      "(command -v node >/dev/null 2>&1 && " +
-      "(node -e \"require('playwright')\" >/dev/null 2>&1 || " +
-      "(npm install -g playwright@1.49.1 && playwright install --with-deps chromium) || true) || true); " +
       "git config --global --replace-all safe.directory '*' >/dev/null 2>&1 || true"
   ]);
+}
+
+function bootstrapSandboxToolsOptional(containerName: string): void {
+  void docker([
+    "exec",
+    containerName,
+    "sh",
+    "-c",
+    "(command -v node >/dev/null 2>&1 && " +
+      "(node -e \"require('playwright')\" >/dev/null 2>&1 || " +
+      "(npm install -g playwright@1.49.1 && playwright install --with-deps chromium) || true) || true)"
+  ]).catch((err) => {
+    console.warn(
+      `[sandbox] optional bootstrap failed for ${containerName}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  });
 }
 
 async function inspectContainer(name: string): Promise<{
@@ -178,7 +195,12 @@ function namedVolumeArgs(vols: NamedVolumeMount[] | undefined): string[] {
 }
 
 function depsVolLabelValue(vols: NamedVolumeMount[] | undefined): string {
-  return vols?.map((v) => v.volumeName).sort().join(",") ?? "";
+  return (
+    vols
+      ?.map((v) => v.volumeName)
+      .sort()
+      .join(",") ?? ""
+  );
 }
 
 async function createSandboxContainer(options: {
@@ -258,16 +280,18 @@ export type EnsureContainerOpts = {
 };
 
 export async function ensureContainer(
-  sessionId: string,
-  volumeName: string,
-  opts?: EnsureContainerOpts
+  options: {
+    sessionId: string;
+    volumeName: string;
+  } & EnsureContainerOpts
 ): Promise<string> {
+  const { sessionId, volumeName } = options;
+  const opts = options;
   const name = sandboxContainerName(sessionId);
   const portBase = sessionHostPortBase(sessionId);
-  const preferredImage =
-    opts?.image?.trim() || preferredSandboxImageName();
-  const desiredBind = workspaceBindHost(opts?.bindMounts) ?? "";
-  const desiredDeps = depsVolLabelValue(opts?.namedVolumes);
+  const preferredImage = opts.image?.trim() || preferredSandboxImageName();
+  const desiredBind = workspaceBindHost(opts.bindMounts) ?? "";
+  const desiredDeps = depsVolLabelValue(opts.namedVolumes);
   let state = await inspectContainer(name);
   const wrongPorts = state.exists && state.portBaseLabel !== String(portBase);
   const wrongImage =
@@ -276,8 +300,7 @@ export async function ensureContainer(
     state.imageName !== preferredImage;
   const wrongBind =
     state.exists && (state.bindWorkspaceLabel || "") !== desiredBind;
-  const wrongDeps =
-    state.exists && (state.depsVolLabel || "") !== desiredDeps;
+  const wrongDeps = state.exists && (state.depsVolLabel || "") !== desiredDeps;
   if (wrongPorts || wrongImage || wrongBind || wrongDeps) {
     await execFileAsync("docker", ["rm", "-f", name]).catch(() => {});
     state = {
@@ -307,7 +330,8 @@ export async function ensureContainer(
     needsBootstrap = true;
   }
   if (needsBootstrap) {
-    await bootstrapSandboxTools(name);
+    await bootstrapSandboxToolsRequired(name);
+    bootstrapSandboxToolsOptional(name);
   }
   await repairHostPortBindings({ containerName: name, portBase });
   const { stdout } = await execFileAsync("docker", [
@@ -319,18 +343,12 @@ export async function ensureContainer(
   return stdout.trim();
 }
 
-/**
- * Docker Desktop (esp. gVisor) can drop published host ports while the
- * container keeps running. Restart once if a port that has a listener
- * inside the container is unreachable on the host.
- */
 export async function repairHostPortBindings(options: {
   containerName: string;
   portBase: number;
 }): Promise<boolean> {
-  const { isHostTcpListening, isTcpListening } = await import(
-    "../backgroundJob.js"
-  );
+  const { isHostTcpListening, isTcpListening } =
+    await import("../backgroundJob.js");
   const missing = await publishedHostPortsNeedingRepair({
     containerName: options.containerName,
     portBase: options.portBase,
@@ -343,8 +361,8 @@ export async function repairHostPortBindings(options: {
     `[sandbox] host ports missing for ${options.containerName}: ${missing.join(", ")}; restarting container to rebind`
   );
   await docker(["restart", options.containerName]);
-  // Give Docker Desktop a moment to re-attach port proxies.
-  for (let i = 0; i < 20; i += 1) {
+
+  for (let i = 0; i < N_20; i += 1) {
     const stillMissing = await publishedHostPortsNeedingRepair({
       containerName: options.containerName,
       portBase: options.portBase,
@@ -353,7 +371,7 @@ export async function repairHostPortBindings(options: {
         isTcpListening({ containerName: options.containerName, port })
     });
     if (stillMissing.length === 0) return true;
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, N_250));
   }
   return true;
 }

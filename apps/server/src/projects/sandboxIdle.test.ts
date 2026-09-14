@@ -11,11 +11,19 @@ describe("sandboxIdle", () => {
   it("treats 30 minutes without activity as idle", () => {
     const now = Date.parse("2026-08-30T18:00:00Z");
     assert.equal(
-      isPastIdleTtl(new Date("2026-08-30T17:30:01Z"), now, SANDBOX_IDLE_MS),
+      isPastIdleTtl({
+        lastActivityAt: new Date("2026-08-30T17:30:01Z"),
+        now,
+        idleMs: SANDBOX_IDLE_MS
+      }),
       false
     );
     assert.equal(
-      isPastIdleTtl(new Date("2026-08-30T17:30:00Z"), now, SANDBOX_IDLE_MS),
+      isPastIdleTtl({
+        lastActivityAt: new Date("2026-08-30T17:30:00Z"),
+        now,
+        idleMs: SANDBOX_IDLE_MS
+      }),
       true
     );
   });
@@ -59,7 +67,10 @@ describe("sandboxIdle", () => {
 
   it("laterActivity prefers the more recent timestamp", () => {
     assert.equal(
-      laterActivity(new Date("2026-08-30T12:00:00Z"), Date.parse("2026-08-30T18:00:00Z")),
+      laterActivity(
+        new Date("2026-08-30T12:00:00Z"),
+        Date.parse("2026-08-30T18:00:00Z")
+      ),
       Date.parse("2026-08-30T18:00:00Z")
     );
     assert.equal(laterActivity(null, null), null);

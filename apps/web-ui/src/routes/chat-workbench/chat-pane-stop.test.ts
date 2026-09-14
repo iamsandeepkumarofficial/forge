@@ -21,7 +21,9 @@ describe("stopChatTurn", () => {
       setStatus,
       setMessages: vi.fn(),
       setStreamingText: vi.fn(),
-      setLiveToolParts: vi.fn()
+      setStreamingReasoning: vi.fn(),
+      setLiveToolParts: vi.fn(),
+      clearLiveTurn: vi.fn()
     });
     expect(abort).toHaveBeenCalled();
     expect(setStatus).toHaveBeenCalledWith("ready");

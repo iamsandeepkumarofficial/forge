@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
+import { appDbInjectionHint } from "./appDb/engines.js";
 import {
   readRepoFactsFromHost,
   type PackageManager,
   type RepoFacts
 } from "./repoFacts.js";
 import { readFileFromSandbox } from "./sandboxExec.js";
+
+const N_12 = 12;
 
 export type RepoInventoryMember = {
   repo: string;
@@ -51,7 +54,9 @@ export function buildRepoInventoryFromFacts(options: {
     for (const s of m.facts.suggestedSkills) allSkills.add(s);
   }
   return {
-    isWorkspace: options.members.length > 1,
+    isWorkspace:
+      options.members.length > 1 ||
+      options.members.some((m) => m.mountPath !== "/workspace"),
     members: options.members,
     dependsOnGraph: options.dependsOnGraph ?? [],
     suggestedSkills: [...allSkills].sort()
@@ -99,13 +104,21 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
     }
     if (facts.envKeysReferenced.length > 0) {
       lines.push(
-        `  - env keys referenced: ${facts.envKeysReferenced.slice(0, 12).join(", ")}${facts.envKeysReferenced.length > 12 ? ", …" : ""}`
+        `  - env keys referenced: ${facts.envKeysReferenced.slice(0, N_12).join(", ")}${facts.envKeysReferenced.length > N_12 ? ", …" : ""}`
       );
     }
   }
   if (inventory.isWorkspace) {
+    const first = inventory.members[0]?.repo ?? "repo";
+    const termCwd =
+      inventory.members.length === 1
+        ? `\`/workspace/${first}\` (the member git root)`
+        : `\`/workspace\`. Always pass \`workingDirectory\` as a member repo (e.g. \`${first}\`) or a subdirectory under it`;
     lines.push(
-      "- Launch config: **only** `/workspace/.forge/launch.json` (session-root). Apps use `repo` + session-relative `cwd` (e.g. `bp-frontend`). Do not create per-member `.forge/launch.json`."
+      "- Launch config: **only** `/workspace/.forge/launch.json` (session-root). Apps use `repo` + session-relative `cwd` (e.g. `bp-frontend`). Do not create per-member `.forge/launch.json`.",
+      `- Session root \`/workspace\` is **not** a git repo; member folders are the git roots.`,
+      `- File tools: paths are relative to \`/workspace\` and **must start with a member repo name** (example: \`${first}/package.json\`). Never use host paths. Delete/rename with delete_files / move_files, not run_terminal rm/mv.`,
+      `- \`run_terminal\` default cwd is ${termCwd}.`
     );
   }
   if (inventory.dependsOnGraph.length > 0) {
@@ -123,19 +136,16 @@ export function formatRepoInventoryBlock(inventory: RepoInventory): string {
       `- Suggested skills: ${inventory.suggestedSkills.map((s) => `\`${s}\``).join(", ")} (invoke_skill to load)`
     );
   }
-  lines.push(
-    "- Forge injects `DATABASE_URL` and `MONGODB_URI` (network plane: `postgres-apps` / `mongo-apps` on docker network `forge`). Do not install database servers."
-  );
+  lines.push(`- ${appDbInjectionHint()}`);
   return lines.join("\n");
 }
 
-/** Load inventory from host paths (pre-session / prompt with hostWorktrees). */
 export function loadRepoInventoryFromHost(options: {
   members: Array<{ repo: string; hostPath: string; analyzable?: boolean }>;
   dependsOnGraph?: Array<{ repo: string; dependsOn: string[] }>;
 }): RepoInventory {
   const members = options.members.map(({ repo, hostPath, analyzable }) => {
-    const mountPath = options.members.length > 1 ? `/workspace/${repo}` : "/workspace";
+    const mountPath = `/workspace/${repo}`;
     return {
       repo,
       mountPath,
@@ -146,23 +156,31 @@ export function loadRepoInventoryFromHost(options: {
       })
     };
   });
-  return buildRepoInventoryFromFacts({ members, dependsOnGraph: options.dependsOnGraph });
+  return buildRepoInventoryFromFacts({
+    members,
+    dependsOnGraph: options.dependsOnGraph
+  });
 }
 
-async function readSandboxFile(
-  containerName: string,
-  absPath: string
-): Promise<string | null> {
-  return readFileFromSandbox(containerName, absPath);
+async function readSandboxFile(options: {
+  containerName: string;
+  absPath: string;
+  sessionId: string;
+}): Promise<string | null> {
+  return readFileFromSandbox({
+    container: options.containerName,
+    absPath: options.absPath,
+    sessionId: options.sessionId
+  });
 }
 
-/** Load inventory by reading from sandbox container (works for GitHub clones). */
 export async function loadRepoInventoryFromSandbox(options: {
   containerName: string;
+  sessionId: string;
   worktrees: Record<string, string>;
   dependsOnGraph?: Array<{ repo: string; dependsOn: string[] }>;
 }): Promise<RepoInventory> {
-  const { containerName, worktrees } = options;
+  const { containerName, sessionId, worktrees } = options;
   const names = Object.keys(worktrees).sort();
   const members: RepoInventoryMember[] = [];
 
@@ -174,14 +192,19 @@ export async function loadRepoInventoryFromSandbox(options: {
     );
     try {
       fs.mkdirSync(tmpDir, { recursive: true });
-      const pkgRaw = await readSandboxFile(containerName, `${mount}/package.json`);
+      const pkgRaw = await readSandboxFile({
+        containerName,
+        absPath: `${mount}/package.json`,
+        sessionId
+      });
       if (pkgRaw) {
         fs.writeFileSync(path.join(tmpDir, "package.json"), pkgRaw);
       }
-      const launchRaw = await readSandboxFile(
+      const launchRaw = await readSandboxFile({
         containerName,
-        `${mount}/.forge/launch.json`
-      );
+        absPath: `${mount}/.forge/launch.json`,
+        sessionId
+      });
       if (launchRaw) {
         fs.mkdirSync(path.join(tmpDir, ".forge"), { recursive: true });
         fs.writeFileSync(path.join(tmpDir, ".forge", "launch.json"), launchRaw);
@@ -192,7 +215,11 @@ export async function loadRepoInventoryFromSandbox(options: {
         "package-lock.json",
         "bun.lockb"
       ]) {
-        const raw = await readSandboxFile(containerName, `${mount}/${lock}`);
+        const raw = await readSandboxFile({
+          containerName,
+          absPath: `${mount}/${lock}`,
+          sessionId
+        });
         if (raw) fs.writeFileSync(path.join(tmpDir, lock), raw);
       }
       members.push({

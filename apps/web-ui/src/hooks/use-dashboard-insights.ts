@@ -35,13 +35,24 @@ export type DashboardInsights = {
   sessions: DashboardSession[];
 };
 
-const EMPTY_STATS: DashboardStats = {
-  totalChats: 0,
-  activeProjects: 0,
-  streakDays: 0,
-  totalContributions: 0,
-  lastActiveAt: null
-};
+const N_HEATMAP_WEEKS = 20;
+
+async function loadSessionsForProject(
+  project: ProjectRow
+): Promise<DashboardSession[]> {
+  try {
+    const list = await fetchWorkbenchSessions(project.id);
+    return list.map((session) => ({
+      id: session.id,
+      projectId: project.id,
+      projectName: project.name,
+      title: session.title,
+      lastActivityAt: session.lastActivityAt
+    }));
+  } catch {
+    return [];
+  }
+}
 
 export function useDashboardInsights(options: {
   projects: ProjectRow[];
@@ -53,28 +64,17 @@ export function useDashboardInsights(options: {
 
   useEffect(() => {
     let cancelled = false;
-    if (projects.length === 0) {
-      setSessions([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
     void (async () => {
+      if (projects.length === 0) {
+        if (!cancelled) {
+          setSessions((prev) => (prev.length === 0 ? prev : []));
+          setLoading(false);
+        }
+        return;
+      }
+      if (!cancelled) setLoading(true);
       const rows = await Promise.all(
-        projects.map(async (project) => {
-          try {
-            const list = await fetchWorkbenchSessions(project.id);
-            return list.map((session) => ({
-              id: session.id,
-              projectId: project.id,
-              projectName: project.name,
-              title: session.title,
-              lastActivityAt: session.lastActivityAt
-            }));
-          } catch {
-            return [];
-          }
-        })
+        projects.map((project) => loadSessionsForProject(project))
       );
       if (!cancelled) {
         setSessions(rows.flat());
@@ -100,7 +100,10 @@ export function useDashboardInsights(options: {
       chatCount: sessions.length,
       timestamps
     });
-    const heatmap = buildHeatmapWeeks(counts, 20);
+    const heatmap = buildHeatmapWeeks({
+      counts,
+      weeks: N_HEATMAP_WEEKS
+    });
     const attention = buildAttentionItems({
       projects,
       workspaces: workspaces.map((ws) => ({

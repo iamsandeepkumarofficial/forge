@@ -13,6 +13,9 @@ export function useNewChatFormFields() {
   const [dueDate, setDueDate] = useState("");
   const [parentId, setParentId] = useState("");
   const [description, setDescription] = useState("");
+  const [executionTarget, setExecutionTarget] = useState<"local" | "cloud">(
+    "local"
+  );
   return {
     title,
     setTitle,
@@ -25,7 +28,9 @@ export function useNewChatFormFields() {
     parentId,
     setParentId,
     description,
-    setDescription
+    setDescription,
+    executionTarget,
+    setExecutionTarget
   };
 }
 

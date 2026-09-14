@@ -2,7 +2,11 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { assertSafeRepoDirectoryName, parseGithubSlug } from "@forge/core";
+import {
+  assertSafeRepoDirectoryName,
+  parseGithubSlug,
+  sanitizeRepoDirectoryName
+} from "@forge/core";
 import type { Project } from "@forge/db";
 import { docker } from "./container.js";
 import { WORKSPACE_MOUNT } from "./constants.js";
@@ -14,15 +18,25 @@ export type LocalFolderSource = {
   path: string;
 };
 
-export function repoDirForProject(project: Project): string {
-  if (project.source === "github") {
-    const parsed = parseGithubSlug(project.dedupeKey);
-    const repo =
-      parsed?.repo || project.dedupeKey.split("/").pop() || project.dedupeKey;
-    assertSafeRepoDirectoryName(repo);
-    return repo;
+function githubSlugRepoName(project: Project): string | null {
+  if (project.source !== "github") return null;
+  const parsed = parseGithubSlug(project.dedupeKey);
+  const repo =
+    parsed?.repo || project.dedupeKey.split("/").pop() || project.dedupeKey;
+  const sanitized = sanitizeRepoDirectoryName(repo);
+  if (sanitized) {
+    assertSafeRepoDirectoryName(sanitized);
+    return sanitized;
   }
-  return "repo";
+  return null;
+}
+
+export function repoDirForProject(project: Project): string {
+  return (
+    sanitizeRepoDirectoryName(project.name ?? "") ??
+    githubSlugRepoName(project) ??
+    "repo"
+  );
 }
 
 export function assertSafeBranch(branch: string): void {
@@ -31,7 +45,9 @@ export function assertSafeBranch(branch: string): void {
   }
 }
 
-export async function assertLocalFolderPath(folderPath: string): Promise<string> {
+export async function assertLocalFolderPath(
+  folderPath: string
+): Promise<string> {
   if (!folderPath || typeof folderPath !== "string" || !folderPath.trim()) {
     throw new Error("Local folder path is required");
   }
@@ -69,7 +85,6 @@ export function cloneGithubWorkspaceScript(): string {
   ].join("; ");
 }
 
-/** Clone into /workspace/{repoName} for multi-repo workspace sessions. */
 export function cloneGithubIntoSubdirScript(repoName: string): string {
   assertSafeRepoDirectoryName(repoName);
   const target = `${WORKSPACE_MOUNT}/${repoName}`;
@@ -92,7 +107,6 @@ export async function isRepoInitializedAt(
   mountPath: string
 ): Promise<boolean> {
   try {
-    // Accept both a real .git directory and a worktree .git file (RFC 0005).
     await execFileAsync("docker", [
       "exec",
       containerName,
@@ -104,6 +118,48 @@ export async function isRepoInitializedAt(
   } catch {
     return false;
   }
+}
+
+async function hasGitHeadAt(
+  containerName: string,
+  mountPath: string
+): Promise<boolean> {
+  try {
+    await execFileAsync("docker", [
+      "exec",
+      containerName,
+      "sh",
+      "-c",
+      `git -C "${mountPath}" rev-parse --verify HEAD >/dev/null 2>&1`
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function ensureGitHeadAt(options: {
+  containerName: string;
+  mountPath: string;
+}): Promise<void> {
+  const { containerName, mountPath } = options;
+  if (
+    (await isRepoInitializedAt(containerName, mountPath)) &&
+    (await hasGitHeadAt(containerName, mountPath))
+  ) {
+    return;
+  }
+  const script = [
+    "set -e",
+    `mkdir -p "${mountPath}"`,
+    `cd "${mountPath}"`,
+    "git init",
+    'git config user.email "forge@local"',
+    'git config user.name "Forge Agent"',
+    "git add -A",
+    'git commit --allow-empty -m "forge: initial import"'
+  ].join("; ");
+  await execFileAsync("docker", ["exec", containerName, "sh", "-c", script]);
 }
 
 function githubCloneUrl(project: Project, token?: string): string {
@@ -120,7 +176,7 @@ export async function cloneGithubIntoVolume(options: {
   project: Project;
   branch: string;
   token?: string;
-  /** When set, clone into /workspace/{repoName} instead of /workspace. */
+
   repoName?: string;
 }): Promise<void> {
   const { containerName, project, branch, token, repoName } = options;

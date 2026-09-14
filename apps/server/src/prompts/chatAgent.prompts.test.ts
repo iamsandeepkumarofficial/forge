@@ -7,11 +7,12 @@ import { composeChatAgentSystemPrompt } from "./chatAgent.prompts.js";
 import { invalidateSkillIndex } from "../tools/skillIndex.js";
 
 describe("composeChatAgentSystemPrompt", () => {
-  it("includes identity, sandbox paths, and launch.json setup", () => {
+  it("includes identity, sandbox paths, and platform ops for single-repo", () => {
     const prompt = composeChatAgentSystemPrompt({
       sessionRoot: "/workspace",
       repoDir: "repo",
-      workingDir: "/workspace"
+      workingDir: "/workspace",
+      executionTarget: "local"
     });
     assert.match(
       prompt,
@@ -21,37 +22,67 @@ describe("composeChatAgentSystemPrompt", () => {
     assert.match(prompt, /Workspace and git root: `\/workspace`/);
     assert.doesNotMatch(prompt, /Repository folder name/);
     assert.doesNotMatch(prompt, /repo\/package\.json/);
-    assert.match(prompt, /\.forge\/launch\.json/);
-    assert.match(prompt, /Eval: not agent-ready/);
+    assert.match(prompt, /## Starting apps/);
     assert.match(prompt, /preview_start/);
-    assert.match(prompt, /3000–3009/);
+    assert.match(prompt, /delete_files/);
+    assert.match(prompt, /40000–49999/);
+    assert.doesNotMatch(prompt, /Eval: not agent-ready/);
+    assert.doesNotMatch(prompt, /## Workspace health/);
+    assert.doesNotMatch(prompt, /Workspace setup SOP/);
     assert.doesNotMatch(prompt, /Hard citation rule/);
     assert.doesNotMatch(prompt, /create_subtask/);
-    assert.doesNotMatch(prompt, /Playwright skill or run Playwright/);
-    assert.doesNotMatch(prompt, /FORGE_GLOBAL_RULES/);
-    assert.doesNotMatch(prompt, /Repository specifications/);
-    assert.doesNotMatch(prompt, /_\(No /);
   });
 
-  it("lists workspace member repos in the system prompt", () => {
+  it("uses nested member paths for a single-repo project chat", () => {
+    const prompt = composeChatAgentSystemPrompt({
+      sessionRoot: "/workspace",
+      repoDir: "My-App",
+      workingDir: "/workspace",
+      executionTarget: "local",
+      worktrees: { "My-App": "/workspace/My-App" },
+      inventoryBlock: [
+        "## Workspace repos",
+        "Per-member inventory for this workspace session:",
+        "- `My-App/` → `/workspace/My-App`",
+        "- File tools: paths must start with a member repo name"
+      ].join("\n")
+    });
+    assert.match(prompt, /## Workspace repos/);
+    assert.match(prompt, /`My-App\/` → `\/workspace\/My-App`/);
+    assert.doesNotMatch(
+      prompt,
+      /The repository is mounted here directly — there is no extra repo folder/
+    );
+  });
+
+  it("lists workspace members only under Workspace repos when inventory provided", () => {
     const prompt = composeChatAgentSystemPrompt({
       sessionRoot: "/workspace",
       repoDir: "bp-frontend",
       workingDir: "/workspace",
+      executionTarget: "local",
       worktrees: {
         "bp-frontend": "/workspace/bp-frontend",
         "bp-backend": "/workspace/bp-backend"
-      }
+      },
+      inventoryBlock: [
+        "## Workspace repos",
+        "Per-member inventory for this workspace session:",
+        "- `bp-backend/` → `/workspace/bp-backend`",
+        "- `bp-frontend/` → `/workspace/bp-frontend`",
+        "- File tools: paths must start with a member repo name"
+      ].join("\n")
     });
-    assert.match(prompt, /Working repositories \(authoritative\)/);
+    assert.doesNotMatch(prompt, /Working repositories \(authoritative\)/);
+    assert.match(prompt, /## Workspace repos/);
     assert.match(prompt, /`bp-frontend\/` → `\/workspace\/bp-frontend`/);
     assert.match(prompt, /`bp-backend\/` → `\/workspace\/bp-backend`/);
     assert.match(prompt, /must start with a member repo name/);
-    assert.match(prompt, /\/workspace\/\.forge\/launch\.json|session-root/);
-    assert.match(prompt, /Workspace setup SOP/);
+    assert.match(prompt, /## Starting apps/);
+    assert.match(prompt, /get_workspace_health/);
     assert.match(prompt, /invoke_skill/);
-    assert.doesNotMatch(prompt, /Each member has its own git root and its own/);
-    assert.doesNotMatch(prompt, /Never write launch config at the session root/);
+    assert.doesNotMatch(prompt, /Workspace setup SOP/);
+    assert.doesNotMatch(prompt, /## Workspace health/);
     assert.doesNotMatch(prompt, /There is exactly one connected repository/);
   });
 

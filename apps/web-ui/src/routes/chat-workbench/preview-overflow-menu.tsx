@@ -21,6 +21,8 @@ import {
   type ShotRect
 } from "./preview-overflow.js";
 
+const MIN_CROP_PX = 8;
+
 export type PreviewOverflowMenuProps = {
   disabled?: boolean;
   zoom: number;
@@ -110,7 +112,9 @@ function HtmlOverflowMenu(options: { options: PreviewOverflowMenuProps }) {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onHardReload}>Hard Reload</DropdownMenuItem>
-        <DropdownMenuItem onClick={onCopyUrl}>Copy Current URL</DropdownMenuItem>
+        <DropdownMenuItem onClick={onCopyUrl}>
+          Copy Current URL
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <ZoomRow
           zoom={zoom}
@@ -222,7 +226,9 @@ export function AreaCropOverlay(options: {
           return;
         }
         const rect = normalizeCrop(a, point(e));
-        onComplete(rect.w >= 8 && rect.h >= 8 ? rect : null);
+        onComplete(
+          rect.w >= MIN_CROP_PX && rect.h >= MIN_CROP_PX ? rect : null
+        );
       }}
     >
       {start && now ? (

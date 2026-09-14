@@ -29,6 +29,24 @@ describe("chatToolGuard", () => {
     assert.equal(background?.success, false);
   });
 
+  it("denies rm and mv via run_terminal", () => {
+    const denied = denyChatToolExecute({
+      agentMode: "agent",
+      toolName: "run_terminal",
+      args: { command: "rm src/a.ts" }
+    });
+    assert.equal(denied?.success, false);
+    assert.match(denied?.output ?? "", /delete_files/);
+    assert.equal(
+      denyChatToolExecute({
+        agentMode: "agent",
+        toolName: "run_terminal",
+        args: { command: "npm rm lodash" }
+      }),
+      null
+    );
+  });
+
   it("allows one-shot shell and write in agent", () => {
     assert.equal(
       denyChatToolExecute({

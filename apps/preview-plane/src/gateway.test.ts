@@ -3,6 +3,7 @@ import { describe, it, before, after } from "node:test";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { createPreviewApp } from "./app.js";
+import { createGateway } from "./gateway.js";
 import { RouteStore } from "./routeStore.js";
 
 const N_200 = 200;
@@ -91,5 +92,41 @@ describe("preview gateway", () => {
     });
     assert.equal(res.status, N_200);
     assert.equal(await res.text(), "upstream-ok");
+  });
+
+  it("proxies websocket upgrades to the upstream", async () => {
+    const wsCalls: Array<{ target?: string }> = [];
+    const gateway = createGateway({
+      store,
+      token: "",
+      proxy: {
+        web() {
+          return undefined;
+        },
+        ws(
+          _req: unknown,
+          socket: { end: () => void },
+          _head: unknown,
+          opts: { target?: string }
+        ) {
+          wsCalls.push(opts);
+          socket.end();
+        }
+      } as never
+    });
+    const socket = {
+      end: () => undefined,
+      write: () => undefined,
+      destroy: () => undefined
+    };
+    gateway.upgrade({
+      req: {
+        url: "/@vite/client",
+        headers: { host: "s-abc.preview.forge.local" }
+      } as never,
+      socket: socket as never,
+      head: Buffer.alloc(0)
+    });
+    assert.equal(wsCalls[0]?.target, `http://${upstreamUrl}`);
   });
 });

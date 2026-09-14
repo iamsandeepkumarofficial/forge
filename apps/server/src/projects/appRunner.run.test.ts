@@ -4,8 +4,10 @@ import assert from "node:assert/strict";
 describe("runApp readiness", { concurrency: false }, () => {
   let jobRunning = true;
   let tcpListening = true;
-  let stopped = false;
+  let publishedReady = true;
+  let stopCount = 0;
   let publishedPorts: number[] = [];
+  let listenPortResolved = 3000;
   let runApp: typeof import("./appRunner.js").runApp;
 
   before(async () => {
@@ -36,6 +38,7 @@ describe("runApp readiness", { concurrency: false }, () => {
     mock.module("./launchCwd.js", {
       exports: {
         normalizeLaunchCwd: (opts: { cwd: string }) => opts.cwd,
+        safeRelDir: (cwd: string) => cwd.replace(/^\.\//, "") || ".",
         resolveLaunchAppDir: async () => ({
           appDir: "/workspace",
           relCwd: ".",
@@ -47,14 +50,14 @@ describe("runApp readiness", { concurrency: false }, () => {
       exports: {
         startBackgroundJob: async () => undefined,
         stopBackgroundJob: async () => {
-          stopped = true;
-          jobRunning = false;
+          stopCount += 1;
         },
         freeListeningPort: async () => undefined,
         waitUntilJobRunning: async () => jobRunning,
         waitUntilTcpListening: async () => tcpListening,
-        waitUntilHostTcpListening: async () => true,
-        isBackgroundJobRunning: async () => jobRunning,
+        waitUntilHostTcpListening: async () => tcpListening,
+        isBackgroundJobRunning: async () =>
+          jobRunning && tcpListening && publishedReady,
         readBackgroundJobLogs: async () => "boot failed"
       }
     });
@@ -77,8 +80,17 @@ describe("runApp readiness", { concurrency: false }, () => {
     });
     mock.module("./sandboxRuntime/resolve.js", {
       exports: {
-        resolveSandboxRuntimeKind: () => "docker",
-        getSandboxRuntime: () => ({
+        isHostSession: async () => false,
+        resolveSandboxRuntimeKindForSession: async () => "docker",
+        getSandboxRuntime: async () => ({
+          kind: "docker",
+          resolveListenPort: async () => listenPortResolved,
+          resolvePublishedPort: async () => 13000,
+          ensurePublishedPortReady: async () => publishedReady,
+          publishedAppPortsEnv: () => "3000-3009",
+          isAllowedListenPort: (port: number) => port >= 3000 && port <= 3009,
+          previewHostname: (sessionId: string, _port: number) =>
+            `s-${sessionId}.preview.local`,
           publishPreviewPort: async (
             _handle: unknown,
             port: number
@@ -94,24 +106,28 @@ describe("runApp readiness", { concurrency: false }, () => {
   it("publishes preview only after TCP listens", async () => {
     jobRunning = true;
     tcpListening = true;
-    stopped = false;
+    publishedReady = true;
+    stopCount = 0;
     publishedPorts = [];
+    listenPortResolved = 3000;
     const status = await runApp("s1", "web");
     assert.equal(status.running, true);
     assert.equal(status.startFailure, undefined);
     assert.deepEqual(publishedPorts, [3000]);
-    assert.equal(stopped, false);
+    assert.ok(stopCount >= 1);
   });
 
-  it("stops job and skips publish when port never listens", async () => {
+  it("stops job and skips publish when published port never ready", async () => {
     jobRunning = true;
-    tcpListening = false;
-    stopped = false;
+    tcpListening = true;
+    publishedReady = false;
+    stopCount = 0;
     publishedPorts = [];
+    listenPortResolved = 3000;
     const status = await runApp("s1", "web");
     assert.equal(status.running, false);
     assert.equal(status.startFailure, "port");
     assert.deepEqual(publishedPorts, []);
-    assert.equal(stopped, true);
+    assert.ok(stopCount >= 2);
   });
 });

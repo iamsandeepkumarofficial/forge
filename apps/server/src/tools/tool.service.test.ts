@@ -31,11 +31,12 @@ describe("ToolService", () => {
       args: { query: "  " }
     });
     assert.equal(out.kind, "result");
-    assert.equal(out.status, 400);
+    assert.equal(out.status, 200);
+    assert.equal(out.body.success, false);
     assert.equal(out.body.metadata.code, "provider");
   });
 
-  it("create_subtask 404s when session has no owner", async () => {
+  it("create_subtask soft-fails when session has no owner", async () => {
     const svc = new ToolService({
       previewTools: {} as never,
       chatFeatureRepo: { getBySessionId: async () => null } as never,
@@ -46,10 +47,11 @@ describe("ToolService", () => {
       toolName: "create_subtask",
       args: { title: "x" }
     });
-    assert.equal(out.status, 404);
+    assert.equal(out.status, 200);
+    assert.equal(out.body.success, false);
   });
 
-  it("create_subtask maps validation errors to 400", async () => {
+  it("create_subtask maps validation errors to soft failure", async () => {
     const svc = new ToolService({
       previewTools: {} as never,
       chatFeatureRepo: {
@@ -70,7 +72,8 @@ describe("ToolService", () => {
       toolName: "create_subtask",
       args: { title: "x" }
     });
-    assert.equal(out.status, 400);
+    assert.equal(out.status, 200);
+    assert.equal(out.body.success, false);
     assert.equal(out.body.output, "bad");
   });
 
@@ -106,6 +109,7 @@ describe("ToolService", () => {
       toolName: "preview_stop",
       args: {}
     });
-    assert.equal(out.status, 400);
+    assert.equal(out.status, 200);
+    assert.equal(out.body.success, false);
   });
 });

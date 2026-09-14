@@ -10,7 +10,13 @@ export const AGENT_MODE_IDS = [
 export type AgentMode = (typeof AGENT_MODE_IDS)[number];
 
 const READ_TOOLS = ["read_file", "list_files", "search_codebase"] as const;
-const WRITE_TOOLS = ["write_file", "edit_file", "run_terminal"] as const;
+const WRITE_TOOLS = [
+  "write_file",
+  "edit_file",
+  "delete_files",
+  "move_files",
+  "run_terminal"
+] as const;
 const PREVIEW_INSPECT_TOOLS = ["preview_status", "preview_logs"] as const;
 const PREVIEW_RUN_TOOLS = ["preview_start", "preview_stop"] as const;
 const LAUNCH_TOOLS = ["upsert_launch_app"] as const;
@@ -20,9 +26,11 @@ const SWITCH_TOOLS = ["switch_mode"] as const;
 const ASK_USER_TOOLS = ["ask_user"] as const;
 const SUBTASK_TOOLS = ["create_subtask"] as const;
 const SETUP_TOOLS = [
+  "get_workspace_health",
   "upsert_workspace_parameter",
   "docker_image_lookup",
-  "provision_app_engine"
+  "setup_project_infra",
+  "install_project_infra"
 ] as const;
 
 function unionTools(...groups: readonly (readonly string[])[]): Set<string> {

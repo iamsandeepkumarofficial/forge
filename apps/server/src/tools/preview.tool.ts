@@ -5,13 +5,19 @@ import {
   runApp,
   stopApp,
   upsertLaunchApp,
+  matchLaunchApp,
   type AppStatus,
   type AppType,
   type ForgeApp
 } from "../projects/appRunner.js";
+import {
+  readFileFromSandbox,
+  resolveSandbox
+} from "../projects/sandboxExec.js";
 import type { ToolResult } from "./types.js";
 
 const N_300 = 300;
+const LAUNCH_REL = ".forge/launch.json";
 
 const APP_TYPES = new Set<AppType>(["web", "api", "worker"]);
 
@@ -23,13 +29,14 @@ async function resolveAppName(options: {
     typeof options.args.name === "string" ? options.args.name.trim() : "";
   const { config } = await readForgeConfig(options.sessionId);
   if (explicit) {
-    const found = config.apps.some((a) => a.name === explicit);
-    if (!found) {
+    const matched = matchLaunchApp(config.apps, explicit);
+    if (!matched) {
+      const known = config.apps.map((a) => a.name).join(", ") || "(none)";
       return {
-        error: `App "${explicit}" is not in .forge/launch.json. Use upsert_launch_app, then preview_start.`
+        error: `App "${explicit}" is not in .forge/launch.json (known: ${known}). Use upsert_launch_app, then preview_start.`
       };
     }
-    return { name: explicit };
+    return { name: matched.name };
   }
   const web = config.apps.find((a) => a.type === "web");
   const api = config.apps.find((a) => a.type === "api");
@@ -139,15 +146,12 @@ export class PreviewToolService {
     const filtered = filterName
       ? apps.filter((a) => a.name === filterName)
       : apps;
-    let output =
+    const output =
       filtered.length === 0
         ? exists
           ? "No matching apps in .forge/launch.json."
           : "No .forge/launch.json — scaffold from the Run tab or upsert_launch_app."
         : filtered.map(formatAppStatus).join("\n\n---\n\n");
-    if (source === "legacy") {
-      output = `${output}\n\n(Note: using legacy pulse.json; prefer .forge/launch.json.)`;
-    }
     return {
       success: true,
       output,
@@ -186,12 +190,28 @@ export class PreviewToolService {
     if (typeof parsed === "string") {
       return { success: false, output: parsed };
     }
+    const sandbox = await resolveSandbox(sessionId);
+    const before = await readFileFromSandbox({
+      container: sandbox.containerName,
+      absPath: `${sandbox.workingDir}/${LAUNCH_REL}`,
+      sessionId
+    });
     const config = await upsertLaunchApp(sessionId, parsed);
     const written = config.apps.find((a) => a.name === parsed.name) ?? parsed;
     return {
       success: true,
       output: `Updated .forge/launch.json with app "${written.name}" (cwd: ${written.cwd}).`,
-      metadata: { app: written, apps: config.apps }
+      metadata: {
+        app: written,
+        apps: config.apps,
+        files: [
+          {
+            path: LAUNCH_REL,
+            op: before === null ? "create" : "update",
+            before
+          }
+        ]
+      }
     };
   }
 }

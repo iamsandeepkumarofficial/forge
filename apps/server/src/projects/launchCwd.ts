@@ -19,12 +19,6 @@ export function normalizeLaunchCwd(options: {
   if (rel === ".") {
     return ".";
   }
-  const repo = String(options.repoDir || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
-  if (repo && rel === repo) {
-    return ".";
-  }
   return rel;
 }
 
@@ -40,28 +34,25 @@ export function appDirForCwd(options: {
 
 export async function resolveLaunchAppDir(options: {
   containerName: string;
+  sessionId: string;
   workingDir: string;
   repoDir: string;
   cwd: string;
 }): Promise<{ appDir: string; relCwd: string; error?: string }> {
   const rel = safeRelDir(options.cwd || ".") || ".";
   const primary = appDirForCwd({ workingDir: options.workingDir, relCwd: rel });
-  if (await pathExistsInSandbox(options.containerName, primary)) {
-    return { appDir: primary, relCwd: rel === "." ? "." : rel };
-  }
-  const repo = String(options.repoDir || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
   if (
-    repo &&
-    rel === repo &&
-    (await pathExistsInSandbox(options.containerName, options.workingDir))
+    await pathExistsInSandbox({
+      container: options.containerName,
+      absPath: primary,
+      sessionId: options.sessionId
+    })
   ) {
-    return { appDir: options.workingDir, relCwd: "." };
+    return { appDir: primary, relCwd: rel === "." ? "." : rel };
   }
   return {
     appDir: primary,
     relCwd: rel,
-    error: `App cwd not found: ${primary} (launch cwd="${options.cwd}"). Use "." for the repo root.`
+    error: `App cwd not found: ${primary} (launch cwd="${options.cwd}"). Use "${options.repoDir || "."}" for the repo root.`
   };
 }

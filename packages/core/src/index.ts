@@ -1,7 +1,8 @@
 export { parseGithubSlug } from "./utilities/github/slug.js";
 export {
   assertSafeRepoDirectoryName,
-  deriveRepoDirectoryName
+  deriveRepoDirectoryName,
+  sanitizeRepoDirectoryName
 } from "./utilities/git/names.js";
 export {
   parsePorcelain,
@@ -24,6 +25,10 @@ export {
   isLongRunningDevServerCommand,
   longRunningDevServerDeniedMessage
 } from "./chat/devServerCommand.js";
+export {
+  blockedWorkspaceMutationMessage,
+  isBlockedWorkspaceMutationCommand
+} from "./chat/fileMutationCommand.js";
 export {
   chatToolCatalogIds,
   formatToolDescription,

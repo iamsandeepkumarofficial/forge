@@ -13,7 +13,9 @@ export async function stopChatTurn(options: {
   setStatus: (s: "ready" | "submitted" | "streaming" | "error") => void;
   setMessages: React.Dispatch<React.SetStateAction<UiChatMessage[]>>;
   setStreamingText: (v: string) => void;
+  setStreamingReasoning: (v: string) => void;
   setLiveToolParts: (v: ToolPart[]) => void;
+  clearLiveTurn: () => void;
 }) {
   options.streamAbortRef.current?.abort();
   if (options.activeTurnId) {
@@ -32,5 +34,7 @@ export async function stopChatTurn(options: {
     void 0;
   }
   options.setStreamingText("");
+  options.setStreamingReasoning("");
   options.setLiveToolParts([]);
+  options.clearLiveTurn();
 }

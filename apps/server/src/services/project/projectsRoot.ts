@@ -5,6 +5,7 @@ import path from "node:path";
 const DEFAULT_FORGE_HOME = path.join(os.homedir(), ".forge");
 const DEFAULT_PROJECTS_ROOT = path.join(DEFAULT_FORGE_HOME, "projects");
 const DEFAULT_SESSIONS_ROOT = path.join(DEFAULT_FORGE_HOME, "sessions");
+const DEFAULT_WORKSPACES_ROOT = path.join(DEFAULT_FORGE_HOME, "workspaces");
 
 function expandHome(raw: string): string {
   if (raw.startsWith("~/")) {
@@ -30,7 +31,6 @@ function resolveAbsoluteRoot(
     : path.resolve(process.cwd(), expanded);
 }
 
-/** Canonical project copies live under ~/.forge/projects (RFC 0004). */
 export function resolveProjectsRoot(): string {
   return resolveAbsoluteRoot(
     process.env.FORGE_PROJECTS_ROOT,
@@ -38,11 +38,17 @@ export function resolveProjectsRoot(): string {
   );
 }
 
-/** Per-session local worktrees live under ~/.forge/sessions (RFC 0005). */
 export function resolveSessionsRoot(): string {
   return resolveAbsoluteRoot(
     process.env.FORGE_SESSIONS_ROOT,
     DEFAULT_SESSIONS_ROOT
+  );
+}
+
+export function resolveWorkspacesRoot(): string {
+  return resolveAbsoluteRoot(
+    process.env.FORGE_WORKSPACES_ROOT,
+    DEFAULT_WORKSPACES_ROOT
   );
 }
 
@@ -57,6 +63,34 @@ export function sessionWorktreeDir(
   return path.join(resolveSessionsRoot(), projectId, sessionId);
 }
 
+export function workspaceMemberDir(
+  workspaceId: string,
+  repoName: string
+): string {
+  return path.join(resolveWorkspacesRoot(), workspaceId, repoName);
+}
+
+export function workspaceSessionMemberDir(options: {
+  workspaceId: string;
+  sessionId: string;
+  repoName: string;
+}): string {
+  return path.join(
+    resolveWorkspacesRoot(),
+    options.workspaceId,
+    "sessions",
+    options.sessionId,
+    options.repoName
+  );
+}
+
+export function workspaceSessionRoot(
+  workspaceId: string,
+  sessionId: string
+): string {
+  return path.join(resolveWorkspacesRoot(), workspaceId, "sessions", sessionId);
+}
+
 export async function ensureProjectsRoot(): Promise<string> {
   const root = resolveProjectsRoot();
   await fs.mkdir(root, { recursive: true });
@@ -65,6 +99,12 @@ export async function ensureProjectsRoot(): Promise<string> {
 
 export async function ensureSessionsRoot(): Promise<string> {
   const root = resolveSessionsRoot();
+  await fs.mkdir(root, { recursive: true });
+  return root;
+}
+
+export async function ensureWorkspacesRoot(): Promise<string> {
+  const root = resolveWorkspacesRoot();
   await fs.mkdir(root, { recursive: true });
   return root;
 }

@@ -46,4 +46,21 @@ describe("sandboxExec path helpers", () => {
       /member repo/
     );
   });
+
+  it("strips a leading workspace/ mount prefix before member validation", () => {
+    assert.equal(
+      resolveWorkspacePath("/workspace/frontend/src/a.ts", {
+        knownRepos: ["frontend", "backend"]
+      }),
+      "/workspace/frontend/src/a.ts"
+    );
+    assert.equal(
+      resolveWorkspacePath("workspace/bp-frontend/package.json", {
+        knownRepos: ["bp-frontend", "bp-backend"]
+      }),
+      "/workspace/bp-frontend/package.json"
+    );
+    assert.equal(resolveWorkspacePath("/workspace"), "/workspace/");
+    assert.equal(resolveWorkspacePath("workspace"), "/workspace/");
+  });
 });

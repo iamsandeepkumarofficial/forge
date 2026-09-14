@@ -15,7 +15,7 @@ describe("SessionHeader", () => {
       />
     );
     expect(screen.getByRole("heading", { name: "Add auth" })).toBeTruthy();
-    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.queryByText("Running")).toBeNull();
     expect(screen.queryByText(/preview.localhost/)).toBeNull();
     expect(screen.queryByText("Starting sandbox")).toBeNull();
     expect(screen.queryByText("← Chats")).toBeNull();
@@ -34,7 +34,7 @@ describe("SessionHeader", () => {
       />
     );
     expect(screen.getByRole("heading", { name: "Chat" })).toBeTruthy();
-    expect(screen.getByLabelText("Idle")).toBeTruthy();
+    expect(screen.queryByLabelText("Idle")).toBeNull();
     expect(screen.queryByText("Idle")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Chat" }).getAttribute("aria-pressed")
@@ -42,6 +42,7 @@ describe("SessionHeader", () => {
     expect(screen.getByRole("button", { name: "Files" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Changes" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Run" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help" })).toBeTruthy();
     screen.getByRole("button", { name: "Files" }).click();
     expect(onLeftMode).toHaveBeenCalledWith("files");
   });
@@ -58,9 +59,9 @@ describe("SessionHeader", () => {
       />
     );
     expect(screen.getByRole("button", { name: "Leave session" })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Leave session" })).toHaveLength(
-      1
-    );
+    expect(
+      screen.getAllByRole("button", { name: "Leave session" })
+    ).toHaveLength(1);
   });
 
   it("asks before leaving the session", () => {
@@ -77,6 +78,7 @@ describe("SessionHeader", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Leave session" }));
     expect(screen.getByText("Leave this session?")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Stay" }));
     expect(onBack).not.toHaveBeenCalled();
     expect(screen.queryByText("Leave this session?")).toBeNull();
@@ -85,7 +87,7 @@ describe("SessionHeader", () => {
     expect(onBack).toHaveBeenCalled();
   });
 
-  it("shows sandbox starting and waiting", () => {
+  it("does not show sandbox or waiting chips in the header", () => {
     render(
       <SessionHeader
         onBack={vi.fn()}
@@ -96,7 +98,7 @@ describe("SessionHeader", () => {
         onLeftMode={vi.fn()}
       />
     );
-    expect(screen.getByText("Waiting on you")).toBeTruthy();
-    expect(screen.getByText("Starting sandbox")).toBeTruthy();
+    expect(screen.queryByText("Waiting on you")).toBeNull();
+    expect(screen.queryByText("Starting sandbox")).toBeNull();
   });
 });

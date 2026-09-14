@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@forge/db";
 import {
   chatTurnChunks,
@@ -9,20 +9,27 @@ import {
   type SessionMessage
 } from "@forge/db";
 import { sanitizeJsonForPg } from "./sanitizeJsonForPg.js";
+import { idsFromMessageOnward } from "./sessionMessagesRevert.js";
 export class SessionMessageRepository {
   async listBySessionId(sessionId: string): Promise<SessionMessage[]> {
     const db = getDb();
     return db
       .select()
       .from(sessionMessages)
-      .where(eq(sessionMessages.sessionId, sessionId))
-      .orderBy(asc(sessionMessages.createdAt));
+      .where(
+        and(
+          eq(sessionMessages.sessionId, sessionId),
+          isNull(sessionMessages.deletedAt)
+        )
+      )
+      .orderBy(asc(sessionMessages.createdAt), asc(sessionMessages.id));
   }
   async create(input: {
     sessionId: string;
     role: SessionMessage["role"];
     parts: unknown[];
     turnId?: string | null;
+    createdAt?: Date;
   }): Promise<SessionMessage> {
     const db = getDb();
     const [created] = await db
@@ -32,7 +39,7 @@ export class SessionMessageRepository {
         role: input.role,
         parts: sanitizeJsonForPg(input.parts),
         turnId: input.turnId ?? null,
-        createdAt: new Date()
+        createdAt: input.createdAt ?? new Date()
       })
       .returning();
     return created as SessionMessage;
@@ -48,6 +55,45 @@ export class SessionMessageRepository {
       .where(eq(sessionMessages.id, id))
       .returning();
     return (updated as SessionMessage) ?? null;
+  }
+  async deleteFromMessage(
+    sessionId: string,
+    messageId: string
+  ): Promise<number> {
+    const rows = await this.listBySessionId(sessionId);
+    const ids = idsFromMessageOnward(rows, messageId);
+    if (!ids || ids.length === 0) return 0;
+    const db = getDb();
+    await db
+      .update(sessionMessages)
+      .set({ deletedAt: new Date() })
+      .where(inArray(sessionMessages.id, ids));
+    return ids.length;
+  }
+  async copyUntil(options: {
+    sourceSessionId: string;
+    targetSessionId: string;
+    untilMessageId: string;
+    turnIdMap?: ReadonlyMap<string, string>;
+  }): Promise<number> {
+    const { sourceSessionId, targetSessionId, untilMessageId, turnIdMap } =
+      options;
+    const rows = await this.listBySessionId(sourceSessionId);
+    const idx = rows.findIndex((row) => row.id === untilMessageId);
+    if (idx < 0) return 0;
+    const slice = rows.slice(0, idx + 1);
+    for (const row of slice) {
+      const mapped =
+        row.turnId && turnIdMap ? (turnIdMap.get(row.turnId) ?? null) : null;
+      await this.create({
+        sessionId: targetSessionId,
+        role: row.role,
+        parts: Array.isArray(row.parts) ? row.parts : [],
+        turnId: mapped,
+        createdAt: row.createdAt
+      });
+    }
+    return slice.length;
   }
 }
 export class ChatTurnRepository {
@@ -104,6 +150,14 @@ export class ChatTurnRepository {
       .where(eq(chatTurns.status, "running"));
     return [...new Set(rows.map((row) => row.sessionId))];
   }
+  async listBySessionId(sessionId: string): Promise<ChatTurn[]> {
+    const db = getDb();
+    return db
+      .select()
+      .from(chatTurns)
+      .where(eq(chatTurns.sessionId, sessionId))
+      .orderBy(asc(chatTurns.startedAt), asc(chatTurns.id));
+  }
   async finish(options: {
     id: string;
     status: "completed" | "cancelled" | "failed";
@@ -118,6 +172,56 @@ export class ChatTurnRepository {
         error: error ?? null,
         finishedAt: new Date()
       })
+      .where(eq(chatTurns.id, id))
+      .returning();
+    return (updated as ChatTurn) ?? null;
+  }
+  async cloneCompleted(input: {
+    id: string;
+    sessionId: string;
+    workflowId: string;
+    source: ChatTurn;
+  }): Promise<ChatTurn> {
+    const status =
+      input.source.status === "running" ? "completed" : input.source.status;
+    const db = getDb();
+    const [created] = await db
+      .insert(chatTurns)
+      .values({
+        id: input.id,
+        sessionId: input.sessionId,
+        workflowId: input.workflowId,
+        status,
+        mode: input.source.mode,
+        provider: input.source.provider,
+        model: input.source.model,
+        error: input.source.error,
+        rounds: input.source.rounds,
+        toolCallCount: input.source.toolCallCount,
+        toolNames: input.source.toolNames,
+        hitRoundCap: input.source.hitRoundCap,
+        workspaceCheckpoint: input.source.workspaceCheckpoint,
+        startedAt: input.source.startedAt,
+        finishedAt: input.source.finishedAt ?? new Date()
+      })
+      .returning();
+    return created as ChatTurn;
+  }
+  async setWorkspaceCheckpoint(
+    id: string,
+    checkpoint: {
+      version: 1;
+      files: Array<{
+        path: string;
+        op: "create" | "update" | "delete";
+        blob: string | null;
+      }>;
+    }
+  ): Promise<ChatTurn | null> {
+    const db = getDb();
+    const [updated] = await db
+      .update(chatTurns)
+      .set({ workspaceCheckpoint: checkpoint })
       .where(eq(chatTurns.id, id))
       .returning();
     return (updated as ChatTurn) ?? null;

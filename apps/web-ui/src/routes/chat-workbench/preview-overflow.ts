@@ -2,6 +2,8 @@ export const ZOOM_MIN = 50;
 export const ZOOM_MAX = 200;
 export const ZOOM_STEP = 25;
 export const ZOOM_DEFAULT = 100;
+const N_PERCENT = 100;
+const N_SHOT_TIMEOUT_MS = 8000;
 
 export type ShotRect = {
   x: number;
@@ -24,12 +26,12 @@ export function iframeZoomStyle(zoom: number): {
   width: string;
   height: string;
 } {
-  const scale = clampZoom(zoom) / 100;
+  const scale = clampZoom(zoom) / N_PERCENT;
   return {
     transform: `scale(${scale})`,
     transformOrigin: "top left",
-    width: `${100 / scale}%`,
-    height: `${100 / scale}%`
+    width: `${N_PERCENT / scale}%`,
+    height: `${N_PERCENT / scale}%`
   };
 }
 
@@ -46,7 +48,7 @@ export function normalizeCrop(
 }
 
 export function mapCropToPage(rect: ShotRect, zoom: number): ShotRect {
-  const scale = clampZoom(zoom) / 100;
+  const scale = clampZoom(zoom) / N_PERCENT;
   return {
     x: rect.x / scale,
     y: rect.y / scale,
@@ -163,7 +165,7 @@ export async function captureInspectFrameShot(options: {
     const timeout = window.setTimeout(() => {
       window.removeEventListener("message", onMessage);
       reject(new Error("Screenshot timed out"));
-    }, options.timeoutMs ?? 8000);
+    }, options.timeoutMs ?? N_SHOT_TIMEOUT_MS);
 
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== options.origin) return;
@@ -183,7 +185,10 @@ export async function captureInspectFrameShot(options: {
     };
 
     window.addEventListener("message", onMessage);
-    win.postMessage({ type: "forge-inspect-shot", rect: options.rect }, options.origin);
+    win.postMessage(
+      { type: "forge-inspect-shot", rect: options.rect },
+      options.origin
+    );
   });
 }
 
@@ -211,7 +216,7 @@ export async function capturePreviewShot(options: {
     const timeout = window.setTimeout(() => {
       cleanup();
       reject(new Error("Screenshot timed out"));
-    }, options.timeoutMs ?? 8000);
+    }, options.timeoutMs ?? N_SHOT_TIMEOUT_MS);
 
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== origin) return;
@@ -268,7 +273,9 @@ export async function clearPreviewSite(
     }, timeoutMs);
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== origin) return;
-      if ((e.data as { type?: string } | null)?.type !== "forge-preview-cleared") {
+      if (
+        (e.data as { type?: string } | null)?.type !== "forge-preview-cleared"
+      ) {
         return;
       }
       cleanup();

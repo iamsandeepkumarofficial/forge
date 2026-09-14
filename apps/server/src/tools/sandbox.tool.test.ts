@@ -8,6 +8,8 @@ describe("sandbox.tool", () => {
       "read_file",
       "write_file",
       "edit_file",
+      "delete_files",
+      "move_files",
       "run_terminal",
       "search_codebase",
       "list_files",

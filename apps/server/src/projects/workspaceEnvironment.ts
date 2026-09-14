@@ -13,8 +13,14 @@ import {
   clearWorkspaceDepsCache,
   restoreCachedDeps,
   workspaceDepsVolumeName
-} from "./workspaceDepsCache.js";
+} from "./cloud/workspaceDepsCache.js";
 import { resolveSandbox } from "./sandboxExec.js";
+import {
+  formatLaunchAppNames,
+  logLaunchConfigPromoted,
+  logLaunchConfigSeedSkip,
+  logLaunchConfigSeeded
+} from "./launchConfigLog.js";
 
 function asForgeConfig(launch: { apps: unknown[] }): ForgeConfig {
   const apps: ForgeApp[] = [];
@@ -49,26 +55,60 @@ function asForgeConfig(launch: { apps: unknown[] }): ForgeConfig {
   return { apps };
 }
 
-/** Seed session launch.json from workspace catalog when session file is empty. */
 export async function seedLaunchFromWorkspace(
   sessionId: string
 ): Promise<boolean> {
   const chatRepo = new ChatFeatureRepository();
   const chat = await chatRepo.getBySessionId(sessionId);
-  if (!chat?.workspaceId) return false;
+  if (!chat?.workspaceId) {
+    logLaunchConfigSeedSkip({
+      sessionId,
+      reason: "not-workspace-chat"
+    });
+    return false;
+  }
 
   const envRepo = new WorkspaceEnvironmentRepository();
   const saved = await envRepo.get(chat.workspaceId);
-  if (!saved || saved.launch.apps.length === 0) return false;
+  if (!saved) {
+    logLaunchConfigSeedSkip({
+      sessionId,
+      workspaceId: chat.workspaceId,
+      reason: "catalog-missing"
+    });
+    return false;
+  }
+  if (saved.launch.apps.length === 0) {
+    logLaunchConfigSeedSkip({
+      sessionId,
+      workspaceId: chat.workspaceId,
+      reason: "catalog-empty"
+    });
+    return false;
+  }
 
   const config = asForgeConfig(saved.launch);
-  if (config.apps.length === 0) return false;
+  if (config.apps.length === 0) {
+    logLaunchConfigSeedSkip({
+      sessionId,
+      workspaceId: chat.workspaceId,
+      reason: "catalog-invalid"
+    });
+    return false;
+  }
 
   await writeForgeConfig(sessionId, config);
+  logLaunchConfigSeeded({
+    sessionId,
+    workspaceId: chat.workspaceId,
+    appCount: config.apps.length,
+    appNames: formatLaunchAppNames(config.apps),
+    sourceSessionId: saved.sourceSessionId,
+    catalogUpdatedAt: saved.updatedAt?.toISOString() ?? null
+  });
   return true;
 }
 
-/** Persist session launch.json to workspace catalog after a successful app start. */
 export async function promoteLaunchToWorkspace(
   sessionId: string
 ): Promise<void> {
@@ -80,23 +120,41 @@ export async function promoteLaunchToWorkspace(
   if (!exists || config.apps.length === 0) return;
 
   const envRepo = new WorkspaceEnvironmentRepository();
-  await envRepo.upsertLaunch(chat.workspaceId, config, sessionId);
+  await envRepo.upsertLaunch({
+    workspaceId: chat.workspaceId,
+    launch: config,
+    sourceSessionId: sessionId
+  });
+  logLaunchConfigPromoted({
+    sessionId,
+    workspaceId: chat.workspaceId,
+    appCount: config.apps.length,
+    appNames: formatLaunchAppNames(config.apps)
+  });
 }
 
 async function memberRepoNames(sessionId: string): Promise<string[]> {
   const chatRepo = new ChatFeatureRepository();
   const chat = await chatRepo.getBySessionId(sessionId);
-  if (!chat?.workspaceId) return [""];
-  const workspaceRepo = new WorkspaceRepository();
-  const members = await workspaceRepo.listMembers(chat.workspaceId);
-  if (members.length === 0) return [""];
-  return members.map((m) => m.repoName);
+  if (chat?.workspaceId) {
+    const workspaceRepo = new WorkspaceRepository();
+    const members = await workspaceRepo.listMembers(chat.workspaceId);
+    return members.map((m) => m.repoName);
+  }
+  const { getSessionRepoInfo } = await import("./sessionSandbox.js");
+  try {
+    const info = await getSessionRepoInfo(sessionId);
+    return info.repoDir ? [info.repoDir] : [];
+  } catch {
+    return [];
+  }
 }
 
-/** Restore node_modules from the workspace deps volume into each member. */
 export async function restoreWorkspaceDepsForSession(
   sessionId: string
 ): Promise<void> {
+  const { isHostSession } = await import("./sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) return;
   const { containerName } = await resolveSandbox(sessionId);
   const repos = await memberRepoNames(sessionId);
   for (const repoName of repos) {
@@ -109,10 +167,11 @@ export async function restoreWorkspaceDepsForSession(
   }
 }
 
-/** Capture node_modules onto the workspace deps volume after a successful start. */
 export async function captureWorkspaceDepsForSession(
   sessionId: string
 ): Promise<void> {
+  const { isHostSession } = await import("./sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) return;
   const { containerName } = await resolveSandbox(sessionId);
   const repos = await memberRepoNames(sessionId);
   for (const repoName of repos) {
@@ -136,9 +195,7 @@ export async function getWorkspaceEnvironmentStatus(workspaceId: string) {
   };
 }
 
-export async function clearWorkspaceLaunch(
-  workspaceId: string
-): Promise<void> {
+export async function clearWorkspaceLaunch(workspaceId: string): Promise<void> {
   const envRepo = new WorkspaceEnvironmentRepository();
   await envRepo.clearLaunch(workspaceId);
 }

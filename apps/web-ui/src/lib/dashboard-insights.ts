@@ -1,4 +1,5 @@
 const MS_DAY = 86_400_000;
+const N_DAYS_PER_WEEK = 7;
 
 export type AttentionItem = {
   id: string;
@@ -27,7 +28,9 @@ export function dayKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-export function parseTimestamp(value: number | string | undefined): number | null {
+export function parseTimestamp(
+  value: number | string | undefined
+): number | null {
   if (value == null) return null;
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
@@ -65,24 +68,25 @@ export function computeStreak(
   return streak;
 }
 
-export function buildHeatmapWeeks(
-  counts: Map<string, number>,
-  weeks: number,
-  now = new Date()
-): HeatmapCell[][] {
+export function buildHeatmapWeeks(options: {
+  counts: Map<string, number>;
+  weeks: number;
+  now?: Date;
+}): HeatmapCell[][] {
+  const now = options.now ?? new Date();
   const end = new Date(now);
   end.setHours(0, 0, 0, 0);
   end.setDate(end.getDate() - end.getDay());
   const start = new Date(end);
-  start.setDate(start.getDate() - (weeks - 1) * 7);
+  start.setDate(start.getDate() - (options.weeks - 1) * N_DAYS_PER_WEEK);
 
   const grid: HeatmapCell[][] = [];
   const cursor = new Date(start);
   while (cursor <= end) {
     const week: HeatmapCell[] = [];
-    for (let i = 0; i < 7; i += 1) {
+    for (let i = 0; i < N_DAYS_PER_WEEK; i += 1) {
       const key = dayKey(cursor);
-      week.push({ date: key, count: counts.get(key) ?? 0 });
+      week.push({ date: key, count: options.counts.get(key) ?? 0 });
       cursor.setDate(cursor.getDate() + 1);
     }
     grid.push(week);
@@ -105,9 +109,11 @@ export function buildDashboardStats(options: {
   timestamps: number[];
 }): DashboardStats {
   const { counts, projectCount, chatCount, timestamps } = options;
-  const totalContributions = [...counts.values()].reduce((sum, n) => sum + n, 0);
-  const lastActiveAt =
-    timestamps.length > 0 ? Math.max(...timestamps) : null;
+  const totalContributions = [...counts.values()].reduce(
+    (sum, n) => sum + n,
+    0
+  );
+  const lastActiveAt = timestamps.length > 0 ? Math.max(...timestamps) : null;
   return {
     totalChats: chatCount,
     activeProjects: projectCount,
@@ -118,7 +124,7 @@ export function buildDashboardStats(options: {
 }
 
 const STALE_DAYS = 14;
-/** Soft tips like "start a chat" are omitted; only warnings + at most one resume. */
+
 const MAX_RESUME_TIPS = 1;
 
 export function buildAttentionItems(options: {
@@ -186,11 +192,14 @@ export function buildAttentionItems(options: {
   return [...warnings, ...resumes];
 }
 
-export function formatRelativeTime(timestamp: number, now = Date.now()): string {
+export function formatRelativeTime(
+  timestamp: number,
+  now = Date.now()
+): string {
   const delta = now - timestamp;
   if (delta < MS_DAY) return "today";
   const days = Math.floor(delta / MS_DAY);
   if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
+  if (days < N_DAYS_PER_WEEK) return `${days} days ago`;
   return new Date(timestamp).toLocaleDateString();
 }

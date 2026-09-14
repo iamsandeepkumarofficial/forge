@@ -6,6 +6,9 @@ RUN apt-get update \
     ca-certificates \
     curl \
     git \
+    tmux \
+    bash \
+    procps \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

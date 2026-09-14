@@ -30,12 +30,14 @@ export async function handleAppRoutes(
     const sandbox = await resolveSandbox(sessionId);
     const resolved = await resolveLaunchAppDir({
       containerName: sandbox.containerName,
+      sessionId,
       workingDir: sandbox.workingDir,
       repoDir: sandbox.repoDir,
       cwd: app.cwd
     });
     const scan = await dockerExec({
       container: sandbox.containerName,
+      sessionId,
       argv: ["sh", "-lc", ROUTE_SCAN_SCRIPT],
       cwd: resolved.appDir
     });

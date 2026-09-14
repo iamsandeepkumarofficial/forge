@@ -122,6 +122,9 @@ export function applyLiveToolEvent(options: {
     typeof payload.toolCallId === "string" ? payload.toolCallId : undefined;
   const toolName = String(payload.toolName ?? "tool");
   if (eventType === "tool_call") {
+    if (toolCallId && prev.some((p) => p.toolCallId === toolCallId)) {
+      return prev;
+    }
     return [
       ...prev,
       {
@@ -215,13 +218,20 @@ export type ToolDiffPreview = {
   kind: "edit" | "write";
   diffText: string;
   totalLines: number;
+  added: number;
+  deleted: number;
 };
 export function synthesizeToolDiff(
   toolName: string,
   args: unknown
 ): ToolDiffPreview | null {
-  const record = asRecord(args);
-  if (!record) return null;
+  const raw = asRecord(args);
+  if (!raw) return null;
+  const firstFile =
+    Array.isArray(raw.files) && raw.files.length > 0
+      ? asRecord(raw.files[0])
+      : null;
+  const record = firstFile ? { ...raw, ...firstFile } : raw;
   const path = typeof record.path === "string" ? record.path : "";
   if (!path) return null;
   if (toolName === "edit_file") {
@@ -243,7 +253,9 @@ export function synthesizeToolDiff(
       path,
       kind: "edit",
       diffText: hunk.join("\n"),
-      totalLines: hunk.length
+      totalLines: hunk.length,
+      added: newLines.length,
+      deleted: oldLines.length
     };
   }
   if (toolName === "write_file") {
@@ -260,7 +272,9 @@ export function synthesizeToolDiff(
       path,
       kind: "write",
       diffText: hunk.join("\n"),
-      totalLines: hunk.length
+      totalLines: hunk.length,
+      added: contentLines.length,
+      deleted: 0
     };
   }
   return null;
@@ -276,3 +290,11 @@ export function truncateDiffText(
   const result = truncateDiffLines(lines, maxLines);
   return { text: result.text, truncated: result.truncated };
 }
+
+export {
+  toolActivityBasename,
+  toolActivityCommand,
+  toolActivityDetail,
+  toolActivityGlimpse,
+  toolActivityLabel
+} from "./tool-activity.js";

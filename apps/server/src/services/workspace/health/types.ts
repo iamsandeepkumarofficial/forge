@@ -4,6 +4,9 @@ import type {
 } from "../../../projects/repoFacts.js";
 import type { AppDbEngineId } from "../../../projects/appDb/engines.js";
 
+const N_8 = 8;
+const N_16 = 16;
+
 export type HealthSeverity = "error" | "warning" | "info";
 
 export type HealthFinding = {
@@ -35,7 +38,7 @@ export type MemberHealth = {
 export type ParamShadowCandidate = {
   key: string;
   secretLikely: boolean;
-  /** Example value redacted when secretLikely. */
+
   exampleHint?: string;
   repo?: string;
 };
@@ -51,7 +54,6 @@ export type WorkspacePrepareShadows = {
 };
 
 export type WorkspacePrepareReport = {
-  /** Always empty on shadow-only prepare; kept for report shape compatibility. */
   parametersSeeded: string[];
   databases: Record<string, string>;
   installs: Array<{
@@ -71,7 +73,7 @@ export type WorkspaceHealthReport = {
   findings: HealthFinding[];
   dependsOnGraph: Array<{ repo: string; dependsOn: string[] }>;
   prepare?: WorkspacePrepareReport;
-  /** Eval-only shadows (also mirrored on prepare when Analyze runs). */
+
   shadows?: WorkspacePrepareShadows;
 };
 
@@ -110,7 +112,7 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
   } else {
     if (blockers.length > 0) {
       lines.push("Blockers:");
-      for (const f of blockers.slice(0, 8)) {
+      for (const f of blockers.slice(0, N_8)) {
         lines.push(
           `- [${f.code}]${f.repo ? ` \`${f.repo}\`` : ""}: ${f.message}${f.hint ? ` — ${f.hint}` : ""}`
         );
@@ -118,7 +120,7 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
     }
     if (warnings.length > 0) {
       lines.push("Warnings:");
-      for (const f of warnings.slice(0, 8)) {
+      for (const f of warnings.slice(0, N_8)) {
         lines.push(
           `- [${f.code}]${f.repo ? ` \`${f.repo}\`` : ""}: ${f.message}${f.hint ? ` — ${f.hint}` : ""}`
         );
@@ -127,7 +129,10 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
   }
   const shadows = report.shadows ?? report.prepare?.shadows;
   if (shadows) {
-    lines.push("", "## Setup shadows (evidence only — do not treat as applied)");
+    lines.push(
+      "",
+      "## Setup shadows (evidence only — do not treat as applied)"
+    );
     lines.push(
       `Preferred sandbox image (from evidence): \`${shadows.preferredSandboxImage}\``
     );
@@ -142,14 +147,14 @@ export function formatHealthPromptBlock(report: WorkspaceHealthReport): string {
     if (shadows.paramCandidates.length > 0) {
       lines.push(
         `- Param candidates (upsert via tool after confirming): ${shadows.paramCandidates
-          .slice(0, 16)
+          .slice(0, N_16)
           .map((p) => `\`${p.key}\`${p.secretLikely ? "*" : ""}`)
-          .join(", ")}${shadows.paramCandidates.length > 16 ? ", …" : ""}`
+          .join(", ")}${shadows.paramCandidates.length > N_16 ? ", …" : ""}`
       );
     }
     if (shadows.infraEvidence.length > 0) {
       lines.push(
-        `- Infra evidence (propose then provision_app_engine with userApproved): ${shadows.infraEvidence.join(", ")}`
+        `- Infra evidence (propose then setup_project_infra with userApproved): ${shadows.infraEvidence.join(", ")}`
       );
     }
   }
@@ -170,7 +175,8 @@ export function formatSetupAgentSopBlock(options?: {
     "3. If image mismatches stack (e.g. generic but need Node/Playwright), propose switching images to the user.",
     "4. `invoke_skill` for that stack (`nodejs-app`, `python-app`, …).",
     "5. Follow the skill: toolchain if needed (`ask_user` → user OK) → install via `run_terminal`.",
-    "6. Params/secrets/infra: call `ask_user` (mcq or form widget) — never ask only in prose. Form fields must set `value` to a sensible default (example URL, generated secret, etc.). After the user answers, `upsert_workspace_parameter` and/or `provision_app_engine` with `userApproved: true`. The widget is honor-system consent, not a cryptographic gate.",
+    "6. Params/secrets/infra: call `ask_user` (mcq or form widget) — never ask only in prose. Form fields must set `value` to a sensible default (example URL, generated secret, etc.). After the user answers, `upsert_workspace_parameter` and/or `setup_project_infra` with `userApproved: true`. The widget is honor-system consent, not a cryptographic gate.",
+    "6b. If `setup_project_infra` fails (e.g. local session missing `mongod`/`postgres`): explain briefly, then `ask_user` (mcq). On approve, `install_project_infra` (downloads into ~/.forge/runtime) then retry `setup_project_infra`. Do not install host infra via `run_terminal`. Do not end the turn on the raw error alone.",
     "7. Launch / migrations / preview per skills. Never invent a platform install matrix."
   ].join("\n");
 }

@@ -2,21 +2,35 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
-**Forge** is an open-source **coding agent harness**: a chat UI, tool-plane API, Temporal orchestrator, Docker sandbox, and local preview proxy that you can run on your own machine.
+**Forge** is an open-source **coding agent harness**: a chat UI, tool-plane API, Temporal orchestrator, session sandbox (host or Docker), and local preview proxy that you can run on your own machine.
 
-Connect a local folder or clone a git repository, chat with an LLM-backed agent, and let tools run inside an isolated Docker sandbox—with session previews on `*.preview.localhost`.
+Connect a local folder or clone a git repository, chat with an LLM-backed agent, and let tools run in an isolated session—with previews on `*.preview.localhost`.
 
 Licensed under the [Apache License 2.0](./LICENSE). Copyright 2026 Forge contributors.
 
 ## Prerequisites
 
-- **Docker** (Docker Desktop or a compatible engine) for Postgres, Temporal, MinIO, and sandboxes
 - **Node.js 20+**
 - **pnpm** (see `packageManager` in `package.json`)
+- **Desktop (default):** Postgres 16 client tools (`initdb`/`postgres`) and Temporal CLI on `PATH`, or binaries under `~/.forge/runtime/bin/` — catalog stack needs **no Docker daemon**
+- **Cloud sessions (optional):** Docker Desktop or a compatible engine when you pick **Cloud** in the UI (`FORGE_CLOUD_SANDBOX=docker`, default)
 
 An LLM API key (OpenAI, Anthropic, or an OpenAI-compatible endpoint) is required to run chats.
 
 ## Quick start (contributors)
+
+### Desktop (Normal / local sessions)
+
+```bash
+pnpm install
+cp .env.example .env
+# Set OPENAI_API_KEY and/or ANTHROPIC_API_KEY
+pnpm desktop
+```
+
+Infra lives under `~/.forge/` (Postgres data, Temporal). New chats default to **Normal** (local host sandbox). Pick **Cloud** when you need a Docker sandbox. Open Activity from the home header to inspect live sessions, ports, and preview apps.
+
+### Browser + compose (optional Docker infra)
 
 ```bash
 # 1. Start local infra
@@ -28,8 +42,9 @@ pnpm install
 # 3. Configure env
 cp .env.example .env
 # Set OPENAI_API_KEY and/or ANTHROPIC_API_KEY (or OpenAI-compatible settings)
+# Optional: FORGE_CLOUD_SANDBOX=docker (default for Cloud sessions)
 
-# 4. Build the sandbox image (needed for agent tool sessions)
+# 4. Build the sandbox image (needed for Cloud / Docker agent sessions)
 pnpm docker:sandbox
 
 # 5. Apply database migrations
@@ -41,15 +56,17 @@ pnpm dev
 
 Typical local ports:
 
-| Service | Port |
-| ------- | ---- |
-| Tool-plane API (`apps/server`) | `4000` |
-| Web UI | `5173` |
-| Postgres (Docker) | `5433` |
-| Temporal gRPC / UI | `7233` / `8233` |
-| MinIO | `9000` (console `9001`) |
+| Service                                 | Port                    |
+| --------------------------------------- | ----------------------- |
+| Tool-plane API (`apps/server`)          | `4000`                  |
+| Web UI                                  | `5173`                  |
+| Postgres (host `~/.forge/pg` or Docker) | `5433`                  |
+| Temporal gRPC / UI                      | `7233` / `8233`         |
+| MinIO (Docker mode)                     | `9000` (console `9001`) |
 
 Open the web UI, connect a workspace (local folder or git clone once that flow lands), and start a chat.
+
+**Smoke (host mode):** launch desktop → connect a folder → send a chat turn → open Activity → confirm session/ports → stop session. No `docker info` required.
 
 Quality gates before you push:
 
@@ -64,8 +81,8 @@ pnpm build
 
 Forge ships as an **Electron** desktop app (`apps/electron`) that:
 
-- Detects Docker and runs `docker compose up`
-- Builds the sandbox image when needed
+- Always starts native Postgres 16 + Temporal under `~/.forge/` (no Docker for catalog)
+- Lets you pick **Normal** (local host sandbox) or **Cloud** (Docker) per chat
 - Spawns the server and orchestrator (preview reverse-proxy runs in-process on the server)
 - Opens the chat UI in Chromium (single-user local mode — no POC token)
 - Reads LLM settings from `~/.forge/config.json`
@@ -74,7 +91,7 @@ Forge ships as an **Electron** desktop app (`apps/electron`) that:
 pnpm desktop
 ```
 
-Contributors can still use docker-compose + `pnpm dev` and open `http://127.0.0.1:5173`. Design details: [RFC 0002: Local Desktop Runtime](./docs/rfcs/0002-local-desktop-runtime.md).
+Contributors can use desktop, or docker-compose + `pnpm dev` and open `http://127.0.0.1:5173`. Design details: [RFC 0002](./docs/rfcs/0002-local-desktop-runtime.md), [RFC 0006](./docs/rfcs/0006-local-host-runtime-zero-docker.md).
 
 ## Architecture (short)
 
@@ -83,7 +100,7 @@ Contributors can still use docker-compose + `pnpm dev` and open `http://127.0.0.
 - **preview-plane** (`apps/preview-plane`) — optional standalone preview proxy (k8s / `PREVIEW_IN_PROCESS=0`)
 - **web-ui** (`apps/web-ui`) — chat workbench
 - **desktop** (`apps/electron`) — Electron supervisor (`pnpm desktop`)
-- **Docker sandbox** — per-session isolated workspace
+- **SandboxRuntime** — host process (Seatbelt/bwrap) or Docker/K8s per session
 
 See the RFCs for the full picture.
 
@@ -94,6 +111,7 @@ Design RFCs live under [`docs/rfcs/`](./docs/rfcs/README.md):
 - [0001 — Harness Extraction](./docs/rfcs/0001-harness-extraction.md)
 - [0002 — Local Desktop Runtime](./docs/rfcs/0002-local-desktop-runtime.md)
 - [0003 — Workspace and Repo Connection](./docs/rfcs/0003-workspace-and-repo-connection.md)
+- [0006 — Local Host Runtime (zero-Docker)](./docs/rfcs/0006-local-host-runtime-zero-docker.md)
 
 ## Contributing
 

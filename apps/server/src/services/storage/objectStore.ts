@@ -105,7 +105,7 @@ export async function deleteObject(bucket: string, key: string): Promise<void> {
   try {
     await fs.unlink(resolveKeyPath(bucket, key));
   } catch {
-    /* ignore missing */
+    void 0;
   }
 }
 

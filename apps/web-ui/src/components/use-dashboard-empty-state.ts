@@ -8,6 +8,58 @@ import {
   maybeCreateChat
 } from "./dashboard-empty-connect.js";
 
+function useLocalConnectActions(options: {
+  desktop: boolean;
+  localPath: string;
+  finishConnect: (projectId: string) => Promise<void>;
+  setLoading: (v: "local" | null) => void;
+  setError: (v: string | null) => void;
+  setShowPathInput: (v: boolean) => void;
+}) {
+  const {
+    desktop,
+    localPath,
+    finishConnect,
+    setLoading,
+    setError,
+    setShowPathInput
+  } = options;
+  const withLocal = async (run: () => Promise<void>) => {
+    setLoading("local");
+    setError(null);
+    try {
+      await run();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(null);
+    }
+  };
+  const handleSelectFolder = async () => {
+    setError(null);
+    if (!desktop) {
+      setShowPathInput(true);
+      return;
+    }
+    await withLocal(async () => {
+      const path = await pickFolder();
+      if (!path) return;
+      await connectLocalAndFinish({ localPath: path, finishConnect });
+    });
+  };
+  const handleConnectPath = async () => {
+    const trimmed = localPath.trim();
+    if (!trimmed) {
+      setError("Enter an absolute path to a project folder.");
+      return;
+    }
+    await withLocal(async () => {
+      await connectLocalAndFinish({ localPath: trimmed, finishConnect });
+    });
+  };
+  return { handleSelectFolder, handleConnectPath };
+}
+
 export function useDashboardEmptyState(options: { onConnected: () => void }) {
   const { onConnected } = options;
   const navigate = useNavigate();
@@ -33,17 +85,14 @@ export function useDashboardEmptyState(options: { onConnected: () => void }) {
     },
     [buildText, navigate, onConnected, pendingTitle]
   );
-  const withLocal = async (run: () => Promise<void>) => {
-    setLoading("local");
-    setError(null);
-    try {
-      await run();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setLoading(null);
-    }
-  };
+  const { handleSelectFolder, handleConnectPath } = useLocalConnectActions({
+    desktop,
+    localPath,
+    finishConnect,
+    setLoading,
+    setError,
+    setShowPathInput
+  });
   const handleBuild = () => {
     setPendingTitle(buildText.trim() || "New Chat");
     setBuildHint(true);
@@ -51,34 +100,6 @@ export function useDashboardEmptyState(options: { onConnected: () => void }) {
     importSectionRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "start"
-    });
-  };
-  const handleSelectFolder = async () => {
-    setError(null);
-    if (!desktop) {
-      setShowPathInput(true);
-      return;
-    }
-    await withLocal(async () => {
-      const path = await pickFolder();
-      if (!path) return;
-      await connectLocalAndFinish({
-        localPath: path,
-        finishConnect
-      });
-    });
-  };
-  const handleConnectPath = async () => {
-    const trimmed = localPath.trim();
-    if (!trimmed) {
-      setError("Enter an absolute path to a project folder.");
-      return;
-    }
-    await withLocal(async () => {
-      await connectLocalAndFinish({
-        localPath: trimmed,
-        finishConnect
-      });
     });
   };
   return {

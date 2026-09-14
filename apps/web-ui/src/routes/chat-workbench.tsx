@@ -1,12 +1,18 @@
-import { useState, useEffect } from "react";
-import { Download, UploadCloud } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { fetchChat, startSession } from "../lib/projects-api.js";
-import { downloadRepoArchive, promoteToCanonical } from "../lib/tool-runner.js";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import {
+  fetchChat,
+  getSessionStatus,
+  startSession
+} from "../lib/projects-api.js";
 import { Workbench } from "./chat-workbench/workbench-layout.js";
 import { SessionHeader } from "./chat-workbench/session-header.js";
-import { SessionBootScreen } from "./chat-workbench/session-boot.js";
+import {
+  bootExistingOrStartSession,
+  SessionBootScreen,
+  sessionBootCopyProps
+} from "./chat-workbench/session-boot.js";
+import { useBranchCopyBoot } from "./chat-workbench/use-branch-copy-boot.js";
 import type {
   LeftPaneMode,
   SandboxStatus,
@@ -25,19 +31,37 @@ function readInitialPrompt(state: unknown): string | undefined {
   return undefined;
 }
 
-export function ChatWorkbench() {
-  const params = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const projectId = params.projectId ?? "";
-  const chatId = params.chatId ?? "";
-  const initialPrompt = readInitialPrompt(location.state);
-  const [chat, setChat] = useState<{
-    sessionId?: string;
-    title?: string;
-    kind?: "ticket" | "workbench";
-    branchName?: string;
-  } | null>(null);
+type WorkbenchChatCard = {
+  sessionId?: string;
+  title?: string;
+  kind?: "ticket" | "workbench";
+  branchName?: string;
+};
+
+function workbenchChatFromRow(data: {
+  sessionId?: string;
+  title?: string;
+  kind?: "ticket" | "workbench";
+  branchName?: string;
+}): WorkbenchChatCard {
+  return {
+    sessionId: data.sessionId,
+    title: data.title,
+    kind: data.kind,
+    branchName:
+      typeof data.branchName === "string" ? data.branchName : undefined
+  };
+}
+
+function useChatWorkbenchSession(options: {
+  projectId: string;
+  chatId: string;
+  locationState: unknown;
+  pathname: string;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const { projectId, chatId } = options;
+  const [chat, setChat] = useState<WorkbenchChatCard | null>(null);
   const [loadingChat, setLoadingChat] = useState(true);
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>("starting");
   const [chrome, setChrome] = useState<WorkbenchChrome>({
@@ -54,15 +78,7 @@ export function ChatWorkbench() {
     let cancelled = false;
     void fetchChat(projectId, chatId)
       .then((data) => {
-        if (!cancelled) {
-          setChat({
-            sessionId: data.sessionId,
-            title: data.title,
-            kind: data.kind,
-            branchName:
-              typeof data.branchName === "string" ? data.branchName : undefined
-          });
-        }
+        if (!cancelled) setChat(workbenchChatFromRow(data));
       })
       .catch((err) => console.error("Failed to load chat:", err))
       .finally(() => {
@@ -73,52 +89,92 @@ export function ChatWorkbench() {
     };
   }, [projectId, chatId]);
   const sessionId: string | undefined = chat?.sessionId;
-  const startSandbox = () => {
+  const startSandbox = useCallback(() => {
     if (!sessionId) return;
-    setSandboxStatus("starting");
-    void startSession(sessionId)
-      .then(() => setSandboxStatus("ready"))
-      .catch((err) => {
-        console.error("Failed to start session sandbox:", err);
-        setSandboxStatus("error");
-      });
-  };
-  useEffect(() => {
-    if (!sessionId) return;
-    startSandbox();
+    void bootExistingOrStartSession({
+      sessionId,
+      getStatus: getSessionStatus,
+      start: startSession,
+      setStatus: setSandboxStatus
+    });
   }, [sessionId]);
-  const booting =
-    loadingChat || Boolean(sessionId && sandboxStatus === "starting");
+  const branchCopy = useBranchCopyBoot({
+    sessionId,
+    locationState: options.locationState,
+    pathname: options.pathname,
+    navigate: options.navigate,
+    onReady: startSandbox
+  });
+  return {
+    chat,
+    loadingChat,
+    sandboxStatus,
+    chrome,
+    setChrome,
+    leftMode,
+    setLeftMode,
+    sessionId,
+    startSandbox,
+    copying: branchCopy.copying,
+    copyError: branchCopy.copyError,
+    retryCopy: branchCopy.retry,
+    booting:
+      loadingChat ||
+      branchCopy.copying ||
+      Boolean(sessionId && sandboxStatus === "starting")
+  };
+}
+
+export function ChatWorkbench() {
+  const params = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const projectId = params.projectId ?? "";
+  const chatId = params.chatId ?? "";
+  const initialPrompt = readInitialPrompt(location.state);
+  const wb = useChatWorkbenchSession({
+    projectId,
+    chatId,
+    locationState: location.state,
+    pathname: location.pathname,
+    navigate
+  });
+  const boot = sessionBootCopyProps({
+    copying: wb.copying,
+    copyError: wb.copyError,
+    retryCopy: wb.retryCopy,
+    sandboxStatus: wb.sandboxStatus,
+    startSandbox: wb.startSandbox
+  });
   return (
     <div className="flex h-screen flex-col">
       <SessionHeader
         onBack={() => navigate(`/projects/${projectId}/chats`)}
-        title={loadingChat ? "Loading…" : (chat?.title ?? "Chat")}
-        turnStatus={chrome.turnStatus}
-        sandboxStatus={sessionId ? sandboxStatus : "starting"}
-        leftMode={leftMode}
-        onLeftMode={setLeftMode}
-        actions={
-          sessionId ? <SessionActions sessionId={sessionId} /> : undefined
-        }
+        title={wb.loadingChat ? "Loading…" : (wb.chat?.title ?? "Chat")}
+        turnStatus={wb.chrome.turnStatus}
+        sandboxStatus={wb.sessionId ? wb.sandboxStatus : "starting"}
+        leftMode={wb.leftMode}
+        onLeftMode={wb.setLeftMode}
       />
       <div className="min-h-0 flex-1">
-        {booting || sandboxStatus === "error" ? (
+        {wb.booting || wb.sandboxStatus === "error" || wb.copyError ? (
           <SessionBootScreen
-            sandboxStatus={sandboxStatus === "error" ? "error" : "starting"}
-            onRetry={sandboxStatus === "error" ? startSandbox : undefined}
+            sandboxStatus={boot.sandboxStatus}
+            title={boot.title}
+            detail={boot.detail}
+            onRetry={boot.onRetry}
           />
-        ) : sessionId ? (
+        ) : wb.sessionId ? (
           <Workbench
-            sessionId={sessionId}
+            sessionId={wb.sessionId}
             projectId={projectId}
             chatId={chatId}
-            sessionKind={chat?.kind ?? "workbench"}
-            branchName={chat?.branchName}
+            sessionKind={wb.chat?.kind ?? "workbench"}
+            branchName={wb.chat?.branchName}
             initialPrompt={initialPrompt}
-            leftMode={leftMode}
-            onLeftModeChange={setLeftMode}
-            onChromeChange={setChrome}
+            leftMode={wb.leftMode}
+            onLeftModeChange={wb.setLeftMode}
+            onChromeChange={wb.setChrome}
           />
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
@@ -127,59 +183,5 @@ export function ChatWorkbench() {
         )}
       </div>
     </div>
-  );
-}
-
-function SessionActions({ sessionId }: { sessionId: string }) {
-  const [busy, setBusy] = useState<"download" | "promote" | null>(null);
-  const download = async () => {
-    setBusy("download");
-    try {
-      await downloadRepoArchive(sessionId);
-    } catch (e) {
-      alert(`Download failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-  const promote = async () => {
-    if (
-      !window.confirm(
-        "Promote the current working code to canonical? For GitHub this pushes to the chat's branch; for uploads it overwrites the stored project."
-      )
-    ) {
-      return;
-    }
-    setBusy("promote");
-    try {
-      const r = await promoteToCanonical(sessionId);
-      alert(
-        r.target === "github"
-          ? `Pushed to branch "${r.branch}".`
-          : `Canonical updated (${r.files} files stored).`
-      );
-    } catch (e) {
-      alert(`Promote failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-  return (
-    <>
-      <DropdownMenuItem
-        disabled={busy !== null}
-        onClick={() => void download()}
-      >
-        <Download className="size-4" />
-        {busy === "download" ? "Downloading…" : "Download"}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        disabled={busy !== null}
-        onClick={() => void promote()}
-      >
-        <UploadCloud className="size-4" />
-        {busy === "promote" ? "Promoting…" : "Promote"}
-      </DropdownMenuItem>
-    </>
   );
 }

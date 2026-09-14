@@ -19,6 +19,7 @@ describe("submitNewChat", () => {
       parentId: "",
       description: "",
       workflowId: "  ",
+      executionTarget: "local",
       files: [],
       links: [],
       onCreated: vi.fn(),

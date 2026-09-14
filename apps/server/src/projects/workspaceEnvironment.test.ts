@@ -27,8 +27,16 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
         ChatFeatureRepository: class {
           async getBySessionId() {
             return chatWorkspaceId
-              ? { workspaceId: chatWorkspaceId, sessionId: "sess-1" }
-              : { workspaceId: null, sessionId: "sess-1" };
+              ? {
+                  workspaceId: chatWorkspaceId,
+                  sessionId: "sess-1",
+                  executionTarget: "cloud"
+                }
+              : {
+                  workspaceId: null,
+                  sessionId: "sess-1",
+                  executionTarget: "cloud"
+                };
           }
         }
       }
@@ -45,12 +53,12 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
               updatedAt: new Date("2024-01-01T00:00:00.000Z")
             };
           }
-          async upsertLaunch(
-            workspaceId: string,
-            launch: unknown,
-            sourceSessionId: string | null
-          ) {
-            upserted = { workspaceId, launch, sourceSessionId };
+          async upsertLaunch(options: {
+            workspaceId: string;
+            launch: unknown;
+            sourceSessionId: string | null;
+          }) {
+            upserted = options;
           }
           async clearLaunch() {}
         }
@@ -78,7 +86,7 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
         resolveSandbox: async () => ({ containerName: "c1" })
       }
     });
-    mock.module("./workspaceDepsCache.js", {
+    mock.module("./cloud/workspaceDepsCache.js", {
       exports: {
         restoreCachedDeps: async (opts: { repoName: string }) => {
           restored.push(opts.repoName);
@@ -89,7 +97,25 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
           return true;
         },
         clearWorkspaceDepsCache: async () => undefined,
-        workspaceDepsVolumeName: (id: string) => `forge-ws-deps-${id.slice(0, 8)}`
+        workspaceDepsVolumeName: (id: string) =>
+          `forge-ws-deps-${id.slice(0, 8)}`
+      }
+    });
+
+    mock.module("./sandboxRuntime/resolve.js", {
+      exports: {
+        isHostSession: async () => false,
+        rememberSessionExecutionTarget: () => undefined,
+        forgetSessionRuntimeKind: () => undefined,
+        getSandboxRuntime: async () => ({ kind: "docker" }),
+        resolveSandboxRuntimeKindForSession: async () => "docker",
+        executionTargetToKind: (t: string) =>
+          t === "cloud" ? "docker" : "host",
+        cloudSandboxKindFromEnv: () => "docker",
+        parseExecutionTarget: (raw: unknown) =>
+          raw === "local" || raw === "cloud" ? raw : undefined,
+        resetSandboxRuntimeCache: () => undefined,
+        getSandboxRuntimeByKind: () => ({ kind: "docker" })
       }
     });
 
@@ -135,7 +161,9 @@ describe("workspaceEnvironment", { concurrency: false }, () => {
 
   it("does not seed without workspace", async () => {
     chatWorkspaceId = null;
-    savedLaunch = { apps: [{ name: "x", cwd: ".", command: "npm run dev", type: "web" }] };
+    savedLaunch = {
+      apps: [{ name: "x", cwd: ".", command: "npm run dev", type: "web" }]
+    };
     written = null;
     assert.equal(await seedLaunchFromWorkspace("sess-1"), false);
     assert.equal(written, null);

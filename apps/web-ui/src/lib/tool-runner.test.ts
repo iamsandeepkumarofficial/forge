@@ -93,4 +93,17 @@ describe("tool-runner", () => {
     const entries = await listSandboxDir({ sessionId: "s1", path: "." });
     expect(entries).toEqual([{ name: "a.ts", path: "a.ts", isDir: false }]);
   });
+
+  it("listSandboxDir throws when list_dir fails", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: false,
+        output: "Invalid path: first segment must be a member repo"
+      })
+    } as Response);
+    await expect(
+      listSandboxDir({ sessionId: "s1", path: "src" })
+    ).rejects.toThrow(/member repo/);
+  });
 });

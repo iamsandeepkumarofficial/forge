@@ -23,9 +23,11 @@ export type ApiOperation = {
 
 export function previewPortLabel(app: {
   port?: number | null;
+  hostPort?: number | null;
   name: string;
 }): string {
-  return app.port != null ? String(app.port) : app.name;
+  const shown = app.hostPort ?? app.port;
+  return shown != null ? String(shown) : app.name;
 }
 
 export function parseHeaderLines(text: string): Record<string, string> {
@@ -92,9 +94,7 @@ export function operationKey(op: ApiOperation): string {
   return `${op.method} ${op.path}`;
 }
 
-export function mergeOperations(
-  ...groups: ApiOperation[][]
-): ApiOperation[] {
+export function mergeOperations(...groups: ApiOperation[][]): ApiOperation[] {
   const found = new Map<string, ApiOperation>();
   for (const group of groups) {
     for (const op of group) {
@@ -107,4 +107,41 @@ export function mergeOperations(
       ? a.method.localeCompare(b.method)
       : a.path.localeCompare(b.path)
   );
+}
+
+const OPENAPI_TIMEOUT_MS = 4000;
+const HTTP_OK_MIN = 200;
+const HTTP_REDIRECT_MIN = 300;
+
+export async function discoverOpenApi(options: {
+  sessionId: string;
+  appName: string;
+  request: (opts: {
+    sessionId: string;
+    appName: string;
+    method: string;
+    path: string;
+    signal: AbortSignal;
+  }) => Promise<{ status: number; body: string }>;
+}): Promise<ApiOperation[]> {
+  const groups = await Promise.all(
+    OPENAPI_SPEC_PATHS.map(async (specPath) => {
+      try {
+        const res = await options.request({
+          sessionId: options.sessionId,
+          appName: options.appName,
+          method: "GET",
+          path: specPath,
+          signal: AbortSignal.timeout(OPENAPI_TIMEOUT_MS)
+        });
+        if (res.status < HTTP_OK_MIN || res.status >= HTTP_REDIRECT_MIN) {
+          return [];
+        }
+        return operationsFromOpenApi(tryParseJsonBody(res.body));
+      } catch {
+        return [];
+      }
+    })
+  );
+  return mergeOperations(...groups);
 }

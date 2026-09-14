@@ -1,4 +1,4 @@
-export type LeftPaneMode = "chat" | "files" | "changes" | "run";
+export type LeftPaneMode = "chat" | "files" | "changes" | "run" | "help";
 
 export type WorkbenchTurnStatus = "idle" | "thinking" | "running" | "waiting";
 

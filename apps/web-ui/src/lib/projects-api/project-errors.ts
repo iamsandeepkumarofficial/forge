@@ -22,7 +22,6 @@ export function parseApiErrorText(options: {
       errorCode = error.error.trim();
       helpText = error.help || undefined;
     } else if (typeof error.help === "string" && error.help.trim()) {
-      // Empty AggregateError messages used to surface as blank 500s.
       errorMessage = error.help.trim();
       helpText = error.help.trim();
     }

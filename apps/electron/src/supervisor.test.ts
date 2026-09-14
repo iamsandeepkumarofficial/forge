@@ -63,6 +63,7 @@ describe("Supervisor", () => {
     const supervisor = new Supervisor({
       findRoot: () => "/repo",
       readCfg: () => ({ desktop: { stopComposeOnQuit: true } }),
+      hostMode: false,
       stopCompose: (root) => {
         roots.push(root);
       }
@@ -84,4 +85,3 @@ describe("Supervisor", () => {
     assert.match(supervisor.getStatus(), /not started/);
   });
 });
-

@@ -17,15 +17,16 @@ afterEach(() => {
 });
 
 describe("resolveRunningAppUrl", () => {
-  it("prefers proxied hostname URL when preview domain is set", () => {
+  it("prefers proxied hostname URL when previewHostname is provided", () => {
     process.env.FORGE_PREVIEW_BASE_DOMAIN = "preview.localhost";
     process.env.PREVIEW_URL_SCHEME = "http";
     process.env.PREVIEW_PUBLIC_ORIGIN = "http://127.0.0.1:8081";
     const url = resolveRunningAppUrl({
       running: true,
       sessionId: "sess-1",
-      port: 3000,
-      hostPort: 40120
+      port: 40007,
+      hostPort: 40007,
+      previewHostname: "s-sess-1.preview.localhost"
     });
     assert.equal(url, "http://s-sess-1.preview.localhost:8081");
   });
@@ -37,23 +38,24 @@ describe("resolveRunningAppUrl", () => {
     const url = resolveRunningAppUrl({
       running: true,
       sessionId: "sess-1",
-      port: 3000,
-      hostPort: 40120
+      port: 40007,
+      hostPort: 40007,
+      previewHostname: "s-sess-1.preview.localhost"
     });
-    assert.equal(url, "http://127.0.0.1:40120");
+    assert.equal(url, "http://127.0.0.1:40007");
   });
 
-  it("uses proxied URL when only PREVIEW_PLANE_URL is set", () => {
-    delete process.env.FORGE_PREVIEW_BASE_DOMAIN;
-    process.env.PREVIEW_PLANE_URL = "http://127.0.0.1:8081";
+  it("uses host port when previewHostname is omitted", () => {
+    process.env.FORGE_PREVIEW_BASE_DOMAIN = "preview.localhost";
     process.env.PREVIEW_URL_SCHEME = "http";
+    process.env.PREVIEW_PUBLIC_ORIGIN = "http://127.0.0.1:8081";
     const url = resolveRunningAppUrl({
       running: true,
       sessionId: "sess-1",
-      port: 3000,
-      hostPort: 40120
+      port: 40007,
+      hostPort: 40007
     });
-    assert.equal(url, "http://s-sess-1.preview.localhost:8081");
+    assert.equal(url, "http://127.0.0.1:40007");
   });
 
   it("returns undefined when not running", () => {
@@ -63,7 +65,8 @@ describe("resolveRunningAppUrl", () => {
         running: false,
         sessionId: "sess-1",
         port: 3000,
-        hostPort: 40120
+        hostPort: 40120,
+        previewHostname: "s-sess-1.preview.localhost"
       }),
       undefined
     );

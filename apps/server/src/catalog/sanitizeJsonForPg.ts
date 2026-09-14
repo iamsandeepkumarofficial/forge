@@ -1,7 +1,4 @@
-/**
- * Postgres `json`/`jsonb` reject U+0000 in string values
- * ("unsupported Unicode escape sequence"). Terminal/tool output often includes it.
- */
+
 export function sanitizeJsonForPg<T>(value: T): T {
   if (typeof value === "string") {
     return (value.includes("\u0000") ? value.replaceAll("\u0000", "") : value) as T;

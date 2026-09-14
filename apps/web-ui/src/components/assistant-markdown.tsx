@@ -129,19 +129,15 @@ const assistantMarkdownComponents: Components = {
 };
 export function AssistantMarkdown({
   text,
-  className,
-  streamingIndicator
+  className
 }: {
   text: string;
   className?: string;
-  streamingIndicator?: boolean;
 }) {
   return (
     <div
       className={cn(
         "text-sm leading-relaxed [&_pre_code]:bg-transparent",
-        streamingIndicator &&
-          "after:ml-0.5 after:inline-block after:h-[1.1em] after:w-1.5 after:animate-pulse after:rounded-sm after:bg-teal-500 after:align-text-bottom",
         className
       )}
     >

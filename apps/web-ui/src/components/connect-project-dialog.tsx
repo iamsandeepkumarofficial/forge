@@ -3,6 +3,42 @@ import { Folder, Loader2 } from "lucide-react";
 import { isDesktop, pickFolder } from "../lib/desktop.js";
 import { connectLocalProject } from "../lib/projects-api.js";
 
+function ConnectProjectPathForm(options: {
+  loading: boolean;
+  localPath: string;
+  onLocalPath: (path: string) => void;
+  onConnectPath: (e: React.FormEvent) => void;
+}) {
+  const { loading, localPath, onLocalPath, onConnectPath } = options;
+  return (
+    <form onSubmit={onConnectPath} className="space-y-2">
+      <label className="block text-sm font-medium">
+        Absolute folder path
+        <input
+          type="text"
+          value={localPath}
+          onChange={(e) => onLocalPath(e.target.value)}
+          placeholder="/Users/you/projects/my-app"
+          disabled={loading}
+          className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+        />
+      </label>
+      <button
+        type="submit"
+        disabled={loading || !localPath.trim()}
+        aria-label="Connect folder"
+        className="inline-flex w-full items-center justify-center rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+      >
+        {loading ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Folder className="size-4" />
+        )}
+      </button>
+    </form>
+  );
+}
+
 function ConnectProjectForm(options: {
   loading: boolean;
   error: string | null;
@@ -45,31 +81,12 @@ function ConnectProjectForm(options: {
             Select folder
           </button>
           {showPathInput && !desktop && (
-            <form onSubmit={onConnectPath} className="space-y-2">
-              <label className="block text-sm font-medium">
-                Absolute folder path
-                <input
-                  type="text"
-                  value={localPath}
-                  onChange={(e) => onLocalPath(e.target.value)}
-                  placeholder="/Users/you/projects/my-app"
-                  disabled={loading}
-                  className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={loading || !localPath.trim()}
-                aria-label="Connect folder"
-                className="inline-flex w-full items-center justify-center rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-              >
-                {loading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Folder className="size-4" />
-                )}
-              </button>
-            </form>
+            <ConnectProjectPathForm
+              loading={loading}
+              localPath={localPath}
+              onLocalPath={onLocalPath}
+              onConnectPath={onConnectPath}
+            />
           )}
           <p className="text-xs text-muted-foreground">
             {desktop

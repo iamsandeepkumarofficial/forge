@@ -28,7 +28,7 @@ function persistDismissed(sessionId: string, ids: Set<string>): void {
       JSON.stringify([...ids])
     );
   } catch {
-    /* ignore quota / private mode */
+    void 0;
   }
 }
 
@@ -46,7 +46,9 @@ export function usePendingAskUser(options: {
     loadDismissed(sessionId)
   );
   useEffect(() => {
-    setDismissedIds(loadDismissed(sessionId));
+    void Promise.resolve().then(() => {
+      setDismissedIds(loadDismissed(sessionId));
+    });
   }, [sessionId]);
   const pending = useMemo(
     () =>

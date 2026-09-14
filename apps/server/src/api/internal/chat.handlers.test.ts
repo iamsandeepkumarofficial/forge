@@ -33,4 +33,24 @@ describe("chat.handlers", () => {
     });
     assert.equal(state.statusCode, 400);
   });
+
+  it("inserts a user turn message without a git checkpoint", async () => {
+    const { res, state } = mockRes();
+    await handleCreateSessionMessage({
+      req: {
+        params: { sessionId: "s1" },
+        body: {
+          role: "user",
+          parts: [{ type: "text", text: "hi" }],
+          turnId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+        }
+      } as never,
+      res,
+      messages: {
+        create: async () => ({ id: "m1" })
+      } as never
+    });
+    assert.equal(state.statusCode, 201);
+    assert.deepEqual(state.body, { id: "m1" });
+  });
 });

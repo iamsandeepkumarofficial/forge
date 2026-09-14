@@ -27,15 +27,12 @@ describe("launchScaffold", { concurrency: false }, () => {
           }
           return { code: 0, stdout: "", stderr: "" };
         },
-        readFileFromSandbox: async (_c: string, absPath: string) => {
-          if (absPath.endsWith(".forge/launch.json")) {
+        readFileFromSandbox: async (opts: { absPath: string }) => {
+          if (opts.absPath.endsWith(".forge/launch.json")) {
             return launchRaw;
           }
-          if (absPath.endsWith("pulse.json")) {
-            return null;
-          }
-          if (packageByPath.has(absPath)) {
-            return packageByPath.get(absPath) ?? null;
+          if (packageByPath.has(opts.absPath)) {
+            return packageByPath.get(opts.absPath) ?? null;
           }
           return null;
         },
@@ -44,6 +41,15 @@ describe("launchScaffold", { concurrency: false }, () => {
           launchRaw = opts.content;
         },
         pathExistsInSandbox: async () => true
+      }
+    });
+    mock.module("../catalog/chatFeatureRepository.js", {
+      exports: {
+        ChatFeatureRepository: class {
+          async getBySessionId() {
+            return { workspaceId: "ws-test", sessionId: "s1" };
+          }
+        }
       }
     });
     mock.module("./workspaceEnvironment.js", {
@@ -86,7 +92,7 @@ describe("launchScaffold", { concurrency: false }, () => {
     seedResult = true;
     appsListing = "web";
     const r = await ensureLaunchConfig("s1");
-    assert.deepEqual(r, { ready: true, scaffolded: false });
+    assert.deepEqual(r, { ready: true, scaffolded: false, source: "existing" });
     assert.equal(written, "");
   });
 
@@ -97,7 +103,12 @@ describe("launchScaffold", { concurrency: false }, () => {
     appsListing = "";
     packageByPath = new Map();
     const r = await ensureLaunchConfig("s2");
-    assert.deepEqual(r, { ready: true, scaffolded: false, seeded: true });
+    assert.deepEqual(r, {
+      ready: true,
+      scaffolded: false,
+      seeded: true,
+      source: "seeded"
+    });
     assert.match(written, /saved-web/);
   });
 
@@ -117,7 +128,11 @@ describe("launchScaffold", { concurrency: false }, () => {
       ]
     ]);
     const r = await ensureLaunchConfig("s1");
-    assert.deepEqual(r, { ready: true, scaffolded: true });
+    assert.deepEqual(r, {
+      ready: true,
+      scaffolded: true,
+      source: "scaffolded"
+    });
     assert.match(written, /"name": "web"/);
     assert.match(written, /"cwd": "apps\/web"/);
   });
@@ -129,7 +144,7 @@ describe("launchScaffold", { concurrency: false }, () => {
     appsListing = "";
     packageByPath = new Map();
     const r = await ensureLaunchConfig("s1");
-    assert.deepEqual(r, { ready: false, scaffolded: false });
+    assert.deepEqual(r, { ready: false, scaffolded: false, source: "none" });
     assert.equal(written, "");
   });
 });

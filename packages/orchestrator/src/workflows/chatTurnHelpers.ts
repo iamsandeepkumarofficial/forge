@@ -1,11 +1,5 @@
 export type ChatAgentMode =
-  | "agent"
-  | "plan"
-  | "debug"
-  | "ask"
-  | "multitask"
-  | "auto"
-  | "build";
+  "agent" | "plan" | "debug" | "ask" | "multitask" | "auto" | "build";
 
 export type InteractiveChatTurnArgs = {
   sessionId: string;
@@ -33,6 +27,18 @@ export type InteractiveChatTurnResult = {
 
 const FINAL_TEXT_PREVIEW_CHARS = 500;
 const N_8 = 8;
+
+export const EMPTY_ASSISTANT_PLACEHOLDER = "_(no response)_";
+
+export function assistantTextForFinalize(opts: {
+  text: string;
+  reasoningText?: string;
+  toolCallCount: number;
+}): string {
+  if (opts.text.trim()) return opts.text;
+  if (opts.reasoningText?.trim() || opts.toolCallCount > 0) return "";
+  return EMPTY_ASSISTANT_PLACEHOLDER;
+}
 
 export function isLocalChatProvider(provider: string): boolean {
   const p = provider.trim().toLowerCase();

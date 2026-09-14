@@ -31,11 +31,12 @@ export class WorkspaceEnvironmentRepository {
     };
   }
 
-  async upsertLaunch(
-    workspaceId: string,
-    launch: WorkspaceLaunchJson,
-    sourceSessionId: string | null
-  ): Promise<void> {
+  async upsertLaunch(options: {
+    workspaceId: string;
+    launch: WorkspaceLaunchJson;
+    sourceSessionId: string | null;
+  }): Promise<void> {
+    const { workspaceId, launch, sourceSessionId } = options;
     const db = getDb();
     const now = new Date();
     await db

@@ -1,29 +1,20 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FolderPlus, Layers, Settings } from "lucide-react";
+import { Activity, FolderPlus, Layers, Settings } from "lucide-react";
 import { ConnectProjectDialog } from "../components/connect-project-dialog.js";
-import { CreateWorkspaceDialog } from "../components/create-workspace-dialog.js";
-import { DashboardEmptyState } from "../components/dashboard-empty-state.js";
 import { DashboardOverview } from "../components/dashboard-overview.js";
 import { ForgeMark } from "../components/forge-mark.js";
 import { ProjectCard } from "../components/project-card.js";
 import { WorkspaceCard } from "../components/workspace-card.js";
 import { useDashboardInsights } from "../hooks/use-dashboard-insights.js";
 import { runnerUrl } from "../lib/tool-runner.js";
-import { deleteProject } from "../lib/projects-api.js";
 import {
-  deleteWorkspace,
   listWorkspaces,
   type WorkspaceSummary
 } from "../lib/workspaces-api.js";
+import { HomeLoaded, type HomeProjectRow } from "./home-loaded.js";
 
-type ProjectRow = {
-  id: string;
-  name: string;
-  source: "github" | "local" | "upload";
-  status: "available" | "unavailable";
-  lastActivityAt?: number | string;
-};
+type ProjectRow = HomeProjectRow;
 
 async function fetchProjectRows(): Promise<ProjectRow[]> {
   const baseUrl = runnerUrl();
@@ -37,6 +28,26 @@ async function fetchProjectRows(): Promise<ProjectRow[]> {
   return Array.isArray(data) ? data : [];
 }
 
+async function loadHomeRows(): Promise<{
+  projects: ProjectRow[];
+  workspaces: WorkspaceSummary[];
+}> {
+  let projects: ProjectRow[] = [];
+  let workspaces: WorkspaceSummary[] = [];
+  try {
+    projects = await fetchProjectRows();
+  } catch (err) {
+    console.error("Failed to load projects:", err);
+  }
+  try {
+    const ws = await listWorkspaces();
+    workspaces = Array.isArray(ws) ? ws : [];
+  } catch (err) {
+    console.error("Failed to load workspaces:", err);
+  }
+  return { projects, workspaces };
+}
+
 export function Home() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -44,90 +55,43 @@ export function Home() {
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const loadProjects = async () => {
     setLoading(true);
-    try {
-      setProjects(await fetchProjectRows());
-    } catch (err) {
-      console.error("Failed to load projects:", err);
-    }
-    try {
-      const ws = await listWorkspaces();
-      setWorkspaces(Array.isArray(ws) ? ws : []);
-    } catch (err) {
-      console.error("Failed to load workspaces:", err);
-    } finally {
-      setLoading(false);
-    }
+    const rows = await loadHomeRows();
+    setProjects(rows.projects);
+    setWorkspaces(rows.workspaces);
+    setLoading(false);
   };
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const rows = await fetchProjectRows();
-        if (!cancelled) setProjects(rows);
-      } catch (err) {
-        console.error("Failed to load projects:", err);
-      }
-      try {
-        const ws = await listWorkspaces();
-        if (!cancelled) setWorkspaces(Array.isArray(ws) ? ws : []);
-      } catch (err) {
-        console.error("Failed to load workspaces:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
+      const rows = await loadHomeRows();
+      if (!cancelled) {
+        setProjects(rows.projects);
+        setWorkspaces(rows.workspaces);
+        setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
-  const handleDelete = async (projectId: string) => {
-    try {
-      await deleteProject(projectId);
-      await loadProjects();
-    } catch (err) {
-      console.error("Failed to delete project:", err);
-    }
-  };
   if (loading) return <div className="p-8 text-center">Loading...</div>;
-  if (projects.length === 0 && workspaces.length === 0) {
-    return <DashboardEmptyState onConnected={() => void loadProjects()} />;
-  }
   return (
-    <>
-      <HomeGrid
-        projects={projects}
-        workspaces={workspaces}
-        showDialog={showDialog}
-        onShowDialog={setShowDialog}
-        onConnected={() => void loadProjects()}
-        onOpen={(id) => void navigate(`/projects/${id}/chats`)}
-        onDelete={(id) => void handleDelete(id)}
-        onOpenWorkspace={(id) => void navigate(`/workspaces/${id}`)}
-        onCreateWorkspace={() => setShowWorkspaceDialog(true)}
-        onDeleteWorkspace={(id) => {
-          void (async () => {
-            try {
-              await deleteWorkspace(id);
-              await loadProjects();
-            } catch (err) {
-              console.error("Failed to delete workspace:", err);
-            }
-          })();
-        }}
-      />
-      {showWorkspaceDialog && (
-        <CreateWorkspaceDialog
-          onClose={() => setShowWorkspaceDialog(false)}
-          onCreated={(ws) => {
-            setShowWorkspaceDialog(false);
-            void loadProjects();
-            navigate(`/workspaces/${ws.id}`);
-          }}
-        />
-      )}
-    </>
+    <HomeLoaded
+      projects={projects}
+      workspaces={workspaces}
+      showDialog={showDialog}
+      showWorkspaceDialog={showWorkspaceDialog}
+      showActivity={showActivity}
+      onShowDialog={setShowDialog}
+      onShowWorkspaceDialog={setShowWorkspaceDialog}
+      onShowActivity={setShowActivity}
+      onReload={() => void loadProjects()}
+      onNavigate={(path) => void navigate(path)}
+      HomeGrid={HomeGrid}
+    />
   );
 }
 
@@ -147,21 +111,123 @@ function CreateCard(options: {
       className="group relative flex aspect-square w-full flex-col rounded-xl border border-dashed bg-muted/20 p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted/40"
     >
       <div className="flex h-full flex-col">
-        <div className="flex flex-1 items-center justify-center">
-          <span className="inline-flex size-14 items-center justify-center rounded-2xl border border-dashed border-border bg-background text-muted-foreground">
-            {children}
-          </span>
+        <div className="mb-3 text-muted-foreground transition-colors group-hover:text-primary">
+          {children}
         </div>
-        <div>
-          <h3 className="truncate text-sm font-semibold leading-snug">
-            {title}
-          </h3>
-          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-            {subtitle}
-          </p>
-        </div>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
       </div>
     </button>
+  );
+}
+
+function HomeWorkspacesSection(options: {
+  workspaces: WorkspaceSummary[];
+  cardGrid: string;
+  onOpenWorkspace: (id: string) => void;
+  onDeleteWorkspace: (id: string) => void;
+  onCreateWorkspace: () => void;
+}) {
+  const {
+    workspaces,
+    cardGrid,
+    onOpenWorkspace,
+    onDeleteWorkspace,
+    onCreateWorkspace
+  } = options;
+  return (
+    <section className="mt-8">
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+        Workspaces
+      </h2>
+      <div className={cardGrid}>
+        {workspaces.map((ws) => (
+          <WorkspaceCard
+            key={ws.id}
+            name={ws.name}
+            routeCount={ws.routes?.length ?? 0}
+            onOpen={() => onOpenWorkspace(ws.id)}
+            onDelete={() => onDeleteWorkspace(ws.id)}
+          />
+        ))}
+        <CreateCard
+          label="Create a workspace"
+          title="New workspace"
+          subtitle="Group projects for multi-repo chats"
+          onClick={onCreateWorkspace}
+        >
+          <Layers className="size-7" />
+        </CreateCard>
+      </div>
+    </section>
+  );
+}
+
+function HomeProjectsSection(options: {
+  projects: ProjectRow[];
+  cardGrid: string;
+  onOpen: (id: string) => void;
+  onDelete: (id: string) => void;
+  onShowDialog: (v: boolean) => void;
+}) {
+  const { projects, cardGrid, onOpen, onDelete, onShowDialog } = options;
+  return (
+    <section className="mt-8">
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+        Projects
+      </h2>
+      <div className={cardGrid}>
+        {projects.map((project) => (
+          <ProjectCard
+            key={project.id}
+            projectId={project.id}
+            name={project.name}
+            source={project.source}
+            status={project.status}
+            lastActivityAt={
+              project.lastActivityAt == null
+                ? undefined
+                : typeof project.lastActivityAt === "number"
+                  ? project.lastActivityAt
+                  : Date.parse(project.lastActivityAt)
+            }
+            onOpen={() => onOpen(project.id)}
+            onDelete={() => onDelete(project.id)}
+          />
+        ))}
+        <CreateCard
+          label="Connect a project"
+          title="Connect project"
+          subtitle="Add a local folder or GitHub repo"
+          onClick={() => onShowDialog(true)}
+        >
+          <FolderPlus className="size-7" />
+        </CreateCard>
+      </div>
+    </section>
+  );
+}
+
+function HomeHeaderActions(options: { onShowActivity: () => void }) {
+  const { onShowActivity } = options;
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        aria-label="Activity"
+        onClick={onShowActivity}
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <Activity className="size-5" />
+      </button>
+      <Link
+        to="/settings"
+        aria-label="Settings"
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <Settings className="size-5" />
+      </Link>
+    </div>
   );
 }
 
@@ -176,6 +242,7 @@ function HomeGrid(options: {
   onOpenWorkspace: (id: string) => void;
   onCreateWorkspace: () => void;
   onDeleteWorkspace: (id: string) => void;
+  onShowActivity: () => void;
 }) {
   const {
     projects,
@@ -187,7 +254,8 @@ function HomeGrid(options: {
     onDelete,
     onOpenWorkspace,
     onCreateWorkspace,
-    onDeleteWorkspace
+    onDeleteWorkspace,
+    onShowActivity
   } = options;
   const insights = useDashboardInsights({ projects, workspaces });
   const cardGrid =
@@ -197,15 +265,8 @@ function HomeGrid(options: {
       <div className="mx-auto max-w-6xl px-6 py-8">
         <div className="mb-6 flex items-start justify-between gap-4">
           <ForgeMark size="lg" />
-          <Link
-            to="/settings"
-            aria-label="Settings"
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Settings className="size-5" />
-          </Link>
+          <HomeHeaderActions onShowActivity={onShowActivity} />
         </div>
-
         <DashboardOverview
           stats={insights.stats}
           heatmap={insights.heatmap}
@@ -214,68 +275,26 @@ function HomeGrid(options: {
           projectCount={projects.length}
           workspaceCount={workspaces.length}
         />
-
         {showDialog && (
           <ConnectProjectDialog
             onClose={() => onShowDialog(false)}
             onConnected={onConnected}
           />
         )}
-
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold">Workspaces</h2>
-          <div className={cardGrid}>
-            {workspaces.map((ws) => (
-              <WorkspaceCard
-                key={ws.id}
-                name={ws.name}
-                routeCount={ws.routes?.length ?? 0}
-                onOpen={() => onOpenWorkspace(ws.id)}
-                onDelete={() => onDeleteWorkspace(ws.id)}
-              />
-            ))}
-            <CreateCard
-              label="Create a workspace"
-              title="New workspace"
-              subtitle="Group services for one feature chat"
-              onClick={onCreateWorkspace}
-            >
-              <Layers className="size-7" />
-            </CreateCard>
-          </div>
-        </section>
-
-        <section>
-          <h2 className="mb-4 text-lg font-semibold">Projects</h2>
-          <div className={cardGrid}>
-            {projects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                projectId={project.id}
-                name={project.name}
-                source={project.source}
-                status={project.status}
-                lastActivityAt={
-                  project.lastActivityAt == null
-                    ? undefined
-                    : typeof project.lastActivityAt === "number"
-                      ? project.lastActivityAt
-                      : Date.parse(project.lastActivityAt)
-                }
-                onOpen={() => onOpen(project.id)}
-                onDelete={() => onDelete(project.id)}
-              />
-            ))}
-            <CreateCard
-              label="Connect a project"
-              title="Connect project"
-              subtitle="Add a local folder or GitHub repo"
-              onClick={() => onShowDialog(true)}
-            >
-              <FolderPlus className="size-7" />
-            </CreateCard>
-          </div>
-        </section>
+        <HomeWorkspacesSection
+          workspaces={workspaces}
+          cardGrid={cardGrid}
+          onOpenWorkspace={onOpenWorkspace}
+          onDeleteWorkspace={onDeleteWorkspace}
+          onCreateWorkspace={onCreateWorkspace}
+        />
+        <HomeProjectsSection
+          projects={projects}
+          cardGrid={cardGrid}
+          onOpen={onOpen}
+          onDelete={onDelete}
+          onShowDialog={onShowDialog}
+        />
       </div>
     </div>
   );

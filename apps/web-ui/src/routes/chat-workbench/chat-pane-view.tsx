@@ -9,6 +9,8 @@ import type { AskUserProposal } from "../../lib/ask-user.js";
 import type { LlmProvider, UiChatMessage } from "../../lib/chat-agent.js";
 import type { ToolPart } from "../../lib/tool-display.js";
 import { ChatMessageList } from "./chat-message-list.js";
+import { RunningTerminalsBar } from "./running-terminals-bar.js";
+import type { CommittedTurnStep } from "./committed-turn-step.js";
 
 export type ChatPaneViewProps = {
   sessionId: string;
@@ -21,7 +23,10 @@ export type ChatPaneViewProps = {
   messages: UiChatMessage[];
   isStreaming: boolean;
   streamingText: string;
+  streamingReasoning?: string;
   liveToolParts: ToolPart[];
+  committedSteps?: CommittedTurnStep[];
+  historyLoaded?: boolean;
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | null;
   clearError: () => void;
@@ -54,6 +59,12 @@ export type ChatPaneViewProps = {
   onAttachFiles: (files: File[]) => void;
   onRemoveAttachment: (index: number) => void;
   onOpenFile?: (path: string) => void;
+  onOpenHelp?: () => void;
+  onBranchAssistant?: (options: {
+    messageId: string;
+    text: string;
+  }) => void | Promise<void>;
+  onRevertUserMessage?: (options: { messageId: string; text: string }) => void;
 };
 
 export function ChatPaneView(props: ChatPaneViewProps) {
@@ -69,14 +80,29 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         messages={o.messages}
         isStreaming={o.isStreaming}
         streamingText={o.streamingText}
+        streamingReasoning={o.streamingReasoning}
         liveToolParts={o.liveToolParts}
+        committedSteps={o.committedSteps}
+        historyLoaded={o.historyLoaded}
         status={o.status}
         waiting={Boolean(o.pendingAskUser)}
         error={o.error}
         clearError={o.clearError}
         onPickStarter={o.setInput}
         onOpenFile={o.onOpenFile}
+        sessionId={o.sessionId}
+        onOpenHelp={o.onOpenHelp}
+        onBranchAssistant={o.onBranchAssistant}
+        onRevertUserMessage={o.onRevertUserMessage}
       />
+      {o.pendingAskUser ? (
+        <div
+          role="status"
+          className="shrink-0 border-t bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          Waiting on you
+        </div>
+      ) : null}
       {o.pendingAskUser && o.onSubmitAskUser && o.onDismissAskUser ? (
         <div className="shrink-0 border-t px-3 py-2">
           <AskUserPrompt
@@ -115,6 +141,7 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         attachments={o.attachments}
         onAttachFiles={o.onAttachFiles}
         onRemoveAttachment={o.onRemoveAttachment}
+        leading={<RunningTerminalsBar sessionId={o.sessionId} />}
       />
     </div>
   );

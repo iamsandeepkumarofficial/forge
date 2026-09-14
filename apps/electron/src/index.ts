@@ -1,7 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { HEALTH_ATTEMPTS, IPC_GET_STATUS, IPC_PICK_FOLDER, WEB_UI_URL } from "./types.js";
+import {
+  HEALTH_ATTEMPTS,
+  IPC_GET_STATUS,
+  IPC_PICK_FOLDER,
+  WEB_UI_URL
+} from "./types.js";
 import { waitForHttp } from "./httpWait.js";
 import { findRepoRoot } from "./repoRoot.js";
 import { Supervisor } from "./supervisor.js";
@@ -53,7 +58,9 @@ async function boot(): Promise<void> {
       process.stderr.write(`[forge-electron] ${msg}\n`);
     })
     .catch((err: unknown) => {
-      process.stderr.write(`[forge-electron] start_infra failed: ${String(err)}\n`);
+      process.stderr.write(
+        `[forge-electron] start_infra failed: ${String(err)}\n`
+      );
     });
   await createWindow();
 }

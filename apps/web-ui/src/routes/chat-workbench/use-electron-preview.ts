@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import { electronPreview } from "../../lib/desktop.js";
-import type { PreviewNavInfo, PreviewPickResult } from "../../lib/desktop-preview.js";
+import type {
+  PreviewNavInfo,
+  PreviewPickResult
+} from "../../lib/desktop-preview.js";
+import { loadElectronPreviewPage } from "./electron-preview-ops.js";
 
 export function useElectronPreviewPage(options: {
   url: string;
@@ -11,26 +15,34 @@ export function useElectronPreviewPage(options: {
   onNavigated: (info: PreviewNavInfo) => void;
   onPick: (pick: PreviewPickResult) => void;
 }): void {
-  const {
-    url,
-    zoom,
-    reloadNonce,
-    cacheBust,
-    commenting,
-    onNavigated,
-    onPick
-  } = options;
+  const { url, zoom, reloadNonce, cacheBust, commenting, onNavigated, onPick } =
+    options;
   const api = electronPreview();
   const loadedUrl = useRef("");
   useEffect(() => {
-    if (!api || !url) return;
-    if (loadedUrl.current === url) {
-      void api.reload(cacheBust > 0);
-      return;
+    if (!api) return undefined;
+    if (!url) {
+      loadedUrl.current = "";
+      loadElectronPreviewPage({ api, url: "" });
+      return undefined;
     }
+    const shouldReload = loadedUrl.current === url;
     loadedUrl.current = url;
-    void api.loadURL(url);
+    loadElectronPreviewPage({
+      api,
+      url,
+      reload: shouldReload,
+      ignoreCache: cacheBust > 0
+    });
+    return undefined;
   }, [api, url, reloadNonce, cacheBust]);
+  useEffect(() => {
+    if (!api) return undefined;
+    return () => {
+      loadedUrl.current = "";
+      loadElectronPreviewPage({ api, url: "" });
+    };
+  }, [api]);
   useEffect(() => {
     if (!api) return;
     void api.setZoom(zoom);

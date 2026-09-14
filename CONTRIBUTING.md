@@ -6,17 +6,30 @@ Thanks for helping build Forge—an open-source, locally runnable coding agent h
 
 ### Prerequisites
 
-- Docker (daemon running)
 - Node.js 20+
 - pnpm (version pinned in root `packageManager`)
+- **Desktop:** Postgres 16 tools + Temporal CLI (or `~/.forge/runtime/bin/`) — Docker optional
+- **Cloud sessions:** Docker daemon running when you select Cloud in the UI (`FORGE_CLOUD_SANDBOX=docker`)
 
-### Steps
+### Desktop
+
+```bash
+pnpm install
+cp .env.example .env
+# Add LLM provider keys to .env
+pnpm desktop
+```
+
+No Docker daemon required for Normal (local) sessions. Use the home **Activity** dialog to list/stop sessions and preview apps.
+
+### Browser + compose
 
 ```bash
 docker compose up -d
 pnpm install
 cp .env.example .env
 # Add LLM provider keys to .env
+# FORGE_CLOUD_SANDBOX=docker
 pnpm docker:sandbox
 pnpm --filter @forge/db db:migrate
 pnpm dev
@@ -31,26 +44,26 @@ pnpm test
 pnpm build
 ```
 
-The desktop supervisor is Electron (`pnpm desktop`). Prefer compose + `pnpm dev` for day-to-day contribution. See [RFC 0002](./docs/rfcs/0002-local-desktop-runtime.md).
+Prefer `pnpm desktop` (host mode) for day-to-day contribution when iterating on the local app; use compose + `pnpm dev` when exercising Docker sandboxes. See [RFC 0002](./docs/rfcs/0002-local-desktop-runtime.md) and [RFC 0006](./docs/rfcs/0006-local-host-runtime-zero-docker.md).
 
 ## Code layout
 
 Monorepo managed with **pnpm** and **Turborepo**.
 
-| Path | Role |
-| ---- | ---- |
-| `apps/server` | Tool-plane HTTP API, sandbox lifecycle, tools, in-process preview proxy |
-| `apps/web-ui` | Chat workbench (React) |
-| `apps/preview-plane` | Optional standalone preview proxy (`PREVIEW_IN_PROCESS=0` / k8s) |
-| `apps/electron` | Electron desktop supervisor (`pnpm desktop`) |
-| `packages/orchestrator` | Temporal worker and chat turn workflows |
-| `packages/core` | Shared backend domain logic |
-| `packages/db` | Schema and migrations |
-| `packages/tools` | Sandbox tool implementations |
-| `packages/agents` | Agent mode definitions |
-| `packages/skills` | Packaged skills |
-| `packages/workflows` | Workflow definitions (trimmed toward chat-only) |
-| `packages/fe-core`, `packages/ui` | Shared client/UI packages when used by the shell |
+| Path                              | Role                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| `apps/server`                     | Tool-plane HTTP API, sandbox lifecycle, tools, in-process preview proxy |
+| `apps/web-ui`                     | Chat workbench (React)                                                  |
+| `apps/preview-plane`              | Optional standalone preview proxy (`PREVIEW_IN_PROCESS=0` / k8s)        |
+| `apps/electron`                   | Electron desktop supervisor (`pnpm desktop`)                            |
+| `packages/orchestrator`           | Temporal worker and chat turn workflows                                 |
+| `packages/core`                   | Shared backend domain logic                                             |
+| `packages/db`                     | Schema and migrations                                                   |
+| `packages/tools`                  | Sandbox tool implementations                                            |
+| `packages/agents`                 | Agent mode definitions                                                  |
+| `packages/skills`                 | Packaged skills                                                         |
+| `packages/workflows`              | Workflow definitions (trimmed toward chat-only)                         |
+| `packages/fe-core`, `packages/ui` | Shared client/UI packages when used by the shell                        |
 
 Apps are thin adapters. Prefer putting durable domain logic in `packages/*` rather than growing app-only business rules.
 

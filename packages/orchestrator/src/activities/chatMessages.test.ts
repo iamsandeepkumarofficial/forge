@@ -1,10 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  partsToModelMessages,
-  sanitizeToolCallPairs,
-  withFirstTurnRepoEval
-} from "./chatMessages.js";
+import { partsToModelMessages, sanitizeToolCallPairs } from "./chatMessages.js";
 import type { ModelMessage } from "ai";
 
 describe("chatMessages", () => {
@@ -118,21 +114,5 @@ describe("chatMessages", () => {
     const out = sanitizeToolCallPairs(input);
     assert.equal(out.length, 3);
     assert.equal(out[2]?.role, "tool");
-  });
-
-  it("withFirstTurnRepoEval prepends only before any assistant or tool turn", () => {
-    const first = withFirstTurnRepoEval([
-      { id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }
-    ]);
-    assert.equal(first[0]?.id, "repo-readiness-eval");
-    assert.match(JSON.stringify(first[0]?.parts), /preview_start/);
-    assert.match(JSON.stringify(first[0]?.parts), /upsert_launch_app/);
-    assert.doesNotMatch(JSON.stringify(first[0]?.parts), /ask the user/);
-    assert.equal(first[1]?.id, "1");
-    const later = withFirstTurnRepoEval([
-      { id: "1", role: "user", parts: [{ type: "text", text: "hi" }] },
-      { id: "2", role: "assistant", parts: [{ type: "text", text: "ok" }] }
-    ]);
-    assert.equal(later[0]?.id, "1");
   });
 });

@@ -120,6 +120,34 @@
       "when": 1785870000000,
       "tag": "0016_workspace_environments",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785875000000,
+      "tag": "0017_execution_target",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785880000000,
+      "tag": "0018_workspace_member_source_ref",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785885000000,
+      "tag": "0019_chat_turn_summary",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785890000000,
+      "tag": "0020_chat_revert",
+      "breakpoints": true
     }
   ]
 }

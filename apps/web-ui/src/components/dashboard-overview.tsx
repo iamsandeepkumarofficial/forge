@@ -153,6 +153,79 @@ function AttentionList(options: { items: AttentionItem[] }) {
   );
 }
 
+function OverviewStats(options: { stats: DashboardStats }) {
+  const { stats } = options;
+  return (
+    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <StatCard
+        label="Day streak"
+        value={stats.streakDays}
+        hint={stats.streakDays > 0 ? "Keep it going" : "Start today"}
+        icon={<Flame className="size-4" />}
+      />
+      <StatCard
+        label="Active chats"
+        value={stats.totalChats}
+        hint="Workbench sessions"
+        icon={<MessageSquare className="size-4" />}
+      />
+      <StatCard
+        label="Projects"
+        value={stats.activeProjects}
+        icon={<FolderKanban className="size-4" />}
+      />
+      <StatCard
+        label="Contributions"
+        value={stats.totalContributions}
+        hint="Sessions in last 20 weeks"
+        icon={<BarChart3 className="size-4" />}
+      />
+    </div>
+  );
+}
+
+function OverviewPanels(options: {
+  loading: boolean;
+  heatmap: HeatmapCell[][];
+  attention: AttentionItem[];
+}) {
+  const { loading, heatmap, attention } = options;
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+        <h3 className="text-sm font-semibold">Activity</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Session activity across your projects
+        </p>
+        <div className="mt-4">
+          {loading ? (
+            <div className="h-24 animate-pulse rounded-lg bg-muted/50" />
+          ) : (
+            <ActivityHeatmap weeks={heatmap} />
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+        <h3 className="text-sm font-semibold">Needs attention</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Stale chats, unavailable projects, and setup gaps
+        </p>
+        <div className="mt-4">
+          {loading ? (
+            <div className="space-y-2">
+              <div className="h-12 animate-pulse rounded-lg bg-muted/50" />
+              <div className="h-12 animate-pulse rounded-lg bg-muted/50" />
+            </div>
+          ) : (
+            <AttentionList items={attention} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DashboardOverview(options: {
   stats: DashboardStats;
   heatmap: HeatmapCell[][];
@@ -190,66 +263,13 @@ export function DashboardOverview(options: {
             <ArrowRight className="size-3.5" />
           </Link>
         </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label="Day streak"
-            value={stats.streakDays}
-            hint={stats.streakDays > 0 ? "Keep it going" : "Start today"}
-            icon={<Flame className="size-4" />}
-          />
-          <StatCard
-            label="Active chats"
-            value={stats.totalChats}
-            hint="Workbench sessions"
-            icon={<MessageSquare className="size-4" />}
-          />
-          <StatCard
-            label="Projects"
-            value={stats.activeProjects}
-            icon={<FolderKanban className="size-4" />}
-          />
-          <StatCard
-            label="Contributions"
-            value={stats.totalContributions}
-            hint="Sessions in last 20 weeks"
-            icon={<BarChart3 className="size-4" />}
-          />
-        </div>
+        <OverviewStats stats={stats} />
       </div>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
-          <h3 className="text-sm font-semibold">Activity</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Session activity across your projects
-          </p>
-          <div className="mt-4">
-            {loading ? (
-              <div className="h-24 animate-pulse rounded-lg bg-muted/50" />
-            ) : (
-              <ActivityHeatmap weeks={heatmap} />
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
-          <h3 className="text-sm font-semibold">Needs attention</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Stale chats, unavailable projects, and setup gaps
-          </p>
-          <div className="mt-4">
-            {loading ? (
-              <div className="space-y-2">
-                <div className="h-12 animate-pulse rounded-lg bg-muted/50" />
-                <div className="h-12 animate-pulse rounded-lg bg-muted/50" />
-              </div>
-            ) : (
-              <AttentionList items={attention} />
-            )}
-          </div>
-        </div>
-      </div>
+      <OverviewPanels
+        loading={loading}
+        heatmap={heatmap}
+        attention={attention}
+      />
     </section>
   );
 }

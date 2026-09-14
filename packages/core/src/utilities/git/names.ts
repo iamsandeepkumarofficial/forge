@@ -1,9 +1,30 @@
+const MAX_DIR_NAME_LENGTH = 64;
+
+export function sanitizeRepoDirectoryName(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (
+    !trimmed ||
+    trimmed.includes("..") ||
+    trimmed.includes("/") ||
+    trimmed.includes("\\")
+  ) {
+    return null;
+  }
+  const base = trimmed
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-._]+|[-._]+$/g, "")
+    .slice(0, MAX_DIR_NAME_LENGTH);
+  if (!base || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(base)) {
+    return null;
+  }
+  return base;
+}
+
 export function deriveRepoDirectoryName(url: string): string {
-  const maxDirNameLength = 64;
   const trimmed = url.trim().replace(/\/$/, "");
   const m = trimmed.match(/[/:]([^/]+?)(?:\.git)?$/i);
-  const base = (m?.[1] || "repo").replace(/[^a-zA-Z0-9._-]/g, "-");
-  return base.slice(0, maxDirNameLength) || "repo";
+  return sanitizeRepoDirectoryName(m?.[1] || "repo") || "repo";
 }
 export function assertSafeRepoDirectoryName(name: string): void {
   if (

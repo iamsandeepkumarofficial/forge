@@ -6,10 +6,7 @@ import { GithubService } from "../github/github.service.js";
 import { assertLocalFolderPath } from "../../projects/sessionSandbox/materialize.js";
 import { ensureCanonicalGitRepo } from "../../projects/localWorktree.js";
 import { copyProjectTree } from "./copyProjectTree.js";
-import {
-  ensureProjectsRoot,
-  projectCanonicalDir
-} from "./projectsRoot.js";
+import { ensureProjectsRoot, projectCanonicalDir } from "./projectsRoot.js";
 
 const N_403 = 403;
 const N_404 = 404;
@@ -58,14 +55,12 @@ export class ProjectService {
     };
   }
 
-  /**
-   * Copy the selected folder into ~/.forge/projects/{id}/ as canonical (RFC 0004).
-   */
-  async connectLocalFolder(
-    localPath: string,
-    userId: string,
-    name?: string
-  ): Promise<{ projectId: string }> {
+  async connectLocalFolder(options: {
+    localPath: string;
+    userId: string;
+    name?: string;
+  }): Promise<{ projectId: string }> {
+    const { localPath, userId, name } = options;
     const abs = await assertLocalFolderPath(localPath);
     const dedupeKey = `local:${abs}`;
     const existing = await this.projectRepo.findByDedupeKey(userId, dedupeKey);
@@ -73,7 +68,9 @@ export class ProjectService {
       return { projectId: existing.id };
     }
     const displayName =
-      (typeof name === "string" && name.trim()) || path.basename(abs) || "local";
+      (typeof name === "string" && name.trim()) ||
+      path.basename(abs) ||
+      "local";
     await ensureProjectsRoot();
     const result = await this.projectRepo.createProject({
       userId,

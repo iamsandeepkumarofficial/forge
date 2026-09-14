@@ -1,5 +1,7 @@
 import { NavLink, Outlet, Link, useParams } from "react-router-dom";
+import { useState } from "react";
 import {
+  Activity,
   ArrowLeft,
   MessageSquare,
   PanelLeftClose,
@@ -7,12 +9,11 @@ import {
   Settings
 } from "lucide-react";
 import { useCollapsibleSidebar } from "../hooks/use-collapsible-sidebar.js";
+import { ActivityDialog } from "./activity-dialog.js";
 import { ForgeMarkLink } from "./forge-mark.js";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { to: "chats", label: "Chats", icon: MessageSquare }
-] as const;
+const NAV = [{ to: "chats", label: "Chats", icon: MessageSquare }] as const;
 
 const SIDEBAR_KEY = "forge:project-shell-collapsed";
 
@@ -55,9 +56,103 @@ function SidebarIconButton(options: {
   );
 }
 
+function ProjectSidebarNav(options: { projectId: string; collapsed: boolean }) {
+  const { projectId, collapsed } = options;
+  return (
+    <nav
+      className={cn(
+        "flex flex-1 flex-col gap-0.5",
+        collapsed ? "items-center px-1.5 pb-2" : "px-3 pb-2"
+      )}
+    >
+      {NAV.map((item) => {
+        const Icon = item.icon;
+        return (
+          <NavLink
+            key={item.to}
+            to={`/projects/${projectId}/${item.to}`}
+            end
+            aria-label={item.label}
+            title={collapsed ? item.label : undefined}
+            className={({ isActive }) =>
+              cn(
+                "inline-flex items-center rounded-lg text-sm font-medium transition-colors",
+                collapsed ? "size-9 justify-center" : "w-full gap-2 px-3 py-2",
+                isActive
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Icon
+                  className={cn("size-4 shrink-0", isActive && "text-primary")}
+                />
+                {!collapsed && item.label}
+              </>
+            )}
+          </NavLink>
+        );
+      })}
+    </nav>
+  );
+}
+
+function ProjectSidebarFooter(options: {
+  collapsed: boolean;
+  onToggle: () => void;
+  onShowActivity: () => void;
+}) {
+  const { collapsed, onToggle, onShowActivity } = options;
+  return (
+    <div
+      className={cn(
+        "mt-auto space-y-1",
+        collapsed ? "flex flex-col items-center px-1.5 pb-2" : "px-3 pb-3"
+      )}
+    >
+      <SidebarIconButton
+        label="Activity"
+        collapsed={collapsed}
+        onClick={onShowActivity}
+      >
+        <Activity className="size-4 shrink-0" />
+      </SidebarIconButton>
+      <SidebarIconButton
+        label="Settings"
+        collapsed={collapsed}
+        href="/settings"
+      >
+        <Settings className="size-4 shrink-0" />
+      </SidebarIconButton>
+      <button
+        type="button"
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        onClick={onToggle}
+        className={cn(
+          "inline-flex items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground",
+          collapsed ? "size-9 justify-center" : "w-full gap-2 px-3 py-2 text-sm"
+        )}
+      >
+        {collapsed ? (
+          <PanelLeftOpen className="size-4 shrink-0" />
+        ) : (
+          <>
+            <PanelLeftClose className="size-4 shrink-0" />
+            <span>Collapse</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
 export function ProjectShell() {
   const { projectId } = useParams();
   const { collapsed, toggle } = useCollapsibleSidebar(SIDEBAR_KEY);
+  const [showActivity, setShowActivity] = useState(false);
   if (!projectId) {
     return <div className="p-8 text-muted-foreground">Missing workspace</div>;
   }
@@ -71,9 +166,7 @@ export function ProjectShell() {
       >
         <div
           className={cn(
-            collapsed
-              ? "flex flex-col items-center gap-2 p-2"
-              : "px-3 py-4"
+            collapsed ? "flex flex-col items-center gap-2 p-2" : "px-3 py-4"
           )}
         >
           <ForgeMarkLink
@@ -83,87 +176,12 @@ export function ProjectShell() {
             className={cn(collapsed ? "size-9 justify-center" : undefined)}
           />
         </div>
-
-        <nav
-          className={cn(
-            "flex flex-1 flex-col gap-0.5",
-            collapsed ? "items-center px-1.5 pb-2" : "px-3 pb-2"
-          )}
-        >
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.to}
-                to={`/projects/${projectId}/${item.to}`}
-                end
-                aria-label={item.label}
-                title={collapsed ? item.label : undefined}
-                className={({ isActive }) =>
-                  cn(
-                    "inline-flex items-center rounded-lg text-sm font-medium transition-colors",
-                    collapsed
-                      ? "size-9 justify-center"
-                      : "w-full gap-2 px-3 py-2",
-                    isActive
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon
-                      className={cn(
-                        "size-4 shrink-0",
-                        isActive && "text-primary"
-                      )}
-                    />
-                    {!collapsed && item.label}
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
-        </nav>
-
-        <div
-          className={cn(
-            "mt-auto space-y-1",
-            collapsed
-              ? "flex flex-col items-center px-1.5 pb-2"
-              : "px-3 pb-3"
-          )}
-        >
-          <SidebarIconButton
-            label="Settings"
-            collapsed={collapsed}
-            href="/settings"
-          >
-            <Settings className="size-4 shrink-0" />
-          </SidebarIconButton>
-          <button
-            type="button"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={toggle}
-            className={cn(
-              "inline-flex items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground",
-              collapsed
-                ? "size-9 justify-center"
-                : "w-full gap-2 px-3 py-2 text-sm"
-            )}
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="size-4 shrink-0" />
-            ) : (
-              <>
-                <PanelLeftClose className="size-4 shrink-0" />
-                <span>Collapse</span>
-              </>
-            )}
-          </button>
-        </div>
+        <ProjectSidebarNav projectId={projectId} collapsed={collapsed} />
+        <ProjectSidebarFooter
+          collapsed={collapsed}
+          onToggle={toggle}
+          onShowActivity={() => setShowActivity(true)}
+        />
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center px-6 py-3">
@@ -180,6 +198,9 @@ export function ProjectShell() {
           <Outlet />
         </div>
       </main>
+      {showActivity && (
+        <ActivityDialog onClose={() => setShowActivity(false)} />
+      )}
     </div>
   );
 }

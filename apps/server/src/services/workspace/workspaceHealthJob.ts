@@ -5,7 +5,6 @@ import { emitSetupPrepareEval } from "../eval/phoenix.js";
 
 const healthRepo = new WorkspaceHealthRepository();
 
-/** Fire-and-forget workspace health recompute (no sandbox/install). Never throws. */
 export function scheduleWorkspaceHealthAnalysis(workspaceId: string): void {
   void runWorkspaceHealthAnalysis(workspaceId).catch((err) => {
     console.warn(
@@ -19,13 +18,9 @@ export async function runWorkspaceHealthAnalysis(
 ): Promise<void> {
   await healthRepo.setComputing(workspaceId);
   const report = await analyzeWorkspaceHealth(workspaceId);
-  await healthRepo.saveReport(workspaceId, report.status, report);
+  await healthRepo.saveReport({ workspaceId, status: report.status, report });
 }
 
-/**
- * Analyze = evidence / shadows only.
- * Does not seed params, provision DBs, or install deps.
- */
 export async function runWorkspaceAnalyzeAndPrepare(
   workspaceId: string,
   _userId: string
@@ -40,7 +35,7 @@ export async function runWorkspaceAnalyzeAndPrepare(
     shadows: report.shadows
   };
   report.prepare = prepare;
-  await healthRepo.saveReport(workspaceId, report.status, report);
+  await healthRepo.saveReport({ workspaceId, status: report.status, report });
   void emitSetupPrepareEval({
     workspaceId,
     shadows: report.shadows,

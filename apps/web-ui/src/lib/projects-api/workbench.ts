@@ -12,18 +12,20 @@ export interface ProjectWorkbenchSession {
   lastActivityAt: string;
   createdAt: string;
 }
-export async function createWorkbenchSession(
-  projectId: string,
-  title?: string
-): Promise<ProjectWorkbenchSession> {
+export async function createWorkbenchSession(options: {
+  projectId: string;
+  title?: string;
+  executionTarget?: "local" | "cloud";
+}): Promise<ProjectWorkbenchSession> {
+  const executionTarget = options.executionTarget ?? "local";
   const response = await fetch(
-    `${BASE_URL}/api/projects/${projectId}/workbench-sessions`,
+    `${BASE_URL}/api/projects/${options.projectId}/workbench-sessions`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ title })
+      body: JSON.stringify({ title: options.title, executionTarget })
     }
   );
   if (!response.ok) {

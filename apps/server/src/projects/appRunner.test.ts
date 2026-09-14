@@ -1,5 +1,5 @@
-import { describe, it, mock, before } from "node:test";
 import assert from "node:assert/strict";
+import { before, describe, it, mock } from "node:test";
 
 describe("appRunner", { concurrency: false }, () => {
   let readFileImpl: () => Promise<string | null> = async () => null;
@@ -25,6 +25,19 @@ describe("appRunner", { concurrency: false }, () => {
           written = opts.content;
         },
         pathExistsInSandbox: async () => true
+      }
+    });
+    mock.module("./sandboxRuntime/resolve.js", {
+      exports: {
+        getSandboxRuntime: async () => ({
+          kind: "docker",
+          publishedAppPortsEnv: () => "3000-3009",
+          isAllowedListenPort: (port: number) => port >= 3000 && port <= 3009,
+          resolveListenPort: async (input: { preferred?: number }) =>
+            input.preferred ?? 3000
+        }),
+        isHostSession: async () => false,
+        resolveSandboxRuntimeKindForSession: async () => "docker"
       }
     });
     ({ readForgeConfig, upsertLaunchApp } = await import("./appRunner.js"));
@@ -106,7 +119,8 @@ describe("appRunner", { concurrency: false }, () => {
     });
     assert.equal(updated.apps[0]!.port, 3002);
 
-    readFileImpl = async () => written;
+    const saved = written;
+    readFileImpl = async () => saved;
     written = "";
     const kept = await upsertLaunchApp("s1", {
       name: "web",

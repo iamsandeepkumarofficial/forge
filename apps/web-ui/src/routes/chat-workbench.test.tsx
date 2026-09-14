@@ -5,11 +5,13 @@ import { ChatWorkbench } from "./chat-workbench";
 
 vi.mock("../lib/projects-api.js", () => ({
   fetchChat: vi.fn(),
-  startSession: vi.fn(async () => ({ sessionId: "s1" }))
+  startSession: vi.fn(async () => ({ sessionId: "s1" })),
+  getSessionStatus: vi.fn(async () => ({ sessionId: "s1", status: "absent" }))
 }));
 vi.mock("../lib/tool-runner.js", () => ({
-  downloadRepoArchive: vi.fn(),
-  promoteToCanonical: vi.fn()
+  fetchApps: vi.fn(),
+  fetchSessionHealth: vi.fn(),
+  runnerUrl: () => "http://127.0.0.1:4000"
 }));
 vi.mock("./chat-workbench/chat-pane.js", () => ({
   ChatPane: () => <div>Chat pane</div>

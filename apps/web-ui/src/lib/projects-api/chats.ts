@@ -19,6 +19,7 @@ export async function createChat(
     dueDate?: string | null;
     description?: string | DescriptionDocument | null;
     workflowId?: string;
+    executionTarget?: "local" | "cloud";
   }
 ): Promise<ChatSummary> {
   if (!projectId) {
@@ -42,7 +43,8 @@ export async function createChat(
           priority: options?.priority,
           dueDate: options?.dueDate,
           description: options?.description,
-          workflowId: options?.workflowId
+          workflowId: options?.workflowId,
+          executionTarget: options?.executionTarget
         })
       }
     );
@@ -82,9 +84,7 @@ export async function fetchChats(projectId: string): Promise<ChatSummary[]> {
     });
   }
   try {
-    const response = await fetch(
-      `${BASE_URL}/api/projects/${projectId}/chats`
-    );
+    const response = await fetch(`${BASE_URL}/api/projects/${projectId}/chats`);
     if (!response.ok) {
       const errorText = await response.text();
       const parsed = parseApiErrorText({

@@ -58,7 +58,10 @@ describe("tools", () => {
     assert.ok(names.includes("list_skills"));
     assert.ok(names.includes("switch_mode"));
     assert.ok(names.includes("ask_user"));
-    assert.equal(names.includes("web_search"), false);
+    assert.ok(names.includes("docker_image_lookup"));
+    assert.ok(names.includes("setup_project_infra"));
+    assert.ok(names.includes("install_project_infra"));
+    assert.equal(names.includes("provision_app_engine"), false);
     assert.equal(names.includes("git_clone"), false);
     assert.equal(names.includes("jira_get_ticket"), false);
     assert.equal(names.includes("github_create_pr"), false);
@@ -66,6 +69,14 @@ describe("tools", () => {
     const withWeb = availableToolNames();
     assert.ok(withWeb.includes("web_search"));
     assert.ok(withWeb.includes("web_fetch"));
+  });
+
+  it("includes docker_image_lookup in agent tools (server denies for local)", () => {
+    process.env.WEB_TOOLS_ENABLED = "false";
+    const names = availableToolNames();
+    assert.equal(names.includes("docker_image_lookup"), true);
+    const agent = buildChatTools({ sessionId: "s1", mode: "agent" });
+    assert.equal("docker_image_lookup" in agent, true);
   });
 
   it("buildTools filters to allowed names and skips unknown", () => {
@@ -84,6 +95,8 @@ describe("tools", () => {
     assert.equal("preview_status" in ask, true);
     assert.equal("list_skills" in ask, true);
     assert.equal("write_file" in ask, false);
+    assert.equal("delete_files" in ask, false);
+    assert.equal("move_files" in ask, false);
     assert.equal("preview_start" in ask, false);
     assert.equal("upsert_launch_app" in ask, false);
     assert.equal("create_subtask" in ask, false);
@@ -97,6 +110,8 @@ describe("tools", () => {
 
     const agent = buildChatTools({ sessionId: "s1", mode: "agent" });
     assert.equal("write_file" in agent, true);
+    assert.equal("delete_files" in agent, true);
+    assert.equal("move_files" in agent, true);
     assert.equal("run_terminal" in agent, true);
     assert.equal("preview_start" in agent, true);
     assert.equal("create_subtask" in agent, false);
@@ -194,6 +209,26 @@ describe("tools", () => {
     assert.equal(body.toolName, "read_file");
     assert.equal(body.turnId, "t1");
     assert.equal(body.agentMode, "agent");
+  });
+
+  it("executeNamedTool accepts ToolResult JSON on 4xx", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          output: "Provision failed: mongod missing",
+          metadata: { recoverable: true }
+        }),
+        { status: 400 }
+      )) as typeof fetch;
+    const result = await executeNamedTool({
+      sessionId: "s",
+      toolName: "setup_project_infra",
+      args: { engineId: "mongo", userApproved: true },
+      agentMode: "agent"
+    });
+    assert.equal(result.success, false);
+    assert.match(result.output, /mongod missing/);
   });
 
   it("executeNamedTool throws on non-ok and non-json", async () => {

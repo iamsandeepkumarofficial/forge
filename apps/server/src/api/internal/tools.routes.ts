@@ -38,7 +38,7 @@ function mountToolsPrepareRoutes(
       ensurePackagedSkillsInSession(workingDir);
       res.json({
         sessionRoot,
-        worktrees: worktrees ?? { [repoDir]: workingDir }
+        worktrees: worktrees ?? { [repoDir]: `${workingDir}/${repoDir}` }
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -54,8 +54,14 @@ function mountToolsPrepareRoutes(
     }
     try {
       await ensureLaunchConfig(sessionId).catch(() => undefined);
-      const { workingDir, repoDir, sessionRoot, worktrees, hostWorktrees, hostWorkingDir } =
-        await getSessionRepoInfo(sessionId);
+      const {
+        workingDir,
+        repoDir,
+        sessionRoot,
+        worktrees,
+        hostWorktrees,
+        hostWorkingDir
+      } = await getSessionRepoInfo(sessionId);
       const promptPaths = await buildPromptContextForSession({
         sessionId,
         paths: {

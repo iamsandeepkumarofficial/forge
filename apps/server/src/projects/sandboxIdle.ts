@@ -3,8 +3,12 @@ import { ChatTurnRepository } from "../catalog/sessionChatRepository.js";
 import { sandboxContainerName } from "./sessionSandbox/constants.js";
 import { docker } from "./sessionSandbox/container.js";
 
-export const SANDBOX_IDLE_MS = 30 * 60 * 1000;
-export const SANDBOX_IDLE_SWEEP_MS = 60 * 1000;
+const N_30 = 30;
+const N_60 = 60;
+const N_1000 = 1000;
+
+export const SANDBOX_IDLE_MS = N_30 * N_60 * N_1000;
+export const SANDBOX_IDLE_SWEEP_MS = N_60 * N_1000;
 
 export function sandboxIdleMs(): number {
   const raw = Number(process.env.FORGE_SANDBOX_IDLE_MS);
@@ -33,44 +37,77 @@ export function laterActivity(
   return Math.max(ta, tb);
 }
 
-export function isPastIdleTtl(
-  lastActivityAt: Date | number,
-  now = Date.now(),
-  idleMs = sandboxIdleMs()
-): boolean {
-  const t = activityTime(lastActivityAt);
+export function isPastIdleTtl(options: {
+  lastActivityAt: Date | number;
+  now?: number;
+  idleMs?: number;
+}): boolean {
+  const now = options.now ?? Date.now();
+  const idleMs = options.idleMs ?? sandboxIdleMs();
+  const t = activityTime(options.lastActivityAt);
   if (t == null) return false;
   return now - t >= idleMs;
 }
 
 export async function listRunningSandboxSessionIds(): Promise<string[]> {
-  const { stdout } = await docker([
-    "ps",
-    "--filter",
-    "label=forge.sandbox=1",
-    "--filter",
-    "status=running",
-    "--format",
-    '{{.Label "forge.session"}}'
-  ]);
-  return stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const ids = new Set<string>();
+  const { listSessionPortAllocations } =
+    await import("./sandboxRuntime/sessionPortRegistry.js");
+  for (const row of listSessionPortAllocations()) {
+    ids.add(row.sessionId);
+  }
+  try {
+    const { listHostActiveSessionIds } =
+      await import("./sandboxRuntime/hostAdapter.js");
+    for (const id of listHostActiveSessionIds()) {
+      ids.add(id);
+    }
+  } catch {
+    void 0;
+  }
+  try {
+    const { stdout } = await docker([
+      "ps",
+      "--filter",
+      "label=forge.sandbox=1",
+      "--filter",
+      "status=running",
+      "--format",
+      '{{.Label "forge.session"}}'
+    ]);
+    for (const line of stdout.split("\n")) {
+      const id = line.trim();
+      if (id) ids.add(id);
+    }
+  } catch {
+    void 0;
+  }
+  return [...ids];
 }
 
 export async function suspendSessionSandbox(sessionId: string): Promise<void> {
   try {
-    const { revokePreviewSession } = await import(
-      "../preview/previewPlaneClient.js"
-    );
+    const { revokePreviewSession } =
+      await import("../preview/previewPlaneClient.js");
     await revokePreviewSession(sessionId);
   } catch (err) {
     console.warn(
       `[sandboxIdle] revoke preview ${sessionId}: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  await docker(["stop", sandboxContainerName(sessionId)]).catch(() => undefined);
+  const { getSandboxRuntime, isHostSession } =
+    await import("./sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) {
+    await (
+      await getSandboxRuntime(sessionId)
+    )
+      .destroySession(sessionId)
+      .catch(() => undefined);
+    return;
+  }
+  await docker(["stop", sandboxContainerName(sessionId)]).catch(
+    () => undefined
+  );
 }
 
 export type IdleSweepDeps = {
@@ -86,6 +123,10 @@ export type IdleSweepDeps = {
 export async function sandboxStartedAt(
   sessionId: string
 ): Promise<Date | null> {
+  const { isHostSession } = await import("./sandboxRuntime/resolve.js");
+  if (await isHostSession(sessionId)) {
+    return null;
+  }
   try {
     const { stdout } = await docker([
       "inspect",
@@ -114,7 +155,8 @@ export async function suspendIdleSandboxes(
       await deps.getLastActivity(sessionId),
       deps.getStartedAt ? await deps.getStartedAt(sessionId) : null
     );
-    if (last == null || !isPastIdleTtl(last, now, idleMs)) continue;
+    if (last == null || !isPastIdleTtl({ lastActivityAt: last, now, idleMs }))
+      continue;
     await deps.suspend(sessionId);
     stopped.push(sessionId);
   }

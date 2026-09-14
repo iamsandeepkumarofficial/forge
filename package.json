@@ -16,7 +16,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
-    "docker:sandbox": "docker build -f Dockerfile.sandbox -t forge-sandbox:latest . && docker build -f Dockerfile.sandbox-generic -t forge-sandbox-generic:latest ."
+    "docker:sandbox": "docker build -f Dockerfile.sandbox -t forge-sandbox:latest . && docker build -f Dockerfile.sandbox-generic -t forge-sandbox-generic:latest .",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
@@ -27,6 +28,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-unused-imports": "^4.4.1",
+    "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
     "prettier": "^3.6.2",
     "turbo": "^2.5.8",

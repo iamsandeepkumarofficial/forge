@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 export function useScrollStick(options: {
   messageCount: number;
   streamingText: string;
+  streamingReasoning?: string;
   isStreaming: boolean;
   toolPartCount: number;
 }) {
@@ -15,6 +16,7 @@ export function useScrollStick(options: {
   }, [
     options.messageCount,
     options.streamingText,
+    options.streamingReasoning,
     options.isStreaming,
     options.toolPartCount
   ]);

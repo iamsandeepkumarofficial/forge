@@ -1,4 +1,6 @@
 import {
+  blockedWorkspaceMutationMessage,
+  isBlockedWorkspaceMutationCommand,
   isLongRunningDevServerCommand,
   isToolAllowedForMode,
   longRunningDevServerDeniedMessage,
@@ -23,6 +25,16 @@ export function denyChatToolExecute(options: {
         agentMode: options.agentMode,
         toolName: options.toolName
       })
+    };
+  }
+  if (
+    options.toolName === "run_terminal" &&
+    typeof options.args.command === "string" &&
+    isBlockedWorkspaceMutationCommand(options.args.command)
+  ) {
+    return {
+      success: false,
+      output: blockedWorkspaceMutationMessage()
     };
   }
   if (

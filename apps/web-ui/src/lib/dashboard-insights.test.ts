@@ -32,7 +32,7 @@ describe("dashboard-insights", () => {
 
   it("builds heatmap weeks", () => {
     const now = new Date("2026-08-27T12:00:00");
-    const weeks = buildHeatmapWeeks(new Map(), 4, now);
+    const weeks = buildHeatmapWeeks({ counts: new Map(), weeks: 4, now });
     expect(weeks).toHaveLength(4);
     expect(weeks[0]).toHaveLength(7);
   });
@@ -78,9 +78,9 @@ describe("dashboard-insights", () => {
       ],
       now
     });
-    expect(items.filter((item) => item.id.startsWith("session-stale-"))).toHaveLength(
-      1
-    );
+    expect(
+      items.filter((item) => item.id.startsWith("session-stale-"))
+    ).toHaveLength(1);
   });
 
   it("formats relative time", () => {

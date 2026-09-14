@@ -9,12 +9,16 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-const FORGE_GIT_IDENTITY = {
+export const FORGE_GIT_IDENTITY = {
   name: "Forge Agent",
   email: "forge@local"
 } as const;
 
 const DOCKER_NAME_MAX = 48;
+const N_10 = 10;
+const N_25 = 25;
+const N_5000 = 5_000;
+const N_1024 = 1024;
 
 export function sanitizeSessionFsName(sessionId: string): string {
   const cleaned = sessionId
@@ -36,7 +40,7 @@ async function git(
   args: string[]
 ): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync("git", ["-C", cwd, ...args], {
-    maxBuffer: 10 * 1024 * 1024
+    maxBuffer: N_10 * N_1024 * N_1024
   });
 }
 
@@ -70,11 +74,12 @@ async function gitConfigGet(
   }
 }
 
-async function gitConfigSet(
-  repoDir: string,
-  key: string,
-  value: string
-): Promise<void> {
+async function gitConfigSet(options: {
+  repoDir: string;
+  key: string;
+  value: string;
+}): Promise<void> {
+  const { repoDir, key, value } = options;
   const maxAttempts = 5;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -84,7 +89,6 @@ async function gitConfigSet(
       const msg = err instanceof Error ? err.message : String(err);
       const locked = /could not lock config file|\.lock/i.test(msg);
       if (!locked || attempt === maxAttempts - 1) {
-        // If another writer won the race but set the same value, treat as ok.
         const current = await gitConfigGet(repoDir, key);
         if (current === value) return;
         throw err;
@@ -92,14 +96,14 @@ async function gitConfigSet(
       const lockPath = path.join(repoDir, ".git", "config.lock");
       try {
         const st = await fs.stat(lockPath);
-        // Stale lock from a crashed writer (common with host+container sharing .git).
-        if (Date.now() - st.mtimeMs > 5_000) {
+
+        if (Date.now() - st.mtimeMs > N_5000) {
           await fs.rm(lockPath, { force: true });
         }
       } catch {
-        /* no lock or can't stat */
+        void 0;
       }
-      await new Promise((r) => setTimeout(r, 25 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, N_25 * (attempt + 1)));
     }
   }
 }
@@ -107,24 +111,30 @@ async function gitConfigSet(
 async function configureForgeIdentity(repoDir: string): Promise<void> {
   const email = await gitConfigGet(repoDir, "user.email");
   if (email !== FORGE_GIT_IDENTITY.email) {
-    await gitConfigSet(repoDir, "user.email", FORGE_GIT_IDENTITY.email);
+    await gitConfigSet({
+      repoDir,
+      key: "user.email",
+      value: FORGE_GIT_IDENTITY.email
+    });
   }
   const name = await gitConfigGet(repoDir, "user.name");
   if (name !== FORGE_GIT_IDENTITY.name) {
-    await gitConfigSet(repoDir, "user.name", FORGE_GIT_IDENTITY.name);
+    await gitConfigSet({
+      repoDir,
+      key: "user.name",
+      value: FORGE_GIT_IDENTITY.name
+    });
   }
   const fileMode = await gitConfigGet(repoDir, "core.fileMode");
   if (fileMode !== "false") {
-    await gitConfigSet(repoDir, "core.fileMode", "false").catch(() => {});
+    await gitConfigSet({
+      repoDir,
+      key: "core.fileMode",
+      value: "false"
+    }).catch(() => {});
   }
 }
 
-/**
- * Ensure a canonical local project dir is a real git repo.
- * If no .git exists: init, identity, add-all, initial commit (when non-empty).
- * Existing repos are left alone — Run tab polls provision often and must not
- * rewrite .git/config on every pass (shared with in-container mounts).
- */
 export async function ensureCanonicalGitRepo(
   canonicalKey: string
 ): Promise<void> {
@@ -142,7 +152,6 @@ export async function ensureCanonicalGitRepo(
   if (status.trim()) {
     await git(canonicalKey, ["commit", "-m", "forge: initial import"]);
   } else {
-    // worktree add requires at least one commit
     await git(canonicalKey, [
       "commit",
       "--allow-empty",
@@ -194,33 +203,46 @@ export type SessionWorktree = {
   projectId: string;
 };
 
-/**
- * Ensure a per-session worktree exists for a local project, with the forward
- * .git pointer rewritten to the in-container /forge-git/{projectId} path.
- */
 export async function ensureSessionWorktree(options: {
   canonicalKey: string;
   projectId: string;
   sessionId: string;
   branchName: string;
+
+  workDir?: string;
+
+  rewriteContainerGitdir?: boolean;
 }): Promise<SessionWorktree> {
   const { canonicalKey, projectId, sessionId, branchName } = options;
   await ensureCanonicalGitRepo(canonicalKey);
   await ensureSessionsRoot();
 
-  const workDir = worktreeWorkDir(projectId, sessionId);
+  const workDir = options.workDir ?? worktreeWorkDir(projectId, sessionId);
+  const rewriteContainer = options.rewriteContainerGitdir !== false;
   const gitCanonicalHostPath = path.join(canonicalKey, ".git");
   const parent = path.dirname(workDir);
   await fs.mkdir(parent, { recursive: true });
 
   const alreadyPresent = await pathExists(workDir);
   if (!alreadyPresent) {
-    await git(canonicalKey, ["worktree", "add", "-B", branchName, workDir]);
-    await configureForgeIdentity(workDir).catch(() => {});
-    const adminName = await resolveWorktreeAdminName(workDir);
-    await rewriteWorktreeGitdir({ workDir, projectId, adminName });
-  } else {
-    // Re-apply rewrite only when the pointer still uses a host path.
+    try {
+      await git(canonicalKey, ["worktree", "add", "-B", branchName, workDir]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const concurrent =
+        /already used by worktree at/i.test(msg) && msg.includes(workDir);
+      if (!concurrent && !(await pathExists(workDir))) {
+        throw err;
+      }
+    }
+    if (await pathExists(workDir)) {
+      await configureForgeIdentity(workDir).catch(() => {});
+      if (rewriteContainer) {
+        const adminName = await resolveWorktreeAdminName(workDir);
+        await rewriteWorktreeGitdir({ workDir, projectId, adminName });
+      }
+    }
+  } else if (rewriteContainer) {
     const pointer = path.join(workDir, ".git");
     try {
       const contents = await fs.readFile(pointer, "utf8");
@@ -234,19 +256,14 @@ export async function ensureSessionWorktree(options: {
           adminName: existing
         });
       }
-      // Already rewritten to /forge-git/... — nothing to do on poll/reprovision.
     } catch {
-      /* leave as-is; provision will fail loudly if git is broken */
+      void 0;
     }
   }
 
   return { workDir, gitCanonicalHostPath, projectId };
 }
 
-/**
- * Remove a session worktree directory and prune the canonical repo's worktree list.
- * Best-effort: does not throw when already gone.
- */
 export async function removeSessionWorktree(options: {
   canonicalKey: string;
   projectId: string;
@@ -256,55 +273,5 @@ export async function removeSessionWorktree(options: {
   await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   if (await isGitRepo(options.canonicalKey)) {
     await git(options.canonicalKey, ["worktree", "prune"]).catch(() => {});
-  }
-}
-
-/**
- * Merge a session branch into the canonical default branch on the host.
- * Objects are already in the shared .git after an in-container commit.
- */
-export async function mergeSessionBranchIntoCanonical(options: {
-  canonicalKey: string;
-  branchName: string;
-}): Promise<void> {
-  const { canonicalKey, branchName } = options;
-  await ensureCanonicalGitRepo(canonicalKey);
-
-  let defaultBranch = "main";
-  try {
-    const { stdout } = await git(canonicalKey, [
-      "symbolic-ref",
-      "--short",
-      "refs/remotes/origin/HEAD"
-    ]);
-    const m = stdout.trim().match(/origin\/(.+)/);
-    if (m?.[1]) defaultBranch = m[1];
-  } catch {
-    try {
-      const { stdout } = await git(canonicalKey, [
-        "rev-parse",
-        "--abbrev-ref",
-        "HEAD"
-      ]);
-      if (stdout.trim()) defaultBranch = stdout.trim();
-    } catch {
-      /* keep main */
-    }
-  }
-
-  await git(canonicalKey, ["checkout", defaultBranch]).catch(async () => {
-    await git(canonicalKey, ["checkout", "-B", defaultBranch]);
-  });
-
-  try {
-    await git(canonicalKey, ["merge", "--ff-only", branchName]);
-  } catch {
-    await git(canonicalKey, [
-      "merge",
-      "--no-ff",
-      "-m",
-      `forge: promote ${branchName}`,
-      branchName
-    ]);
   }
 }

@@ -21,7 +21,7 @@ export async function connectPostgres(): Promise<void> {
     console.error("Unexpected database error:", err);
   });
   try {
-    // Fail fast — Pool construction alone does not open a socket.
+    
     await nextPool.query("select 1");
   } catch (err) {
     await nextPool.end().catch(() => {});

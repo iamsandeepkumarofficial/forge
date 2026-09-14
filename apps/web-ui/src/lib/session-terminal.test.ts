@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
-  fetchAllTerminalLogs,
-  runTerminalCommand,
+  closeShellTab,
+  createShellTab,
+  listTerminalTabs,
   stopTerminalJob
 } from "./session-terminal";
 
@@ -10,43 +11,56 @@ describe("session-terminal", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
-  it("fetches all terminal job logs", async () => {
+  it("lists terminal tabs", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        jobs: [{ name: "install", running: true, command: "pnpm i" }],
-        logs: { install: "ok\n" }
+        tabs: [{ id: "main", kind: "shell", label: "Shell", running: false }]
       })
     } as Response);
-    const result = await fetchAllTerminalLogs("s1");
+    const tabs = await listTerminalTabs("s1");
     expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/internal/terminal/logs?sessionId=s1",
+      "http://127.0.0.1:4000/internal/terminal/tabs?sessionId=s1",
       expect.any(Object)
     );
-    expect(result.jobs[0]?.name).toBe("install");
-    expect(result.logs.install).toBe("ok\n");
+    expect(tabs[0]?.id).toBe("main");
   });
 
-  it("runs and stops terminal jobs", async () => {
+  it("creates and closes shell tabs", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ success: true, output: "a\n" })
+      json: async () => ({
+        tabId: "sh-new",
+        tab: {
+          id: "sh-new",
+          kind: "shell",
+          label: "sh-new",
+          running: false,
+          closable: true
+        }
+      })
     } as Response);
-    const ran = await runTerminalCommand({
-      sessionId: "s1",
-      command: "ls",
-      background: false
-    });
-    expect(ran.output).toBe("a\n");
-    expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/internal/terminal/run",
-      expect.objectContaining({ method: "POST" })
-    );
+    const created = await createShellTab("s1");
+    expect(created.tabId).toBe("sh-new");
+    expect(created.tab.id).toBe("sh-new");
+
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ok: true })
     } as Response);
-    await stopTerminalJob("s1", "install");
+    await closeShellTab({ sessionId: "s1", tabId: "sh-new" });
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:4000/internal/terminal/tabs/sh-new?sessionId=s1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("stops terminal jobs", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true })
+    } as Response);
+    await stopTerminalJob({ sessionId: "s1", name: "install" });
     expect(fetch).toHaveBeenCalledWith(
       "http://127.0.0.1:4000/internal/terminal/stop",
       expect.objectContaining({ method: "POST" })

@@ -9,18 +9,18 @@ describe("launchCwd", { concurrency: false }, () => {
   before(async () => {
     mock.module("./sandboxExec.js", {
       exports: {
-        pathExistsInSandbox: async (_c: string, absPath: string) =>
-          existing.has(absPath)
+        pathExistsInSandbox: async (opts: { absPath: string }) =>
+          existing.has(opts.absPath)
       }
     });
     ({ normalizeLaunchCwd, resolveLaunchAppDir } =
       await import("./launchCwd.js"));
   });
 
-  it("normalizeLaunchCwd maps repo folder name to .", () => {
+  it("normalizeLaunchCwd keeps the nested repo folder name", () => {
     assert.equal(
       normalizeLaunchCwd({ cwd: "portfolio", repoDir: "portfolio" }),
-      "."
+      "portfolio"
     );
     assert.equal(
       normalizeLaunchCwd({ cwd: "apps/web", repoDir: "portfolio" }),
@@ -34,6 +34,7 @@ describe("launchCwd", { concurrency: false }, () => {
     existing = new Set(["/workspace"]);
     const r = await resolveLaunchAppDir({
       containerName: "c",
+      sessionId: "s1",
       workingDir: "/workspace",
       repoDir: "portfolio",
       cwd: "."
@@ -43,23 +44,24 @@ describe("launchCwd", { concurrency: false }, () => {
     assert.equal(r.error, undefined);
   });
 
-  it("resolveLaunchAppDir remaps missing repo-name cwd to workingDir", async () => {
+  it("resolveLaunchAppDir errors when nested repo-name cwd is missing", async () => {
     existing = new Set(["/workspace"]);
     const r = await resolveLaunchAppDir({
       containerName: "c",
+      sessionId: "s1",
       workingDir: "/workspace",
       repoDir: "portfolio",
       cwd: "portfolio"
     });
-    assert.equal(r.appDir, "/workspace");
-    assert.equal(r.relCwd, ".");
-    assert.equal(r.error, undefined);
+    assert.match(r.error ?? "", /App cwd not found/);
+    assert.equal(r.appDir, "/workspace/portfolio");
   });
 
   it("resolveLaunchAppDir keeps a real nested folder named like the repo", async () => {
     existing = new Set(["/workspace", "/workspace/portfolio"]);
     const r = await resolveLaunchAppDir({
       containerName: "c",
+      sessionId: "s1",
       workingDir: "/workspace",
       repoDir: "portfolio",
       cwd: "portfolio"
@@ -72,6 +74,7 @@ describe("launchCwd", { concurrency: false }, () => {
     existing = new Set(["/workspace"]);
     const r = await resolveLaunchAppDir({
       containerName: "c",
+      sessionId: "s1",
       workingDir: "/workspace",
       repoDir: "portfolio",
       cwd: "apps/missing"

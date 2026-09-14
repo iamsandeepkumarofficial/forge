@@ -56,6 +56,10 @@ describe("packaged skills catalog", () => {
       peekAllPackagedSkills().some((e) => e.skillId === "playwright"),
       true
     );
+    assert.equal(
+      peekAllPackagedSkills().some((e) => e.skillId === "workspace-readiness"),
+      true
+    );
   });
 
   it("reads full SKILL.md body", () => {

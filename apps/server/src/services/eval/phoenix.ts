@@ -1,7 +1,4 @@
-/**
- * Arize Phoenix eval emitter via @arizeai/phoenix-otel.
- * No-op unless PHOENIX_COLLECTOR_ENDPOINT (or FORGE_PHOENIX_ENDPOINT) is set.
- */
+
 
 import type { WorkspacePrepareShadows } from "../workspace/health/types.js";
 
@@ -95,7 +92,7 @@ export type SetupAgentEvalInput = {
   infraProvisioned?: string[];
 };
 
-/** Shadow attrs from Analyze prepare (eval only). */
+
 export async function emitSetupPrepareEval(
   input: SetupPrepareEvalInput
 ): Promise<void> {
@@ -116,7 +113,7 @@ export async function emitSetupPrepareEval(
   });
 }
 
-/** Agent outcomes for Phoenix comparison vs shadows. */
+
 export async function emitSetupAgentEval(
   input: SetupAgentEvalInput
 ): Promise<void> {

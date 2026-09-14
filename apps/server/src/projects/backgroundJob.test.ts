@@ -8,6 +8,8 @@ describe("backgroundJob", { concurrency: false }, () => {
   let sanitizeJobName: typeof import("./backgroundJob.js").sanitizeJobName;
   let jobPidFile: typeof import("./backgroundJob.js").jobPidFile;
   let freeListeningPortScript: typeof import("./backgroundJob.js").freeListeningPortScript;
+  let freeListeningPortHostScript: typeof import("./backgroundJob.js").freeListeningPortHostScript;
+  let HOST_JOB_PID_EXTERNAL_ENV: typeof import("./backgroundJob.js").HOST_JOB_PID_EXTERNAL_ENV;
   let waitUntilJobRunning: typeof import("./backgroundJob.js").waitUntilJobRunning;
   let waitUntilTcpListening: typeof import("./backgroundJob.js").waitUntilTcpListening;
 
@@ -36,6 +38,8 @@ describe("backgroundJob", { concurrency: false }, () => {
       sanitizeJobName,
       jobPidFile,
       freeListeningPortScript,
+      freeListeningPortHostScript,
+      HOST_JOB_PID_EXTERNAL_ENV,
       waitUntilJobRunning,
       waitUntilTcpListening
     } = await import("./backgroundJob.js"));
@@ -45,9 +49,12 @@ describe("backgroundJob", { concurrency: false }, () => {
     const script = startJobScript();
     assert.match(script, /: > "\$LOG"/);
     assert.match(script, /cwd not found/);
+    assert.match(script, /printf '\$ %s\\n' "\$CMD"/);
+    assert.match(script, new RegExp(HOST_JOB_PID_EXTERNAL_ENV));
     const logIdx = script.indexOf(': > "$LOG"');
+    const cmdIdx = script.indexOf("printf");
     const pidIdx = script.indexOf('echo $$ > "$PID"');
-    assert.ok(logIdx >= 0 && pidIdx > logIdx);
+    assert.ok(logIdx >= 0 && cmdIdx > logIdx && pidIdx > cmdIdx);
   });
 
   it("sanitizeJobName and pid paths stay under /tmp", () => {
@@ -68,6 +75,15 @@ describe("backgroundJob", { concurrency: false }, () => {
     assert.match(script, /\/proc\/net\/tcp/);
     assert.match(script, /socket:\[\$inode\]/);
     assert.match(script, /kill -KILL/);
+  });
+
+  it("freeListeningPortHostScript prefers lsof then falls back to /proc", () => {
+    const script = freeListeningPortHostScript(3001);
+    assert.match(script, /port=3001/);
+    assert.match(script, /lsof -nP -iTCP:"\$port"/);
+    assert.match(script, /kill_pids TERM/);
+    assert.match(script, /kill_pids KILL/);
+    assert.match(script, /\/proc\/net\/tcp/);
   });
 
   it("waitUntilJobRunning returns false then true", async () => {

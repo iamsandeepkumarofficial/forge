@@ -1,8 +1,12 @@
 import { useRef } from "react";
 import { electronPreview } from "../../lib/desktop.js";
 import { noopPreviewOp } from "../../lib/desktop-preview.js";
-import type { PreviewNavInfo, PreviewPickResult } from "../../lib/desktop-preview.js";
+import type {
+  PreviewNavInfo,
+  PreviewPickResult
+} from "../../lib/desktop-preview.js";
 import { useElectronPreviewPage } from "./use-electron-preview.js";
+import { usePreviewOverlayLocked } from "./preview-overlay-lock.js";
 import { useViewHole } from "./use-view-hole.js";
 
 export function ElectronPreviewHole(options: {
@@ -17,9 +21,10 @@ export function ElectronPreviewHole(options: {
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const api = electronPreview();
+  const overlayLocked = usePreviewOverlayLocked();
   useViewHole({
     ref,
-    active: options.visible,
+    active: options.visible && !overlayLocked,
     setBounds: api?.setBounds ?? noopPreviewOp,
     setVisible: api?.setVisible ?? noopPreviewOp
   });
@@ -44,9 +49,10 @@ export function ElectronPreviewHole(options: {
 export function ElectronDevtoolsHole(options: { active: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const api = electronPreview();
+  const overlayLocked = usePreviewOverlayLocked();
   useViewHole({
     ref,
-    active: options.active,
+    active: options.active && !overlayLocked,
     setBounds: api?.setDevtoolsBounds ?? noopPreviewOp,
     setVisible: api?.setDevtoolsVisible ?? noopPreviewOp
   });

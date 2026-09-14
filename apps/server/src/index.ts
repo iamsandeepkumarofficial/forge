@@ -1,16 +1,19 @@
 import "./env.js";
+import http from "node:http";
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { createLocalUserMiddleware } from "./api/pocAuth.js";
 import { connectPostgres } from "@forge/db";
 import { createInternalRouter } from "./api/internal/internal.router.js";
+import { attachTerminalSessionWebSocket } from "./api/internal/terminalSession.ws.js";
 import { createProjectsRouter } from "./api/projectsRouter.js";
 import { createChatFeaturesRouter } from "./api/chatFeaturesRouter.js";
 import { createAttachmentsRouter } from "./api/attachmentsRouter.js";
 import { createChatRouter } from "./api/chatRouter.js";
 import { createWorkspacesRouter } from "./api/workspacesRouter.js";
 import { startInProcessPreview } from "./preview/startInProcessPreview.js";
+import { cloudSandboxKindFromEnv } from "./projects/sandboxRuntime/resolve.js";
 
 const N_120 = 120;
 const N_1200 = 1200;
@@ -28,7 +31,12 @@ app.use(
   })
 );
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, mode: "tool-plane" });
+  res.json({
+    ok: true,
+    mode: "tool-plane",
+    cloudSandbox: cloudSandboxKindFromEnv(),
+    localSessions: "host"
+  });
 });
 try {
   await connectPostgres();
@@ -60,13 +68,24 @@ const bindHost =
     ? "127.0.0.1"
     : process.env.FORGE_BIND_HOST?.trim() || "127.0.0.1";
 
-// Hostname preview proxy shares this process (local/desktop). Set
-// PREVIEW_IN_PROCESS=0 to use a standalone @forge/preview-plane instead.
 startInProcessPreview(bindHost);
 
-app.listen(port, bindHost, () => {
+const server = http.createServer(app);
+attachTerminalSessionWebSocket(server);
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  const detail =
+    err.code === "EADDRINUSE"
+      ? `Port ${port} is already in use — stop the other Forge server (often a non-desktop pnpm dev) so host mode can bind.`
+      : err.message;
+  process.stderr.write(`[forge-tool-plane] listen failed: ${detail}\n`);
+  process.exit(1);
+});
+
+server.listen(port, bindHost, () => {
+  const cloud = cloudSandboxKindFromEnv();
   process.stdout.write(
-    `Forge tool plane listening on http://${bindHost}:${port}\n`
+    `Forge tool plane listening on http://${bindHost}:${port} (cloudSandbox=${cloud}, localSessions=host)\n`
   );
   void import("./projects/sandboxIdle.js")
     .then(({ startSandboxIdleSweeper }) => {

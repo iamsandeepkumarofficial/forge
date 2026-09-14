@@ -1,86 +1,131 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TerminalPane } from "./terminal-pane";
 
-vi.mock("./use-apps.js", () => ({
-  useApps: () => ({
-    exists: true,
-    apps: [
-      {
-        name: "web",
-        type: "web",
-        running: true,
-        cwd: ".",
-        command: "dev",
-        port: 3000
-      }
-    ],
-    error: null,
-    refresh: vi.fn()
-  })
+vi.mock("./terminal-xterm-view.js", () => ({
+  ShellXtermPane: ({ tabId }: { tabId: string }) => (
+    <div data-testid={`shell-xterm-${tabId}`} />
+  ),
+  AppLogXtermPane: ({ tabId }: { tabId: string }) => (
+    <div data-testid={`follow-xterm-${tabId}`} />
+  ),
+  JobLogXtermPane: ({ tabId }: { tabId: string }) => (
+    <div data-testid={`job-log-xterm-${tabId}`} />
+  )
+}));
+
+const mocks = vi.hoisted(() => ({
+  listTerminalTabs: vi.fn(async () => [
+    {
+      id: "main",
+      kind: "shell",
+      label: "Shell",
+      running: false,
+      closable: false
+    },
+    {
+      id: "app:web",
+      kind: "app",
+      label: "web",
+      running: true,
+      closable: true,
+      stoppable: true
+    }
+  ]),
+  createShellTab: vi.fn(async () => ({
+    tabId: "sh-new",
+    tab: {
+      id: "sh-new",
+      kind: "shell",
+      label: "sh-new",
+      running: false,
+      closable: true
+    }
+  })),
+  closeShellTab: vi.fn(async () => undefined)
 }));
 
 vi.mock("../../lib/tool-runner.js", () => ({
-  fetchAllAppLogs: vi.fn(async () => ({ web: "hello\nworld" }))
+  stopApp: vi.fn(async () => undefined)
 }));
-
-const runTerminalCommand = vi.fn(async () => ({
-  success: true,
-  output: "file.txt"
-}));
-const stopTerminalJob = vi.fn(async () => undefined);
 
 vi.mock("../../lib/session-terminal.js", () => ({
-  fetchAllTerminalLogs: vi.fn(async () => ({
-    jobs: [{ name: "install", running: true, command: "pnpm i" }],
-    logs: { install: "added 12 packages" }
-  })),
-  runTerminalCommand,
-  stopTerminalJob
+  listTerminalTabs: mocks.listTerminalTabs,
+  createShellTab: mocks.createShellTab,
+  closeShellTab: mocks.closeShellTab
 }));
 
+vi.mock("../../lib/terminal-session-registry.js", () => {
+  const client = {
+    connect() {
+      return undefined;
+    },
+    disconnect() {
+      return undefined;
+    },
+    subscribe() {
+      return () => undefined;
+    }
+  };
+  return {
+    retainTerminalSessionClient: () => client,
+    releaseTerminalSessionClient: () => undefined,
+    getTerminalSessionClient: () => client
+  };
+});
+
+vi.mock("./tracked-terminals.js", () => {
+  const trackedApps = new Set<string>();
+  return {
+    isBackgroundJobTracked: () => false,
+    listTrackedBackgroundJobs: () => [],
+    listTrackedApps: () => [...trackedApps],
+    subscribeTrackedTerminals: () => () => undefined,
+    trackApp: (_sessionId: string, name: string) => {
+      trackedApps.add(name);
+    },
+    __resetTrackedAppsForTest: () => trackedApps.clear()
+  };
+});
+
 describe("TerminalPane", () => {
-  it("renders app logs and background jobs", async () => {
-    render(<TerminalPane sessionId="s1" />);
-    await waitFor(() => {
-      expect(screen.getByText("hello")).toBeTruthy();
-    });
-    expect(screen.getByText("world")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "web" })).toBeTruthy();
-    expect(screen.getByText("added 12 packages")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "pnpm i" })).toBeTruthy();
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const tracked = await import("./tracked-terminals.js");
+    (
+      tracked as { __resetTrackedAppsForTest?: () => void }
+    ).__resetTrackedAppsForTest?.();
   });
 
-  it("runs a user command into the shell stream", async () => {
-    render(<TerminalPane sessionId="s1" />);
+  it("renders a vertical tab list with shell and app panes", async () => {
+    render(
+      <TerminalPane sessionId="s1" visible fitSignal={0} />
+    );
     await waitFor(() => {
-      expect(screen.getByLabelText("Run command")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Shell" })).toBeTruthy();
     });
-    fireEvent.change(screen.getByLabelText("Run command"), {
-      target: { value: "ls" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Run" }));
-    await waitFor(() => {
-      expect(runTerminalCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionId: "s1",
-          command: "ls",
-          background: false
-        })
-      );
-    });
-    expect(await screen.findByText("$ ls")).toBeTruthy();
-    expect(screen.getByText("file.txt")).toBeTruthy();
+    expect(screen.getByTestId("terminal-tab-list")).toBeTruthy();
+    expect(
+      screen.getByRole("separator", { name: "Resize terminal tab list" })
+    ).toBeTruthy();
+    expect(screen.getByText("web")).toBeTruthy();
+    expect(screen.getByLabelText("Running")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stop web" })).toBeNull();
+    expect(screen.getByTestId("shell-xterm-main")).toBeTruthy();
+    expect(screen.getByTestId("follow-xterm-app:web")).toBeTruthy();
   });
 
-  it("stops a running job", async () => {
-    render(<TerminalPane sessionId="s1" />);
+  it("creates a new shell tab", async () => {
+    render(
+      <TerminalPane sessionId="s1" visible fitSignal={0} />
+    );
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Stop pnpm i" })).toBeTruthy();
+      expect(screen.getByLabelText("New shell tab")).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Stop pnpm i" }));
+    fireEvent.click(screen.getByLabelText("New shell tab"));
     await waitFor(() => {
-      expect(stopTerminalJob).toHaveBeenCalledWith("s1", "install");
+      expect(mocks.createShellTab).toHaveBeenCalledWith("s1");
     });
+    expect(await screen.findByRole("button", { name: "sh-new" })).toBeTruthy();
   });
 });

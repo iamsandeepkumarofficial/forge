@@ -34,6 +34,9 @@ export function useWorkbenchSessions(options: {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<ProjectWorkbenchSession[]>([]);
   const [title, setTitle] = useState("");
+  const [executionTarget, setExecutionTarget] = useState<"local" | "cloud">(
+    "local"
+  );
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -70,6 +73,8 @@ export function useWorkbenchSessions(options: {
     sessions,
     title,
     setTitle,
+    executionTarget,
+    setExecutionTarget,
     loading,
     creating,
     deletingId,
@@ -79,6 +84,7 @@ export function useWorkbenchSessions(options: {
         e,
         projectId,
         title,
+        executionTarget,
         onClose,
         navigate,
         setCreating,
@@ -105,6 +111,7 @@ async function createSession(options: {
   e: React.FormEvent;
   projectId: string;
   title: string;
+  executionTarget: "local" | "cloud";
   onClose: () => void;
   navigate: ReturnType<typeof useNavigate>;
   setCreating: (v: boolean) => void;
@@ -114,10 +121,11 @@ async function createSession(options: {
   options.setCreating(true);
   options.setError(null);
   try {
-    const session = await createWorkbenchSession(
-      options.projectId,
-      options.title.trim() || "Workbench"
-    );
+    const session = await createWorkbenchSession({
+      projectId: options.projectId,
+      title: options.title.trim() || "Workbench",
+      executionTarget: options.executionTarget
+    });
     options.onClose();
     void options.navigate(`/projects/${options.projectId}/chats/${session.id}`);
   } catch (err) {

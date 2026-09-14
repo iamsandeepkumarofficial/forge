@@ -15,6 +15,7 @@ export async function submitNewChat(options: {
   parentId: string;
   description: string;
   workflowId: string;
+  executionTarget: "local" | "cloud";
   files: File[];
   links: PendingLink[];
   onCreated: () => void | Promise<void>;
@@ -32,7 +33,8 @@ export async function submitNewChat(options: {
     dueDate: options.dueDate || null,
     parentId: options.parentId || undefined,
     description: options.description.trim() || undefined,
-    workflowId: options.workflowId.trim()
+    workflowId: options.workflowId.trim(),
+    executionTarget: options.executionTarget
   });
   const chatId = chat?.id as string | undefined;
   if (!chatId) {

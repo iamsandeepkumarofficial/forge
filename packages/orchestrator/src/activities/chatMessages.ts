@@ -159,36 +159,6 @@ export function sanitizeToolCallPairs(
   return out;
 }
 
-export function withFirstTurnRepoEval(
-  messages: StoredMessage[]
-): StoredMessage[] {
-  const hasPrior = messages.some(
-    (m) => m.role === "assistant" || m.role === "tool"
-  );
-  if (hasPrior) {
-    return messages;
-  }
-  return [
-    {
-      id: "repo-readiness-eval",
-      role: "user",
-      parts: [
-        {
-          type: "text",
-          text: [
-            "[Repo readiness eval] Read ## Working repositories, ## Workspace repos, ## Repo setup, ## Workspace setup SOP, ## Environment, and ## Workspace health in the system prompt.",
-            "Order: (1) identify stack per member from shadows/inventory (2) invoke_skill for that stack (3) install via run_terminal per skill (ask_user for toolchain if missing) (4) ask_user then upsert_workspace_parameter for env; ask_user then provision_app_engine with userApproved after consent (5) upsert_launch_app with cwd under the member (6) preview_start backends before frontends when dependsOn says so.",
-            "Never use run_terminal for npm/pnpm/yarn run dev|start or long-running app servers — use preview_start (network plane).",
-            "Do not install Postgres/Mongo server packages; use ask_user then provision_app_engine after user approval.",
-            "Then continue with the user's request."
-          ].join(" ")
-        }
-      ]
-    },
-    ...messages
-  ];
-}
-
 export function partsToModelMessages(
   messages: StoredMessage[]
 ): ModelMessage[] {

@@ -112,7 +112,7 @@ describe("mountToolsRoutes", () => {
     const { res, state } = mockRes();
     await handlers[0]({ body: { sessionId: "s1" } }, res);
     assert.equal(state.body.sessionRoot, "/workspace");
-    assert.equal(state.body.worktrees.repo, "/workspace");
+    assert.equal(state.body.worktrees.repo, "/workspace/repo");
   });
   it("chat-tool-definitions returns mode-filtered catalog text", async () => {
     const router = Router();

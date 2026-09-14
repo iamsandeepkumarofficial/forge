@@ -7,8 +7,9 @@ export type AskUserField = {
   label: string;
   secret?: boolean;
   placeholder?: string;
-  /** Agent-provided default shown prefilled in the widget. */
   value?: string;
+  group?: string;
+  type?: "text" | "secret" | "boolean";
 };
 
 export type AskUserProposal = {
@@ -43,7 +44,13 @@ function normalizeField(raw: unknown): AskUserField | null {
     ...(typeof f.placeholder === "string" && f.placeholder.trim()
       ? { placeholder: f.placeholder.trim() }
       : {}),
-    ...(typeof f.value === "string" ? { value: f.value } : {})
+    ...(typeof f.value === "string" ? { value: f.value } : {}),
+    ...(typeof f.group === "string" && f.group.trim()
+      ? { group: f.group.trim() }
+      : {}),
+    ...(f.type === "text" || f.type === "secret" || f.type === "boolean"
+      ? { type: f.type }
+      : {})
   };
 }
 
@@ -51,7 +58,8 @@ function proposalFromPart(part: ToolPart): AskUserProposal | null {
   if (toolPartName(part) !== "ask_user") return null;
   const meta = part.metadata;
   if (!meta || meta.needsUserInput !== true) return null;
-  const kind = meta.kind === "form" ? "form" : meta.kind === "mcq" ? "mcq" : null;
+  const kind =
+    meta.kind === "form" ? "form" : meta.kind === "mcq" ? "mcq" : null;
   const prompt = typeof meta.prompt === "string" ? meta.prompt.trim() : "";
   if (!kind || !prompt) return null;
   const options = Array.isArray(meta.options)
@@ -60,7 +68,9 @@ function proposalFromPart(part: ToolPart): AskUserProposal | null {
       )
     : [];
   const fields = Array.isArray(meta.fields)
-    ? meta.fields.map(normalizeField).filter((f): f is AskUserField => f != null)
+    ? meta.fields
+        .map(normalizeField)
+        .filter((f): f is AskUserField => f != null)
     : [];
   if (kind === "mcq" && options.length < 2) return null;
   if (kind === "form" && fields.length < 1) return null;
@@ -75,7 +85,7 @@ function proposalFromPart(part: ToolPart): AskUserProposal | null {
 
 type IndexedProposal = {
   proposal: AskUserProposal;
-  /** Message index where the ask_user tool part appeared; live parts use messages.length. */
+
   atIndex: number;
 };
 
@@ -114,10 +124,6 @@ function hasAnswerAfter(
   return false;
 }
 
-/**
- * Latest unanswered ask_user wins.
- * A proposal is answered when a later user message starts with "User answer (ask_user)".
- */
 export function findPendingAskUser(options: {
   messages: UiChatMessage[];
   liveToolParts: ToolPart[];
@@ -145,13 +151,19 @@ export function askUserMcqReply(option: AskUserOption): string {
   return `User answer (ask_user): chose "${option.id}" — ${option.label}`;
 }
 
-export function askUserFormReply(
-  fields: AskUserField[],
-  values: Record<string, string>,
-  options?: { savedParamKeys?: string[] }
-): string {
-  const lines = fields.map((f) => `${f.id}: ${values[f.id] ?? ""}`);
-  const saved = options?.savedParamKeys?.filter(Boolean) ?? [];
+export function askUserSkipReply(): string {
+  return "User answer (ask_user): skipped";
+}
+
+export function askUserFormReply(options: {
+  fields: AskUserField[];
+  values: Record<string, string>;
+  savedParamKeys?: string[];
+}): string {
+  const lines = options.fields.map(
+    (f) => `${f.id}: ${options.values[f.id] ?? ""}`
+  );
+  const saved = options.savedParamKeys?.filter(Boolean) ?? [];
   const header =
     saved.length > 0
       ? `User answer (ask_user) — saved to parameter store: ${saved.join(", ")}.`
@@ -159,7 +171,6 @@ export function askUserFormReply(
   return `${header}\n${lines.join("\n")}`;
 }
 
-/** Initial form values from agent-provided field.value defaults. */
 export function askUserInitialValues(
   fields: AskUserField[]
 ): Record<string, string> {
@@ -170,7 +181,49 @@ export function askUserInitialValues(
   return init;
 }
 
-/** Env-style keys get written to the workspace parameter store on submit. */
+export function askUserDisplayPrompt(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("|") && /\n\s*\|?\s*-{3,}/.test(trimmed)) {
+    const first = trimmed.split(/\n\s*\n/)[0]?.trim() ?? trimmed;
+    const sentence = first.split(/(?<=[.!?])\s/)[0] ?? first;
+    return sentence.length > 0
+      ? `${sentence.replace(/\s+/g, " ").trim()} Details in the fields below.`
+      : "Details in the fields below.";
+  }
+  return trimmed;
+}
+
+export function groupAskUserFields(
+  fields: AskUserField[]
+): Array<{ group: string | null; fields: AskUserField[] }> {
+  const order: string[] = [];
+  const byGroup = new Map<string, AskUserField[]>();
+  const ungrouped: AskUserField[] = [];
+  for (const field of fields) {
+    const group = field.group?.trim();
+    if (!group) {
+      ungrouped.push(field);
+      continue;
+    }
+    if (!byGroup.has(group)) {
+      order.push(group);
+      byGroup.set(group, []);
+    }
+    byGroup.get(group)!.push(field);
+  }
+  const sections: Array<{ group: string | null; fields: AskUserField[] }> = [];
+  if (ungrouped.length > 0) sections.push({ group: null, fields: ungrouped });
+  for (const group of order) {
+    sections.push({ group, fields: byGroup.get(group) ?? [] });
+  }
+  return sections;
+}
+
 export function isWorkspaceParamFieldId(id: string): boolean {
   return /^[A-Z][A-Z0-9_]*$/.test(id);
+}
+
+export function askUserOtherReply(text: string): string {
+  return `User answer (ask_user): other — ${text.trim()}`;
 }

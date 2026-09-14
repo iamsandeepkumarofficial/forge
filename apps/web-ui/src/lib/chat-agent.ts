@@ -2,6 +2,7 @@ import { runnerUrl } from "./tool-runner.js";
 
 const N_5 = 5;
 const N_6 = 6;
+const HTTP_CONFLICT = 409;
 
 export type LlmProvider = "openai" | "anthropic" | "openai-compatible";
 export const REASONING_CAPABLE_PROVIDERS: LlmProvider[] = [
@@ -26,12 +27,7 @@ export interface ModelListResponse {
   error?: string;
 }
 export type ChatMode =
-  | "agent"
-  | "plan"
-  | "debug"
-  | "ask"
-  | "multitask"
-  | "auto";
+  "agent" | "plan" | "debug" | "ask" | "multitask" | "auto";
 export type ReasoningEffort = "low" | "medium" | "high";
 export type UiChatMessage = {
   id: string;
@@ -183,6 +179,48 @@ export async function cancelChatTurn(
     throw new Error(body.error || `cancel failed: ${res.status}`);
   }
 }
+
+export async function deleteSessionMessagesFrom(
+  sessionId: string,
+  messageId: string
+): Promise<void> {
+  const res = await fetch(
+    `${runnerUrl()}/api/sessions/${encodeURIComponent(sessionId)}/messages/from/${encodeURIComponent(messageId)}`,
+    { method: "DELETE", headers: authHeaders() }
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(body.error || `delete messages failed: ${res.status}`);
+  }
+}
+
+export async function copySessionMessagesUntil(options: {
+  sourceSessionId: string;
+  targetSessionId: string;
+  untilMessageId: string;
+}): Promise<void> {
+  const res = await fetch(
+    `${runnerUrl()}/api/sessions/${encodeURIComponent(options.sourceSessionId)}/branch`,
+    {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        untilMessageId: options.untilMessageId,
+        targetSessionId: options.targetSessionId
+      })
+    }
+  );
+  if (res.status === HTTP_CONFLICT) return;
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(body.error || `branch copy failed: ${res.status}`);
+  }
+}
+
 export type StreamHandlers = {
   onEvent: (event: {
     eventType: string;
@@ -203,7 +241,8 @@ export async function consumeTurnStream(options: {
     : `${runnerUrl()}${streamUrl}`;
   const res = await fetch(url, {
     headers: {
-      Accept: "text/event-stream"
+      Accept: "text/event-stream",
+      ...authHeaders()
     },
     signal
   });

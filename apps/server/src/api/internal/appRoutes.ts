@@ -28,14 +28,25 @@ export function joinMountPath(prefix: string, path: string): string {
   return `${cleanBase}${leaf.startsWith("/") ? leaf : `/${leaf}`}`;
 }
 
+type AddRoute = (options: {
+  method: string;
+  path: string;
+  summary?: string;
+}) => void;
+
 export function parseRouteScanLines(text: string): DiscoveredRoute[] {
   const found = new Map<string, DiscoveredRoute>();
   const mounts = new Set<string>();
-  const add = (method: string, path: string, summary?: string) => {
-    if (!path.startsWith("/")) return;
-    const key = `${method.toUpperCase()} ${path}`;
+  const add: AddRoute = (options) => {
+    if (!options.path.startsWith("/")) return;
+    const method = options.method.toUpperCase();
+    const key = `${method} ${options.path}`;
     if (!found.has(key)) {
-      found.set(key, { method: method.toUpperCase(), path, summary });
+      found.set(key, {
+        method,
+        path: options.path,
+        summary: options.summary
+      });
     }
   };
   for (const line of text.split("\n")) {
@@ -51,13 +62,15 @@ export function parseRouteScanLines(text: string): DiscoveredRoute[] {
     FLASK_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CALL_RE.exec(trimmed))) {
-      add(m[1] ?? "GET", m[2] ?? "/");
+      add({ method: m[1] ?? "GET", path: m[2] ?? "/" });
     }
     while ((m = ROUTE_CHAIN_RE.exec(trimmed))) {
       const path = m[1] ?? "/";
-      const chained = [...(m[2] ?? "").matchAll(/\.(get|post|put|patch|delete|all)/gi)];
-      if (chained.length === 0) add("GET", path);
-      for (const method of chained) add(method[1] ?? "GET", path);
+      const chained = [
+        ...(m[2] ?? "").matchAll(/\.(get|post|put|patch|delete|all)/gi)
+      ];
+      if (chained.length === 0) add({ method: "GET", path });
+      for (const method of chained) add({ method: method[1] ?? "GET", path });
     }
     while ((m = MOUNT_RE.exec(trimmed))) {
       const prefix = m[1] ?? "/";
@@ -66,11 +79,11 @@ export function parseRouteScanLines(text: string): DiscoveredRoute[] {
       mounts.add(prefix);
     }
     while ((m = DECORATOR_RE.exec(trimmed))) {
-      add(m[1] ?? "GET", m[2] ?? "/");
+      add({ method: m[1] ?? "GET", path: m[2] ?? "/" });
     }
     while ((m = FLASK_RE.exec(trimmed))) {
       const methods = parseFlaskMethods(m[2] ?? "");
-      for (const method of methods) add(method, m[1] ?? "/");
+      for (const method of methods) add({ method, path: m[1] ?? "/" });
     }
   }
   if (mounts.size > 0) {
@@ -78,12 +91,14 @@ export function parseRouteScanLines(text: string): DiscoveredRoute[] {
     for (const prefix of mounts) {
       if (prefix === "/") continue;
       for (const leaf of leaves) {
-        add(leaf.method, joinMountPath(prefix, leaf.path));
+        add({ method: leaf.method, path: joinMountPath(prefix, leaf.path) });
       }
     }
   }
   return [...found.values()].sort((a, b) =>
-    a.path === b.path ? a.method.localeCompare(b.method) : a.path.localeCompare(b.path)
+    a.path === b.path
+      ? a.method.localeCompare(b.method)
+      : a.path.localeCompare(b.path)
   );
 }
 
@@ -93,18 +108,19 @@ function isCommentedSource(line: string): boolean {
   return /^\s*(\/\/|#)/.test(code);
 }
 
-function addNextFileRoute(
-  file: string,
-  add: (method: string, path: string, summary?: string) => void
-): void {
+function addNextFileRoute(file: string, add: AddRoute): void {
   const app = file.match(NEXT_APP_RE);
   if (app?.[1]) {
-    add("GET", `/${app[1]}`, "Next.js app route");
+    add({ method: "GET", path: `/${app[1]}`, summary: "Next.js app route" });
     return;
   }
   const pages = file.match(NEXT_PAGES_RE);
   if (pages?.[1]) {
-    add("GET", `/${pages[1].replace(/\/index$/i, "")}`, "Next.js pages API");
+    add({
+      method: "GET",
+      path: `/${pages[1].replace(/\/index$/i, "")}`,
+      summary: "Next.js pages API"
+    });
   }
 }
 

@@ -46,8 +46,10 @@ describe("createChatRouter", () => {
   let createChatRouter;
   before(async () => {
     mock.module("./pocAuth.js", {
-      exports: { createLocalUserMiddleware: () => (_r, _s, n) => n(),
-      createPocAuth: () => (_r, _s, n) => n() }
+      exports: {
+        createLocalUserMiddleware: () => (_r, _s, n) => n(),
+        createPocAuth: () => (_r, _s, n) => n()
+      }
     });
     mock.module("../catalog/chatFeatureRepository.js", {
       exports: {
@@ -89,7 +91,8 @@ describe("createChatRouter", () => {
       exports: {
         newTurnId: () => "turn-1",
         startInteractiveChatTurn: async () => "wf-1",
-        cancelInteractiveChatTurn: async () => undefined
+        cancelInteractiveChatTurn: async () => undefined,
+        isInteractiveChatTurnRunning: async () => false
       }
     });
     ({ createChatRouter } = await import("./chatRouter.js"));

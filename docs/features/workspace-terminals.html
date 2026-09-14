@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Workspace terminals — how Forge streams shell I/O</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fafafa;
+      --fg: #1a1a1a;
+      --muted: #555;
+      --border: #ddd;
+      --accent: #2563eb;
+      --code-bg: #f4f4f5;
+      --diagram-bg: #fff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1117;
+        --fg: #e8eaed;
+        --muted: #9aa0a6;
+        --border: #3c4043;
+        --accent: #8ab4f8;
+        --code-bg: #1e2128;
+        --diagram-bg: #161922;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.65;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    .wrap {
+      max-width: 52rem;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+    h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 0.5rem; }
+    .lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 2rem; }
+    h2 {
+      font-size: 1.25rem;
+      margin: 2.5rem 0 0.75rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+    h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+    p, li { margin: 0.5rem 0; }
+    ul, ol { padding-left: 1.35rem; }
+    a { color: var(--accent); }
+    code, kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 0.12em 0.35em;
+      border-radius: 4px;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      overflow-x: auto;
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+    pre code { background: none; padding: 0; }
+    .diagram {
+      background: var(--diagram-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      overflow-x: auto;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.4;
+      white-space: pre;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      margin: 1rem 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.65rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--code-bg); }
+    .toc {
+      background: var(--diagram-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin: 1.5rem 0 2rem;
+    }
+    .toc ol { margin: 0; }
+    .note {
+      border-left: 3px solid var(--accent);
+      padding: 0.5rem 0 0.5rem 1rem;
+      margin: 1rem 0;
+      color: var(--muted);
+    }
+    .tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      background: var(--code-bg);
+      margin-right: 0.35rem;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Workspace terminals</h1>
+    <p class="lede">
+      How the Forge workbench bottom terminal works — especially interactive shell tabs,
+      tmux inside the sandbox, and the live byte stream from Docker to your browser.
+    </p>
+
+    <nav class="toc" aria-label="Contents">
+      <strong>On this page</strong>
+      <ol>
+        <li><a href="#overview">What you see in the UI</a></li>
+        <li><a href="#sandbox">The sandbox container and tmux</a></li>
+        <li><a href="#pty">What is a PTY?</a></li>
+        <li><a href="#shell-stream">Interactive shell: the full streaming path</a></li>
+        <li><a href="#ws-protocol">WebSocket protocol (session mux)</a></li>
+        <li><a href="#lifecycle">Connect, disconnect, and refresh</a></li>
+        <li><a href="#job-app">Job and app tabs</a></li>
+        <li><a href="#why-tmux">Why tmux?</a></li>
+        <li><a href="#code-map">Where the code lives</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ol>
+    </nav>
+
+    <h2 id="overview">What you see in the UI</h2>
+    <p>
+      The workbench has a collapsible panel at the bottom (<strong>Terminal</strong> / <strong>DevTools</strong>).
+      The dock uses a <strong>vertical sidebar</strong> of tabs (resizable) plus an xterm pane:
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Tab kind</th>
+          <th>What it is</th>
+          <th>Can you type?</th>
+          <th>How it appears / how output arrives</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="tag">shell</span></td>
+          <td>A bash login shell inside tmux in your session sandbox</td>
+          <td><strong>Yes</strong></td>
+          <td>Always available; live PTY over session WebSocket</td>
+        </tr>
+        <tr>
+          <td><span class="tag">app</span></td>
+          <td>Web app from Run / <code>preview_start</code></td>
+          <td>No — read-only</td>
+          <td><strong>Auto-subscribe</strong> — Run / <code>preview_start</code> tracks <code>app:{name}</code> on session WS; compose strip + dock; <code>exited</code> unsubscribes. No <code>/tabs</code> poll</td>
+        </tr>
+        <tr>
+          <td><span class="tag">job</span></td>
+          <td>Agent background <code>run_terminal</code></td>
+          <td>No — read-only</td>
+          <td><strong>Auto-subscribe</strong> — chat background <code>run_terminal</code> tracks the job over session WS; compose strip lists it; dock tab opens from the strip. <code>exited</code> unsubscribes. No boot <code>/jobs</code> list</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      There is <strong>no Stop button</strong> on dock tabs (close still hides/unpins). Stop apps from the
+      Run panel; stop background jobs with the agent’s <code>run_terminal action=stop</code>.
+      Above the chat composer, a collapsed <strong>“N terminals running”</strong> strip lists tracked
+      apps/jobs (socket lifecycle — no polling) and focuses that dock tab when clicked.
+    </p>
+    <p class="note">
+      One WebSocket per workbench session multiplexes shell, app, and job streams:
+      <code>/internal/terminal/session?sessionId=…</code>
+    </p>
+
+    <h2 id="sandbox">The sandbox container and tmux</h2>
+    <p>
+      Each Forge chat session gets a dedicated <strong>Docker sandbox container</strong>
+      (your workspace files are mounted at <code>/workspace</code>).
+      Inside that container Forge runs <strong>tmux</strong> — a terminal multiplexer.
+    </p>
+    <h3>tmux session layout</h3>
+    <ul>
+      <li>Session name: <code>forge</code></li>
+      <li>First window: <code>main</code>, running <code>bash -l</code> (created lazily on first use)</li>
+      <li>Extra shell tabs: new tmux windows, each with its own <code>bash -l</code> (names like <code>sh-a1b2c3</code>)</li>
+    </ul>
+    <p>
+      tmux keeps those shells alive even when you close the workbench tab or refresh the page.
+      The shell is not tied to your browser connection — only the <em>view</em> into it is.
+    </p>
+    <pre><code># Created once per container (simplified)
+tmux new-session -d -s forge -c /workspace -n main bash -l
+
+# Each "+" shell tab in the UI
+tmux new-window -t forge -n sh-a1b2c3 -c /workspace bash -l</code></pre>
+
+    <h2 id="pty">What is a PTY?</h2>
+    <p>
+      A <strong>PTY</strong> (pseudo-terminal) is what makes <code>bash</code> behave like
+      it is connected to a real keyboard and screen — colors, line editing, window size,
+      prompts, and programs like <code>vim</code> or <code>npm run dev</code> in interactive mode.
+    </p>
+    <div class="diagram">  Your browser (xterm.js)          Forge server              Docker sandbox
+  ┌─────────────────────┐       ┌──────────────┐       ┌─────────────────────────┐
+  │ Draws glyphs, sends │  WS   │ Forwards raw │ attach│ tmux → bash             │
+  │ keys as byte stream │◄─────►│ PTY bytes    │◄─────►│ (PTY slave side)        │
+  └─────────────────────┘       └──────────────┘       └─────────────────────────┘</div>
+    <p>
+      Plain pipes (<code>bash &lt; file</code>) would <em>not</em> work the same way:
+      no TTY, no colors, broken interactivity. Forge always allocates a PTY for shell tabs
+      via Docker’s exec API with <code>Tty: true</code>.
+    </p>
+
+    <h2 id="shell-stream">Interactive shell: the full streaming path</h2>
+    <p>
+      When you open or focus a shell tab, Forge opens a <strong>live pipe</strong> from
+      that tmux window to xterm in your browser. Output is not polled — bytes arrive as
+      the shell produces them.
+    </p>
+
+    <h3>Step 1 — Create a shell tab (HTTP)</h3>
+    <ol>
+      <li>You click <strong>+</strong> in the terminal tab strip.</li>
+      <li>The web UI calls <code>POST /internal/terminal/tabs</code> with your <code>sessionId</code>.</li>
+      <li>The Forge server runs <code>tmux new-window</code> in your sandbox container and returns the new window name (tab id).</li>
+      <li>The UI adds the tab immediately (optimistic update) while the server confirms.</li>
+    </ol>
+
+    <h3>Step 2 — Open a session WebSocket (browser → Forge server)</h3>
+    <p>
+      The terminal dock opens <strong>one</strong> WebSocket for the whole workbench session:
+    </p>
+    <pre><code>ws://&lt;tool-runner-host&gt;/internal/terminal/session?sessionId=&lt;id&gt;</code></pre>
+    <p>
+      Shell tabs then <code>subscribe</code> to streams like <code>shell:main</code>.
+      App and job tabs subscribe to <code>app:…</code> / <code>job:…</code> on the same connection.
+    </p>
+
+    <h3>Step 3 — Forge attaches to tmux via Docker (server → container)</h3>
+    <p>The session router (<code>terminalSession.ws.ts</code>) does the following for a shell subscribe:</p>
+    <ol>
+      <li>Resolves your <code>sessionId</code> to a sandbox container name.</li>
+      <li>Calls <code>attachShellWindow</code>, which runs Docker exec <strong>with a TTY</strong>:</li>
+    </ol>
+    <pre><code>tmux attach-session -d -t forge:&lt;window&gt;</code></pre>
+    <ul>
+      <li><code>-d</code> — detach any other client attached to that session view (one attach at a time for this attach command).</li>
+      <li><code>-t forge:sh-a1b2c3</code> — target the specific tmux window (tab).</li>
+    </ul>
+    <p>
+      Under the hood Forge talks to the Docker Engine API over the socket (<code>/var/run/docker.sock</code>):
+    </p>
+    <ol>
+      <li><code>POST /containers/{id}/exec</code> — create exec with <code>AttachStdin/Stdout/Stderr: true</code>, <code>Tty: true</code></li>
+      <li><code>POST /exec/{id}/start</code> with HTTP upgrade — <strong>hijack</strong> the stream</li>
+      <li>Raw bytes on that socket are PTY I/O (not line-delimited JSON)</li>
+    </ol>
+
+    <h3>Step 4 — Output streaming (container → browser)</h3>
+    <p>When bash (via tmux) writes to the terminal:</p>
+    <div class="diagram">bash prints bytes
+    ↓
+tmux multiplexes the PTY for that window
+    ↓
+docker exec attach stream (PTY master)
+    ↓
+Forge server: encodeDataFrame(stream, chunk) → ws.send(binary)
+    ↓
+Browser: TerminalSessionClient demux → term.write(chunk)
+    ↓
+You see text, colors, cursor moves on screen</div>
+    <p>
+      Chunks are opaque terminal bytes — ANSI escape sequences for color, cursor positioning,
+      clearing lines, etc. xterm interprets them; Forge does not parse command output.
+    </p>
+    <p>
+      After attach succeeds, the server sends one JSON control message:
+      <code>{"type":"ready","stream":"shell:main"}</code>. Data frames are binary with a stream header.
+    </p>
+
+    <h3>Step 5 — Input streaming (browser → container)</h3>
+    <p>When you type in xterm:</p>
+    <div class="diagram">Key press in xterm
+    ↓
+term.onData → encodeStdinFrame(stream, bytes) → ws.send
+    ↓
+Forge server: parseStdinFrame → attach.write(data)
+    ↓
+Docker hijacked stream → stdin of attach process
+    ↓
+tmux → bash readline / program stdin</div>
+    <p>
+      Special keys (arrows, Ctrl+C, paste) are encoded as the same byte sequences
+      a local terminal would send. Stdin is rejected for <code>app:*</code> / <code>job:*</code> streams.
+    </p>
+
+    <h3>Step 6 — Terminal resize</h3>
+    <p>When you resize the dock or the split pane, xterm recalculates columns and rows and sends JSON:</p>
+    <pre><code>{"type":"resize","stream":"shell:main","cols":120,"rows":32}</code></pre>
+    <p>
+      The server calls Docker’s <code>POST /exec/{id}/resize?w=&amp;h=</code> so programs
+      like <code>vim</code> or full-screen CLIs reflow correctly.
+    </p>
+
+    <h3>End-to-end diagram</h3>
+    <div class="diagram">┌──────────────────────────────────────────────────────────────────────────┐
+│ Browser (workbench)                                                       │
+│  TerminalPane → TerminalSessionClient (one WS)                            │
+│       │ subscribe shell:main / app:… / job:…                              │
+└───────┼──────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Forge server (Node)                                                       │
+│  terminalSession.ws.ts  →  sessionPty / sessionAppLog  →  docker attach  │
+│       │ framed data          │ write / resize                             │
+└───────┼──────────────────────┼───────────────────────────────────────────┘
+        │ Docker Engine API (unix socket)
+        ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Sandbox container                                                         │
+│  tmux session "forge"  OR  tail -n 500 -F /tmp/forge-app-*.log            │
+└──────────────────────────────────────────────────────────────────────────┘</div>
+
+    <h2 id="ws-protocol">WebSocket protocol (session mux)</h2>
+    <p>Connect once:</p>
+    <pre><code>ws://127.0.0.1:4000/internal/terminal/session?sessionId=&lt;id&gt;</code></pre>
+    <table>
+      <thead>
+        <tr>
+          <th>Direction</th>
+          <th>Payload</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Client → server</td>
+          <td><code>{"type":"subscribe","stream":"shell:main"}</code></td>
+          <td>Start attach for that stream</td>
+        </tr>
+        <tr>
+          <td>Client → server</td>
+          <td><code>{"type":"unsubscribe","stream":"…"}</code></td>
+          <td>Stop attach</td>
+        </tr>
+        <tr>
+          <td>Client → server</td>
+          <td>Binary stdin frame / JSON resize</td>
+          <td>Shell only</td>
+        </tr>
+        <tr>
+          <td>Server → client</td>
+          <td><code>{"type":"ready","stream":"…"}</code></td>
+          <td>Attach succeeded</td>
+        </tr>
+        <tr>
+          <td>Server → client</td>
+          <td>Binary data frame (stream header + payload)</td>
+          <td>PTY or log bytes</td>
+        </tr>
+        <tr>
+          <td>Server → client</td>
+          <td><code>{"type":"exited","stream":"…"}</code></td>
+          <td>App/job process ended</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Default PTY size on attach: 80×24. After <code>ready</code>, the client fits xterm to the pane
+      and sends the real dimensions.
+    </p>
+
+    <h2 id="lifecycle">Connect, disconnect, and refresh</h2>
+    <p>
+      The workbench opens <strong>one</strong> session WebSocket. Tabs
+      <code>subscribe</code> / <code>unsubscribe</code> streams; collapsing the dock unsubscribes
+      followers but the socket can stay for reconnect.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>What happens</th>
+          <th>What happens to bash / logs</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Switch shell tab</td>
+          <td>Unsubscribe old shell stream; subscribe new</td>
+          <td>Both shells keep running in tmux</td>
+        </tr>
+        <tr>
+          <td>Dock open with apps/jobs</td>
+          <td>Subscribe app/job streams even if not focused</td>
+          <td>Boot output buffered in xterm while you stay on Shell</td>
+        </tr>
+        <tr>
+          <td>Collapse dock</td>
+          <td>Unsubscribe streams (session client may reconnect later)</td>
+          <td>Processes keep running</td>
+        </tr>
+        <tr>
+          <td>Refresh workbench</td>
+          <td>New session WS; resubscribe visible tabs</td>
+          <td>tmux + log files persist in the container</td>
+        </tr>
+        <tr>
+          <td>Close shell tab (×)</td>
+          <td>Unsubscribe + <code>tmux kill-window</code></td>
+          <td>That shell ends</td>
+        </tr>
+        <tr>
+          <td>Close app/job tab (×)</td>
+          <td>Unsubscribe + client-hide / unpin</td>
+          <td>Process keeps running; app may reappear after reload if still running</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="job-app">Job and app tabs</h2>
+    <p>
+      Run apps and background agent jobs write stdout/stderr to files inside the container.
+      New starts also echo a header line <code>$ &lt;command&gt;</code> into the log before process output:
+    </p>
+    <pre><code>/tmp/forge-app-&lt;sanitized-name&gt;.log    ← preview_start / Run panel
+/tmp/forge-term-&lt;job-name&gt;.log         ← run_terminal background:true</code></pre>
+    <p>
+      <strong>Apps</strong> appear in the vertical sidebar when running or when a log file already exists.
+      <strong>Jobs</strong> are auto-subscribed when a background <code>run_terminal</code> appears in chat;
+      they show in the composer strip and open in the dock from that strip (no Show in terminal CTA).
+      Closing a job tab removes it from the dock only.
+    </p>
+    <p>
+      Follow streams use a single <code>tail -n 500 -F</code> Docker attach (replay + live).
+      While the dock is open, app/job streams stay subscribed even if another tab is focused.
+      While a process is running but no bytes yet, the pane shows <strong>Starting…</strong>.
+    </p>
+    <h3>How the agent gets job output (not HTTP /terminal/logs)</h3>
+    <ul>
+      <li><strong>Foreground</strong> <code>run_terminal</code>: command runs via <code>dockerExec</code>; stdout/stderr returned in the tool result and shown in chat.</li>
+      <li><strong>Background</strong>: process appends to the log file; the tool returns an initial tail and tells the agent to poll with <code>action=logs</code>.</li>
+      <li><code>action=logs</code> calls <code>terminalJobLogs</code> / <code>readBackgroundJobLogs</code> <em>inside the server</em> — it does <strong>not</strong> use HTTP <code>GET /internal/terminal/logs</code> (that route was removed as unused by the dock).</li>
+      <li>The UI follows the same files over the session WebSocket.</li>
+    </ul>
+    <p class="note">
+      Tab metadata is polled every <strong>8 seconds</strong> via <code>GET /internal/terminal/tabs</code>
+      (shells + apps). Job pins are client-side. Log bytes use the session WebSocket only.
+    </p>
+
+    <h2 id="why-tmux">Why tmux?</h2>
+    <ul>
+      <li><strong>Persistence</strong> — shells survive browser refresh and WebSocket disconnect.</li>
+      <li><strong>Multiple tabs</strong> — one session, many windows; attach targets one window at a time.</li>
+      <li><strong>Standard tooling</strong> — familiar model for anyone who uses remote dev boxes.</li>
+    </ul>
+    <p>
+      tmux does not provide a separate “streaming API.” Attaching <em>is</em> the stream —
+      the same model as SSH or <code>docker run -it</code>.
+    </p>
+
+    <h2 id="code-map">Where the code lives</h2>
+    <p>For engineers navigating the repo:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Layer</th>
+          <th>File</th>
+          <th>Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>UI — session client</td>
+          <td><code>apps/web-ui/src/lib/terminal-session-client.ts</code></td>
+          <td>One WS; subscribe / stdin / resize; reconnect</td>
+        </tr>
+        <tr>
+          <td>UI — xterm panes</td>
+          <td><code>apps/web-ui/src/routes/chat-workbench/terminal-xterm-view.tsx</code></td>
+          <td><code>ShellXtermPane</code>, <code>AppLogXtermPane</code>, <code>JobLogXtermPane</code></td>
+        </tr>
+        <tr>
+          <td>UI — tab sidebar</td>
+          <td><code>apps/web-ui/src/routes/chat-workbench/terminal-pane.tsx</code></td>
+          <td>Vertical list: shells + apps + pinned jobs; <code>+ Shell</code>; session client</td>
+        </tr>
+        <tr>
+          <td>UI — compose strip</td>
+          <td><code>apps/web-ui/src/routes/chat-workbench/running-terminals-bar.tsx</code></td>
+          <td>“N terminals running” → open/focus dock tab</td>
+        </tr>
+        <tr>
+          <td>UI — HTTP helpers</td>
+          <td><code>apps/web-ui/src/lib/session-terminal.ts</code></td>
+          <td>Tab CRUD, jobs list, job stop</td>
+        </tr>
+        <tr>
+          <td>Server — session WebSocket</td>
+          <td><code>apps/server/src/api/internal/terminalSession.ws.ts</code></td>
+          <td>Mux router; shell / app / job streams</td>
+        </tr>
+        <tr>
+          <td>Server — protocol</td>
+          <td><code>apps/server/src/api/internal/terminalSessionProtocol.ts</code></td>
+          <td>Stream ids, control JSON, binary frames</td>
+        </tr>
+        <tr>
+          <td>Server — log follow</td>
+          <td><code>apps/server/src/projects/sessionAppLog.ts</code></td>
+          <td><code>tail -n 500 -F</code> for app and job logs</td>
+        </tr>
+        <tr>
+          <td>Server — tmux ops</td>
+          <td><code>apps/server/src/projects/sessionPty.ts</code></td>
+          <td><code>ensureTmuxSession</code>, <code>attachShellWindow</code>, list/kill windows</td>
+        </tr>
+        <tr>
+          <td>Server — Docker attach</td>
+          <td><code>apps/server/src/projects/dockerExecHttp.ts</code></td>
+          <td><code>dockerExecAttach</code>, <code>dockerLogFollowAttach</code></td>
+        </tr>
+        <tr>
+          <td>Server — WS registration</td>
+          <td><code>apps/server/src/index.ts</code></td>
+          <td><code>attachTerminalSessionWebSocket</code></td>
+        </tr>
+        <tr>
+          <td>Server — job/app logs</td>
+          <td><code>apps/server/src/projects/backgroundJob.ts</code></td>
+          <td>Log files, pid files, sanitize names</td>
+        </tr>
+        <tr>
+          <td>Sandbox image</td>
+          <td><code>Dockerfile.sandbox</code></td>
+          <td>Installs <code>tmux</code>, <code>bash</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="faq">FAQ</h2>
+
+    <h3>Does tmux “stream” output?</h3>
+    <p>
+      tmux holds PTY sessions. When you attach, you get a continuous byte stream —
+      there is no separate log tail or poll. Streaming is a property of the PTY + attach pipe,
+      not a tmux-specific network protocol.
+    </p>
+
+    <h3>Why WebSocket for shells and apps?</h3>
+    <p>
+      Shells need low-latency bidirectional I/O. App and job logs stream from container files over
+      the same session WebSocket via <code>tail -F</code>. Foreground agent commands stay in chat;
+      background jobs appear in the compose running strip via auto-subscribe and open in the dock from there.
+    </p>
+
+    <h3>Is my keystroke data stored?</h3>
+    <p>
+      Forge forwards PTY bytes between browser and container. Shell scrollback lives in tmux/xterm
+      client memory; Forge does not persist terminal transcripts in this path unless other
+      features (e.g. agent tools) explicitly capture command output.
+    </p>
+
+    <h3>What if tmux is missing in the image?</h3>
+    <p>
+      Shell tabs fail with a rebuild hint. Rebuild the sandbox image after pulling terminal
+      changes (<code>pnpm docker:sandbox</code> or your project’s documented rebuild step).
+    </p>
+
+    <footer>
+      <p>
+        Forge workspace terminals — internal architecture doc for humans.
+        Last updated for session mux, auto-subscribe apps/jobs, no tabs/jobs poll.
+      </p>
+    </footer>
+  </div>
+</body>
+</html>

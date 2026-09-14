@@ -11,6 +11,10 @@ import {
 import { provisionSessionSandbox } from "../../projects/sessionSandbox.js";
 import { finalizeSessionProvision } from "../../projects/sessionProvision.js";
 import {
+  assertCloudSandboxAvailable,
+  readExecutionTarget
+} from "../executionTarget.js";
+import {
   chatFeatureService,
   chatRepo,
   param,
@@ -101,6 +105,7 @@ export async function handleCreateChat(
   const userId = (req as AuthedRequest).forgeUser.id;
   const { title, type, parentId, priority, dueDate, description, workflowId } =
     req.body;
+  const executionTarget = readExecutionTarget(req.body);
   const validation = validateCreateBody({
     type,
     priority,
@@ -112,6 +117,7 @@ export async function handleCreateChat(
     return;
   }
   try {
+    await assertCloudSandboxAvailable(executionTarget);
     const project = await projectRepo.getById(projectId);
     if (!project) {
       res.status(N_404).json({ error: "Project not found" });
@@ -131,10 +137,11 @@ export async function handleCreateChat(
             ? null
             : new Date(dueDate),
       description: validation.description,
-      workflowId: typeof workflowId === "string" ? workflowId : undefined
+      workflowId: typeof workflowId === "string" ? workflowId : undefined,
+      executionTarget
     });
     void provisionSessionSandbox(chat.sessionId)
-        .then(() => finalizeSessionProvision(chat.sessionId))
+      .then(() => finalizeSessionProvision(chat.sessionId))
       .catch((err) => {
         console.warn(
           `[chat ${chat.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`
@@ -184,7 +191,9 @@ export async function handleCreateWorkbench(
   const userId = (req as AuthedRequest).forgeUser.id;
   const title =
     typeof req.body?.title === "string" ? req.body.title : undefined;
+  const executionTarget = readExecutionTarget(req.body);
   try {
+    await assertCloudSandboxAvailable(executionTarget);
     const project = await projectRepo.getById(projectId);
     if (!project) {
       res.status(N_404).json({ error: "Project not found" });
@@ -193,10 +202,11 @@ export async function handleCreateWorkbench(
     const session = await chatFeatureService.createWorkbench({
       projectId,
       userId,
-      title
+      title,
+      executionTarget
     });
     void provisionSessionSandbox(session.sessionId)
-        .then(() => finalizeSessionProvision(session.sessionId))
+      .then(() => finalizeSessionProvision(session.sessionId))
       .catch((err) => {
         console.warn(
           `[workbench ${session.id}] sandbox provisioning failed (will retry on open): ${err instanceof Error ? err.message : String(err)}`

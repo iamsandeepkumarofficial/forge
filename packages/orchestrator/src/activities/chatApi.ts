@@ -13,18 +13,15 @@ export async function withHeartbeats<T>(opts: {
     typeof opts.detail === "string"
       ? { detail: opts.detail, at: Date.now() }
       : { ...opts.detail, at: Date.now() };
-  heartbeat(payload);
-  const timer = setInterval(() => {
+  const beat = () => {
     try {
-      heartbeat(
-        typeof opts.detail === "string"
-          ? { detail: opts.detail, at: Date.now() }
-          : { ...opts.detail, at: Date.now() }
-      );
+      heartbeat(payload);
     } catch {
       void 0;
     }
-  }, intervalMs);
+  };
+  beat();
+  const timer = setInterval(beat, intervalMs);
   try {
     return await opts.work;
   } finally {
@@ -103,10 +100,13 @@ export async function appendChatMessage(input: {
 }
 
 export async function ensureChatSandbox(sessionId: string): Promise<void> {
-  await api(`/internal/session/start`, {
-    method: "POST",
-    body: JSON.stringify({ sessionId })
-  }).catch(() => {});
+  await withHeartbeats({
+    work: api(`/internal/session/start`, {
+      method: "POST",
+      body: JSON.stringify({ sessionId })
+    }).catch(() => {}),
+    detail: `ensureChatSandbox:${sessionId}`
+  });
 }
 
 export async function getChatSystemPrompt(sessionId: string): Promise<string> {

@@ -37,7 +37,7 @@ function ActivityBody({ entry }: { entry: ActivityEntry }) {
   }
   return (
     <div className="mt-1 text-sm [&_.prose]:max-w-none">
-      <AssistantMarkdown text={text} streamingIndicator={false} />
+      <AssistantMarkdown text={text} />
     </div>
   );
 }

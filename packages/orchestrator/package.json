@@ -20,6 +20,7 @@
     "@temporalio/workflow": "^1.11.6",
     "@forge/agents": "workspace:*",
     "@forge/core": "workspace:*",
+    "@forge/tools": "workspace:*",
     "@forge/workflows": "workspace:*",
     "ai": "^6.0.177",
     "dotenv": "^17.2.2",
