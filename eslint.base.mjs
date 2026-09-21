@@ -19,8 +19,6 @@ export default tseslint.config(
       "**/coverage/**",
       "**/.turbo/**",
       "packages/personas/**",
-      "packages/agents/definitions/**",
-      "packages/workflows/definitions/**",
       "infra/**",
       "docker/**",
       "scripts/**",

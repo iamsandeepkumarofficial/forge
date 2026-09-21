@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { errorMessage, maybeCreateChat } from "./dashboard-empty-connect";
+import {
+  errorMessage,
+  maybeCreateWorkspaceChat
+} from "./dashboard-empty-connect";
 
 vi.mock("../lib/projects-api.js", () => ({
   ConnectProjectError: class extends Error {
@@ -10,8 +13,11 @@ vi.mock("../lib/projects-api.js", () => ({
     }
   },
   connectProject: vi.fn(),
-  connectLocalProject: vi.fn(),
-  createChat: vi.fn(async () => ({ id: "c1" }))
+  connectLocalProject: vi.fn()
+}));
+
+vi.mock("../lib/workspaces-api.js", () => ({
+  createWorkspaceChat: vi.fn(async () => ({ id: "c1" }))
 }));
 
 describe("dashboard-empty-connect", () => {
@@ -19,7 +25,7 @@ describe("dashboard-empty-connect", () => {
     expect(errorMessage(new Error("boom"))).toBe("boom");
   });
 
-  it("maybeCreateChat no-ops for empty titles", async () => {
-    await maybeCreateChat({ projectId: "p1", title: "" });
+  it("maybeCreateWorkspaceChat no-ops for empty titles", async () => {
+    await maybeCreateWorkspaceChat({ workspaceId: "w1", title: "" });
   });
 });

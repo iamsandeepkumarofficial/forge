@@ -1,7 +1,9 @@
-import { DEFAULT_WORKFLOW_ID } from "@forge/workflows";
 import { ChatFeatureRepository } from "../catalog/chatFeatureRepository.js";
 import type { ChatFeature } from "@forge/db";
 import type { DescriptionDocument } from "../catalog/descriptionDocument.js";
+
+const DEFAULT_WORKFLOW_ID = "sdlc";
+
 export const VALID_TYPES = ["feature", "bug", "refactor"] as const;
 type ChatFeatureTypeValue = (typeof VALID_TYPES)[number];
 export const SINGLE_LEVEL_PARENT_ERROR =

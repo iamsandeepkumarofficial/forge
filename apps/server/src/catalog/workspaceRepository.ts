@@ -119,6 +119,20 @@ export class WorkspaceRepository {
     return result[0] || null;
   }
 
+  async listMembershipsByProjectId(
+    projectId: string
+  ): Promise<WorkspaceProject[]> {
+    const db = getDb();
+    return db
+      .select()
+      .from(workspaceProjects)
+      .where(eq(workspaceProjects.projectId, projectId))
+      .orderBy(
+        asc(workspaceProjects.createdAt),
+        asc(workspaceProjects.sortOrder)
+      );
+  }
+
   async findMemberByRepoName(
     workspaceId: string,
     repoName: string

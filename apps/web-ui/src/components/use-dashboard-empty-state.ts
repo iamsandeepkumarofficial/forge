@@ -5,13 +5,13 @@ import { SUGGESTION_SETS } from "./empty-state-shared.js";
 import {
   connectLocalAndFinish,
   errorMessage,
-  maybeCreateChat
+  maybeCreateWorkspaceChat
 } from "./dashboard-empty-connect.js";
 
 function useLocalConnectActions(options: {
   desktop: boolean;
   localPath: string;
-  finishConnect: (projectId: string) => Promise<void>;
+  finishConnect: (workspaceId: string) => Promise<void>;
   setLoading: (v: "local" | null) => void;
   setError: (v: string | null) => void;
   setShowPathInput: (v: boolean) => void;
@@ -60,7 +60,9 @@ function useLocalConnectActions(options: {
   return { handleSelectFolder, handleConnectPath };
 }
 
-export function useDashboardEmptyState(options: { onConnected: () => void }) {
+export function useDashboardEmptyState(options: {
+  onConnected: (workspaceId: string) => void;
+}) {
   const { onConnected } = options;
   const navigate = useNavigate();
   const importSectionRef = useRef<HTMLDivElement>(null);
@@ -75,13 +77,13 @@ export function useDashboardEmptyState(options: { onConnected: () => void }) {
   const [localPath, setLocalPath] = useState("");
   const suggestions = SUGGESTION_SETS[suggestionSet % SUGGESTION_SETS.length]!;
   const finishConnect = useCallback(
-    async (projectId: string) => {
-      await maybeCreateChat({
-        projectId,
+    async (workspaceId: string) => {
+      await maybeCreateWorkspaceChat({
+        workspaceId,
         title: (pendingTitle || buildText).trim()
       });
-      onConnected();
-      void navigate(`/projects/${projectId}`);
+      onConnected(workspaceId);
+      void navigate(`/workspaces/${workspaceId}`);
     },
     [buildText, navigate, onConnected, pendingTitle]
   );

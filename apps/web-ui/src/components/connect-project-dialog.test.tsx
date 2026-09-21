@@ -14,7 +14,10 @@ import { connectLocalProject } from "../lib/projects-api.js";
 
 describe("ConnectProjectDialog", () => {
   beforeEach(() => {
-    vi.mocked(connectLocalProject).mockResolvedValue({ projectId: "p1" });
+    vi.mocked(connectLocalProject).mockResolvedValue({
+      projectId: "p1",
+      workspaceId: "w1"
+    });
   });
 
   it("renders connect heading and cancel closes", () => {
@@ -37,7 +40,7 @@ describe("ConnectProjectDialog", () => {
     fireEvent.click(screen.getByLabelText("Connect folder"));
     await waitFor(() => {
       expect(connectLocalProject).toHaveBeenCalledWith("/tmp/my-app");
-      expect(onConnected).toHaveBeenCalled();
+      expect(onConnected).toHaveBeenCalledWith("w1");
       expect(onClose).toHaveBeenCalled();
     });
   });

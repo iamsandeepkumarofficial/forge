@@ -64,6 +64,9 @@ export function chatHrefForSession(
   if (session.workspaceId && session.chatId) {
     return `/workspaces/${session.workspaceId}/chats/${session.chatId}`;
   }
+  if (session.workspaceId && session.chatId) {
+    return `/workspaces/${session.workspaceId}/chats/${session.chatId}`;
+  }
   if (session.projectId && session.chatId) {
     return `/projects/${session.projectId}/chats/${session.chatId}`;
   }

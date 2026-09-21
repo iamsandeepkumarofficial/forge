@@ -60,9 +60,8 @@ Monorepo managed with **pnpm** and **Turborepo**.
 | `packages/core`                   | Shared backend domain logic                                             |
 | `packages/db`                     | Schema and migrations                                                   |
 | `packages/tools`                  | Sandbox tool implementations                                            |
-| `packages/agents`                 | Agent mode definitions                                                  |
+| `packages/agents`                 | Agent types / schema (chat modes live in `@forge/core`)                 |
 | `packages/skills`                 | Packaged skills                                                         |
-| `packages/workflows`              | Workflow definitions (trimmed toward chat-only)                         |
 | `packages/fe-core`, `packages/ui` | Shared client/UI packages when used by the shell                        |
 
 Apps are thin adapters. Prefer putting durable domain logic in `packages/*` rather than growing app-only business rules.

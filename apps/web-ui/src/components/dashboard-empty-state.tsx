@@ -2,7 +2,7 @@ import { DashboardEmptyStateView } from "./dashboard-empty-state-view.js";
 import { useDashboardEmptyState } from "./use-dashboard-empty-state.js";
 
 export function DashboardEmptyState(options: {
-  onConnected: () => void;
+  onConnected: (workspaceId: string) => void;
   onShowActivity?: () => void;
 }) {
   const { onShowActivity, ...emptyOptions } = options;

@@ -16,7 +16,11 @@ describe("projects API", () => {
   it("connectProject posts github url and returns ids", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ projectId: "p1", alreadyConnected: false })
+      json: async () => ({
+        projectId: "p1",
+        workspaceId: "w1",
+        alreadyConnected: false
+      })
     } as Response);
     const result = await connectProject("octocat/hello");
     expect(fetch).toHaveBeenCalledWith(
@@ -27,6 +31,7 @@ describe("projects API", () => {
       })
     );
     expect(result.projectId).toBe("p1");
+    expect(result.workspaceId).toBe("w1");
   });
 
   it("connectProject rejects empty github urls", async () => {
@@ -38,7 +43,7 @@ describe("projects API", () => {
   it("connectLocalProject posts localPath", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ projectId: "p-local" })
+      json: async () => ({ projectId: "p-local", workspaceId: "w-local" })
     } as Response);
     const result = await connectLocalProject("/tmp/my-repo");
     expect(fetch).toHaveBeenCalledWith(
@@ -49,6 +54,7 @@ describe("projects API", () => {
       })
     );
     expect(result.projectId).toBe("p-local");
+    expect(result.workspaceId).toBe("w-local");
   });
 
   it("connectLocalProject rejects empty paths", async () => {
@@ -65,9 +71,7 @@ describe("projects API", () => {
       ]
     } as Response);
     const projects = await fetchProjects();
-    expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects"
-    );
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:4000/api/projects");
     expect(projects).toHaveLength(1);
   });
 
@@ -83,9 +87,7 @@ describe("projects API", () => {
       })
     } as Response);
     const project = await fetchProject("p1");
-    expect(fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:4000/api/projects/p1"
-    );
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:4000/api/projects/p1");
     expect(project.id).toBe("p1");
   });
 

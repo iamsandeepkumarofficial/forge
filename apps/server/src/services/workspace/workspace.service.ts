@@ -19,6 +19,12 @@ import {
   rewriteRoutesForRename,
   validateDependsOn
 } from "./workspaceMemberUpdate.js";
+import {
+  backfillOrphanProjects,
+  ensureWorkspaceForProject,
+  findPrimaryWorkspaceIdForProject,
+  wrapProjectInNewWorkspace
+} from "./workspaceConnect.js";
 
 const N_400 = 400;
 const N_403 = 403;
@@ -86,6 +92,20 @@ export class WorkspaceService {
     this.projectRepo = projectRepo;
   }
 
+  private connectHost() {
+    return {
+      projectRepo: this.projectRepo,
+      workspaceRepo: this.workspaceRepo,
+      createWorkspace: (userId: string, name: string) =>
+        this.createWorkspace(userId, name),
+      addProject: (options: {
+        workspaceId: string;
+        userId: string;
+        input: { projectId: string };
+      }) => this.addProject(options)
+    };
+  }
+
   async createWorkspace(
     userId: string,
     name: string
@@ -101,6 +121,32 @@ export class WorkspaceService {
     });
     scheduleWorkspaceHealthAnalysis(ws.id);
     return { ...ws, members: [] };
+  }
+
+  async wrapProjectInNewWorkspace(options: {
+    userId: string;
+    projectId: string;
+    workspaceName: string;
+  }): Promise<{ workspaceId: string }> {
+    return wrapProjectInNewWorkspace(this.connectHost(), options);
+  }
+
+  async findPrimaryWorkspaceIdForProject(
+    projectId: string
+  ): Promise<string | null> {
+    return findPrimaryWorkspaceIdForProject(this.connectHost(), projectId);
+  }
+
+  async ensureWorkspaceForProject(options: {
+    userId: string;
+    projectId: string;
+    workspaceName?: string;
+  }): Promise<{ workspaceId: string }> {
+    return ensureWorkspaceForProject(this.connectHost(), options);
+  }
+
+  async backfillOrphanProjects(userId: string): Promise<number> {
+    return backfillOrphanProjects(this.connectHost(), userId);
   }
 
   async listWorkspaces(userId: string): Promise<Workspace[]> {

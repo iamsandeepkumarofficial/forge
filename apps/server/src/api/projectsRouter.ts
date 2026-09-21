@@ -179,6 +179,32 @@ router.get("/:projectId", pocAuth, async (req, res) => {
     });
   }
 });
+router.get("/:projectId/workspace", pocAuth, async (req, res) => {
+  const projectId = Array.isArray(req.params.projectId)
+    ? req.params.projectId[0]
+    : req.params.projectId;
+  if (!projectId) {
+    return res.status(N_400).json({ error: "Project ID is required" });
+  }
+  try {
+    const project = await projectService.getProjectById(projectId);
+    if (!project) {
+      return res.status(N_404).json({ error: "Project not found" });
+    }
+    const { WorkspaceService } =
+      await import("../services/workspace/workspace.service.js");
+    const workspaceService = new WorkspaceService();
+    const userId = (req as AuthedRequest).forgeUser.id;
+    const { workspaceId } = await workspaceService.ensureWorkspaceForProject({
+      userId,
+      projectId,
+      workspaceName: project.name
+    });
+    res.json({ workspaceId });
+  } catch (error: unknown) {
+    return res.status(N_400).json({ error: errorMessage(error) });
+  }
+});
 router.delete("/:projectId", pocAuth, async (req, res) => {
   const projectId = Array.isArray(req.params.projectId)
     ? req.params.projectId[0]

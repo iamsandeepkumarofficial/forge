@@ -4,72 +4,42 @@ import { Activity, FolderPlus, Layers, Settings } from "lucide-react";
 import { ConnectProjectDialog } from "../components/connect-project-dialog.js";
 import { DashboardOverview } from "../components/dashboard-overview.js";
 import { ForgeMark } from "../components/forge-mark.js";
-import { ProjectCard } from "../components/project-card.js";
 import { WorkspaceCard } from "../components/workspace-card.js";
 import { useDashboardInsights } from "../hooks/use-dashboard-insights.js";
-import { runnerUrl } from "../lib/tool-runner.js";
 import {
   listWorkspaces,
   type WorkspaceSummary
 } from "../lib/workspaces-api.js";
-import { HomeLoaded, type HomeProjectRow } from "./home-loaded.js";
+import { HomeLoaded } from "./home-loaded.js";
 
-type ProjectRow = HomeProjectRow;
-
-async function fetchProjectRows(): Promise<ProjectRow[]> {
-  const baseUrl = runnerUrl();
-  const response = await fetch(`${baseUrl}/api/projects`);
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Failed to fetch projects:", response.status, errorText);
-    throw new Error(`Failed to load projects: ${response.status}`);
-  }
-  const data = (await response.json()) as ProjectRow[];
-  return Array.isArray(data) ? data : [];
-}
-
-async function loadHomeRows(): Promise<{
-  projects: ProjectRow[];
-  workspaces: WorkspaceSummary[];
-}> {
-  let projects: ProjectRow[] = [];
-  let workspaces: WorkspaceSummary[] = [];
-  try {
-    projects = await fetchProjectRows();
-  } catch (err) {
-    console.error("Failed to load projects:", err);
-  }
+async function loadHomeWorkspaces(): Promise<WorkspaceSummary[]> {
   try {
     const ws = await listWorkspaces();
-    workspaces = Array.isArray(ws) ? ws : [];
+    return Array.isArray(ws) ? ws : [];
   } catch (err) {
     console.error("Failed to load workspaces:", err);
+    return [];
   }
-  return { projects, workspaces };
 }
 
 export function Home() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
-  const loadProjects = async () => {
+  const reload = async () => {
     setLoading(true);
-    const rows = await loadHomeRows();
-    setProjects(rows.projects);
-    setWorkspaces(rows.workspaces);
+    setWorkspaces(await loadHomeWorkspaces());
     setLoading(false);
   };
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const rows = await loadHomeRows();
+      const rows = await loadHomeWorkspaces();
       if (!cancelled) {
-        setProjects(rows.projects);
-        setWorkspaces(rows.workspaces);
+        setWorkspaces(rows);
         setLoading(false);
       }
     })();
@@ -80,7 +50,6 @@ export function Home() {
   if (loading) return <div className="p-8 text-center">Loading...</div>;
   return (
     <HomeLoaded
-      projects={projects}
       workspaces={workspaces}
       showDialog={showDialog}
       showWorkspaceDialog={showWorkspaceDialog}
@@ -88,7 +57,7 @@ export function Home() {
       onShowDialog={setShowDialog}
       onShowWorkspaceDialog={setShowWorkspaceDialog}
       onShowActivity={setShowActivity}
-      onReload={() => void loadProjects()}
+      onReload={() => void reload()}
       onNavigate={(path) => void navigate(path)}
       HomeGrid={HomeGrid}
     />
@@ -127,13 +96,15 @@ function HomeWorkspacesSection(options: {
   onOpenWorkspace: (id: string) => void;
   onDeleteWorkspace: (id: string) => void;
   onCreateWorkspace: () => void;
+  onConnectProject: () => void;
 }) {
   const {
     workspaces,
     cardGrid,
     onOpenWorkspace,
     onDeleteWorkspace,
-    onCreateWorkspace
+    onCreateWorkspace,
+    onConnectProject
   } = options;
   return (
     <section className="mt-8">
@@ -151,57 +122,20 @@ function HomeWorkspacesSection(options: {
           />
         ))}
         <CreateCard
+          label="Connect a project"
+          title="Connect project"
+          subtitle="Local folder or GitHub — opens as a workspace"
+          onClick={onConnectProject}
+        >
+          <FolderPlus className="size-7" />
+        </CreateCard>
+        <CreateCard
           label="Create a workspace"
-          title="New workspace"
-          subtitle="Group projects for multi-repo chats"
+          title="Empty workspace"
+          subtitle="Add repos later in settings"
           onClick={onCreateWorkspace}
         >
           <Layers className="size-7" />
-        </CreateCard>
-      </div>
-    </section>
-  );
-}
-
-function HomeProjectsSection(options: {
-  projects: ProjectRow[];
-  cardGrid: string;
-  onOpen: (id: string) => void;
-  onDelete: (id: string) => void;
-  onShowDialog: (v: boolean) => void;
-}) {
-  const { projects, cardGrid, onOpen, onDelete, onShowDialog } = options;
-  return (
-    <section className="mt-8">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        Projects
-      </h2>
-      <div className={cardGrid}>
-        {projects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            projectId={project.id}
-            name={project.name}
-            source={project.source}
-            status={project.status}
-            lastActivityAt={
-              project.lastActivityAt == null
-                ? undefined
-                : typeof project.lastActivityAt === "number"
-                  ? project.lastActivityAt
-                  : Date.parse(project.lastActivityAt)
-            }
-            onOpen={() => onOpen(project.id)}
-            onDelete={() => onDelete(project.id)}
-          />
-        ))}
-        <CreateCard
-          label="Connect a project"
-          title="Connect project"
-          subtitle="Add a local folder or GitHub repo"
-          onClick={() => onShowDialog(true)}
-        >
-          <FolderPlus className="size-7" />
         </CreateCard>
       </div>
     </section>
@@ -232,32 +166,26 @@ function HomeHeaderActions(options: { onShowActivity: () => void }) {
 }
 
 function HomeGrid(options: {
-  projects: ProjectRow[];
   workspaces: WorkspaceSummary[];
   showDialog: boolean;
   onShowDialog: (v: boolean) => void;
-  onConnected: () => void;
-  onOpen: (id: string) => void;
-  onDelete: (id: string) => void;
+  onConnected: (workspaceId: string) => void;
   onOpenWorkspace: (id: string) => void;
   onCreateWorkspace: () => void;
   onDeleteWorkspace: (id: string) => void;
   onShowActivity: () => void;
 }) {
   const {
-    projects,
     workspaces,
     showDialog,
     onShowDialog,
     onConnected,
-    onOpen,
-    onDelete,
     onOpenWorkspace,
     onCreateWorkspace,
     onDeleteWorkspace,
     onShowActivity
   } = options;
-  const insights = useDashboardInsights({ projects, workspaces });
+  const insights = useDashboardInsights({ projects: [], workspaces });
   const cardGrid =
     "grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-4";
   return (
@@ -272,7 +200,7 @@ function HomeGrid(options: {
           heatmap={insights.heatmap}
           attention={insights.attention}
           loading={insights.loading}
-          projectCount={projects.length}
+          projectCount={0}
           workspaceCount={workspaces.length}
         />
         {showDialog && (
@@ -287,13 +215,7 @@ function HomeGrid(options: {
           onOpenWorkspace={onOpenWorkspace}
           onDeleteWorkspace={onDeleteWorkspace}
           onCreateWorkspace={onCreateWorkspace}
-        />
-        <HomeProjectsSection
-          projects={projects}
-          cardGrid={cardGrid}
-          onOpen={onOpen}
-          onDelete={onDelete}
-          onShowDialog={onShowDialog}
+          onConnectProject={() => onShowDialog(true)}
         />
       </div>
     </div>

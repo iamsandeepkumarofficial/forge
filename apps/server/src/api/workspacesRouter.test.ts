@@ -79,6 +79,9 @@ describe("createWorkspacesRouter", () => {
             if (listThrow) throw listThrow;
             return [{ id: "ws1", name: "Demo" }];
           }
+          async backfillOrphanProjects() {
+            return 0;
+          }
           async getWorkspaceDetail(id: string) {
             if (id === "missing") {
               const err = new Error("Workspace not found") as Error & {

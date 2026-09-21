@@ -9,6 +9,7 @@ export {
 export {
   connectProject,
   connectLocalProject,
+  fetchPrimaryWorkspace,
   fetchProjects,
   fetchProject,
   deleteProject

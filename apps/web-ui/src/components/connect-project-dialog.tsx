@@ -114,7 +114,7 @@ export function ConnectProjectDialog({
   onConnected
 }: {
   onClose: () => void;
-  onConnected: () => void;
+  onConnected: (workspaceId: string) => void;
 }) {
   const [desktop] = useState(() => isDesktop());
   const [showPathInput, setShowPathInput] = useState(() => !isDesktop());
@@ -122,8 +122,8 @@ export function ConnectProjectDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const finish = () => {
-    onConnected();
+  const finish = (workspaceId: string) => {
+    onConnected(workspaceId);
     onClose();
   };
 
@@ -137,8 +137,8 @@ export function ConnectProjectDialog({
     try {
       const path = await pickFolder();
       if (!path) return;
-      await connectLocalProject(path);
-      finish();
+      const result = await connectLocalProject(path);
+      finish(result.workspaceId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -156,8 +156,8 @@ export function ConnectProjectDialog({
     setLoading(true);
     setError(null);
     try {
-      await connectLocalProject(trimmed);
-      finish();
+      const result = await connectLocalProject(trimmed);
+      finish(result.workspaceId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
