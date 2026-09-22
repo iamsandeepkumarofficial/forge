@@ -118,4 +118,10 @@ describe("localWorktree", () => {
     });
     await assert.rejects(() => fs.access(wt.workDir));
   });
+
+  it("taskWorktreeDir sanitizes ids under the session tree", async () => {
+    const { taskWorktreeDir } = await import("./localWorktree.js");
+    const dir = taskWorktreeDir("/tmp/session", "feat/auth?");
+    assert.equal(dir, "/tmp/session/.forge-tasks/feat-auth-");
+  });
 });

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useApps } from "./use-apps.js";
 import { useCollapsibleSidebar } from "../../hooks/use-collapsible-sidebar.js";
 import type { LeftPaneMode, WorkbenchChrome } from "./types.js";
+import type { PlanCardModel } from "./plan-card.js";
 import { PREVIEW_TAB_ID } from "./right-tabs.js";
 import { ResizableSplit } from "./workbench-split-view.js";
 import { MODE_ICON, RightStage, WorkbenchLeft } from "./workbench-panes.js";
@@ -37,6 +39,7 @@ export function Workbench(options: {
   const split = useWorkbenchSplit({ previewLive });
   const docs = useWorkbenchDocs();
   const chrome = useWorkbenchChrome({ onChromeChange: o.onChromeChange });
+  const [plan, setPlan] = useState<PlanCardModel | null>(null);
 
   return (
     <ResizableSplit
@@ -61,6 +64,8 @@ export function Workbench(options: {
           onOpenFile={docs.openFile}
           onOpenDiff={docs.openDiff}
           onShowPreview={() => docs.setActiveRight(PREVIEW_TAB_ID)}
+          onOpenPlan={docs.openPlan}
+          onPlanChange={setPlan}
           onTurnStatus={chrome.setTurnStatus}
         />
       }
@@ -70,6 +75,7 @@ export function Workbench(options: {
           docs={docs.docs}
           activeId={docs.activeRight}
           activeDoc={docs.activeDoc}
+          plan={plan}
           onSelect={docs.setActiveRight}
           onClose={docs.closeTab}
           onOpenRun={() => o.onLeftModeChange("run")}

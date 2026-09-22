@@ -7,7 +7,7 @@ import {
   listSandboxDir
 } from "../../lib/tool-runner.js";
 import { DiffText } from "../../components/tool-calls.js";
-import type { FileTab, ViewerState } from "./types.js";
+import type { ViewerState } from "./types.js";
 
 export { ChangesTab } from "./changes-tab.js";
 
@@ -87,7 +87,7 @@ function ViewerPane({ viewer }: { viewer: ViewerState | null }) {
 
 async function loadViewerContent(options: {
   sessionId: string;
-  tab: FileTab;
+  tab: { kind: "file" | "diff"; path: string; repo?: string };
 }): Promise<ViewerState> {
   const { sessionId, tab } = options;
   if (tab.kind === "diff") {
@@ -127,7 +127,7 @@ export function FileTabPane({
   tab
 }: {
   sessionId: string;
-  tab: FileTab;
+  tab: { id: string; kind: "file" | "diff"; path: string; repo?: string };
 }) {
   const [viewer, setViewer] = useState<ViewerState>({
     title: tab.path,

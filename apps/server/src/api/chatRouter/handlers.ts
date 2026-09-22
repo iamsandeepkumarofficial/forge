@@ -4,27 +4,28 @@ import type { Request, Response } from "express";
 import type { AuthedRequest } from "../pocAuth.js";
 import type { ChatFeatureRepository } from "../../catalog/chatFeatureRepository.js";
 import type {
-  ChatTurnChunkRepository,
   ChatTurnRepository,
   SessionMessageRepository
 } from "../../catalog/sessionChatRepository.js";
 import {
-  cancelInteractiveChatTurn,
   isInteractiveChatTurnRunning,
   newTurnId,
+  startInteractiveAgentWorkflow,
   startInteractiveChatTurn
 } from "../../orchestration/chatTemporalClient.js";
+import { WorkflowPlanRepository } from "../../catalog/workflowPlanRepository.js";
+import { planJsonWithLiveTasks } from "./planHandlers.js";
 
 export {
   handleBranchSessionMessages,
   handleDeleteMessagesFrom
 } from "./sessionCopyHandlers.js";
+export { handleGetCurrentPlan } from "./planHandlers.js";
+export { handleStreamTurn, handleCancelTurn } from "./streamHandlers.js";
 
 const N_202 = 202;
-const N_250 = 250;
 const N_400 = 400;
 const N_404 = 404;
-const N_409 = 409;
 const N_500 = 500;
 const N_503 = 503;
 
@@ -65,6 +66,7 @@ function parseChatBody(body: Record<string, unknown> | undefined): {
   provider: "openai" | "anthropic" | "openai-compatible";
   model: string | undefined;
   reasoningEffort: "low" | "medium" | "high" | undefined;
+  forceSend: boolean;
 } {
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   const mode = parseAgentMode(body?.mode) ?? "agent";
@@ -90,7 +92,8 @@ function parseChatBody(body: Record<string, unknown> | undefined): {
     reasoningEffortRaw === "high"
       ? reasoningEffortRaw
       : undefined;
-  return { text, mode, provider, model, reasoningEffort };
+  const forceSend = body?.forceSend === true;
+  return { text, mode, provider, model, reasoningEffort, forceSend };
 }
 
 async function launchTurn(options: {
@@ -105,7 +108,10 @@ async function launchTurn(options: {
   turns: ChatTurnRepository;
 }): Promise<{ turnId: string; workflowId: string }> {
   const turnId = newTurnId();
-  const workflowId = `chat-${options.sessionId}-${turnId}`;
+  const useAgentWorkflow = options.mode !== "ask";
+  const workflowId = useAgentWorkflow
+    ? `agent-${options.sessionId}-${turnId}`
+    : `chat-${options.sessionId}-${turnId}`;
   await options.turns.create({
     id: turnId,
     sessionId: options.sessionId,
@@ -122,7 +128,7 @@ async function launchTurn(options: {
     });
   }
   try {
-    await startInteractiveChatTurn({
+    const startOpts = {
       sessionId: options.sessionId,
       turnId,
       userText: options.text,
@@ -130,7 +136,15 @@ async function launchTurn(options: {
       provider: options.provider,
       model: options.model,
       reasoningEffort: options.reasoningEffort
-    });
+    };
+    if (useAgentWorkflow) {
+      await startInteractiveAgentWorkflow({
+        ...startOpts,
+        maxConcurrency: 4
+      });
+    } else {
+      await startInteractiveChatTurn(startOpts);
+    }
   } catch (err) {
     await options.turns.finish({
       id: turnId,
@@ -176,15 +190,84 @@ export async function handleGetRunningTurn(options: {
       return;
     }
     const turn = await reconcileRunningTurn(turns, sessionId);
+    let plan: unknown = null;
+    const plans = new WorkflowPlanRepository();
+    if (turn) {
+      const row = await plans.getByTurnId(turn.id);
+      if (row) plan = await planJsonWithLiveTasks(plans, row);
+    } else {
+      const current = await plans.getCurrentBySessionId(sessionId);
+      if (current) plan = await planJsonWithLiveTasks(plans, current);
+    }
     res.json({
       turn: turn
         ? { id: turn.id, workflowId: turn.workflowId, status: "running" }
-        : null
+        : null,
+      plan
     });
   } catch (err) {
     res
       .status(N_500)
       .json({ error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+async function queueFollowUp(options: {
+  running: { id: string; workflowId: string };
+  parsed: ReturnType<typeof parseChatBody>;
+}): Promise<void> {
+  const plans = new WorkflowPlanRepository();
+  const plan = await plans.getByTurnId(options.running.id);
+  if (plan) {
+    await plans.update(plan.id, {
+      queuedFollowUp: {
+        text: options.parsed.text,
+        mode: options.parsed.mode,
+        provider: options.parsed.provider,
+        model: options.parsed.model,
+        reasoningEffort: options.parsed.reasoningEffort
+      }
+    });
+  }
+  try {
+    const { Client, Connection } = await import("@temporalio/client");
+    const address = process.env.TEMPORAL_ADDRESS || "localhost:7233";
+    const connection = await Connection.connect({ address });
+    const client = new Client({
+      connection,
+      namespace: process.env.TEMPORAL_NAMESPACE || "default"
+    });
+    await client.workflow
+      .getHandle(options.running.workflowId)
+      .signal("queueFollowUp", {
+        text: options.parsed.text,
+        mode: options.parsed.mode,
+        provider: options.parsed.provider,
+        model: options.parsed.model,
+        reasoningEffort: options.parsed.reasoningEffort
+      });
+  } catch {
+    void 0;
+  }
+}
+
+async function cancelRunningForForceSend(options: {
+  running: { id: string; workflowId: string };
+  turns: ChatTurnRepository;
+}): Promise<void> {
+  try {
+    await cancelInteractiveChatTurn(options.running.workflowId);
+  } catch {
+    void 0;
+  }
+  await options.turns.finish({ id: options.running.id, status: "cancelled" });
+  const plans = new WorkflowPlanRepository();
+  const plan = await plans.getByTurnId(options.running.id);
+  if (plan) {
+    await plans.update(plan.id, {
+      status: "cancelled",
+      queuedFollowUp: null
+    });
   }
 }
 
@@ -209,17 +292,26 @@ export async function handleStartChat(options: {
       return;
     }
     const running = await reconcileRunningTurn(turns, sessionId);
-    if (running) {
-      res.status(N_409).json({
-        error: "A turn is already running for this session",
+    if (running && !parsed.forceSend) {
+      await queueFollowUp({ running, parsed });
+      res.status(N_202).json({
+        queued: true,
         turnId: running.id,
-        workflowId: running.workflowId
+        workflowId: running.workflowId,
+        streamUrl: `/api/sessions/${encodeURIComponent(sessionId)}/turns/${running.id}/stream`
       });
       return;
     }
+    if (running) {
+      await cancelRunningForForceSend({ running, turns });
+    }
     const { turnId, workflowId } = await launchTurn({
       sessionId,
-      ...parsed,
+      text: parsed.text,
+      mode: parsed.mode,
+      provider: parsed.provider,
+      model: parsed.model,
+      reasoningEffort: parsed.reasoningEffort,
       card,
       features,
       turns
@@ -241,103 +333,7 @@ export async function handleStartChat(options: {
   }
 }
 
-async function writeTurnStream(options: {
-  req: Request;
-  res: Response;
-  turnId: string;
-  afterSeq: number;
-  turns: ChatTurnRepository;
-  chunks: ChatTurnChunkRepository;
-}): Promise<void> {
-  const { req, res, turnId, turns, chunks } = options;
-  let afterSeq = options.afterSeq;
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders?.();
-  let closed = false;
-  req.on("close", () => {
-    closed = true;
-  });
-  const writeEvent = (event: {
-    seq: number;
-    eventType: string;
-    payload: unknown;
-  }) => {
-    res.write(`id: ${event.seq}\n`);
-    res.write(`event: ${event.eventType}\n`);
-    res.write(`data: ${JSON.stringify(event.payload)}\n\n`);
-  };
-  while (!closed) {
-    const batch = await chunks.listAfter(turnId, afterSeq);
-    for (const c of batch) {
-      afterSeq = c.seq;
-      writeEvent({
-        seq: c.seq,
-        eventType: c.eventType,
-        payload: c.payload
-      });
-    }
-    const latest = await turns.getById(turnId);
-    if (!latest) break;
-    if (latest.status !== "running") {
-      writeEvent({
-        seq: afterSeq + 1,
-        eventType: "turn_status",
-        payload: {
-          status: latest.status,
-          error: latest.error
-        }
-      });
-      break;
-    }
-    await new Promise((r) => setTimeout(r, N_250));
-  }
-  res.end();
-}
-
-export async function handleStreamTurn(options: {
-  req: Request;
-  res: Response;
-  features: ChatFeatureRepository;
-  turns: ChatTurnRepository;
-  chunks: ChatTurnChunkRepository;
-}): Promise<void> {
-  const { req, res, features, turns, chunks } = options;
-  const sessionId = String(req.params.sessionId ?? "");
-  const turnId = String(req.params.turnId ?? "");
-  const userId = (req as AuthedRequest).forgeUser.id;
-  const lastEventIdHeader = req.headers["last-event-id"];
-  let afterSeq = Number(
-    typeof lastEventIdHeader === "string" && lastEventIdHeader.trim()
-      ? lastEventIdHeader
-      : (req.query.afterSeq ?? 0)
-  );
-  if (!Number.isFinite(afterSeq) || afterSeq < 0) afterSeq = 0;
-  try {
-    const card = await features.getBySessionId(sessionId);
-    if (card && card.userId !== userId) {
-      res.status(N_404).json({ error: "session not found" });
-      return;
-    }
-    const turn = await turns.getById(turnId);
-    if (!turn || turn.sessionId !== sessionId) {
-      res.status(N_404).json({ error: "turn not found" });
-      return;
-    }
-    await writeTurnStream({ req, res, turnId, afterSeq, turns, chunks });
-  } catch (err) {
-    if (!res.headersSent) {
-      res
-        .status(N_500)
-        .json({ error: err instanceof Error ? err.message : String(err) });
-    } else {
-      res.end();
-    }
-  }
-}
-
-export async function handleCancelTurn(options: {
+export async function handleTurnAnswer(options: {
   req: Request;
   res: Response;
   features: ChatFeatureRepository;
@@ -347,6 +343,13 @@ export async function handleCancelTurn(options: {
   const sessionId = String(req.params.sessionId ?? "");
   const turnId = String(req.params.turnId ?? "");
   const userId = (req as AuthedRequest).forgeUser.id;
+  const body = req.body as Record<string, unknown> | undefined;
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
+  const taskId = typeof body?.taskId === "string" ? body.taskId : undefined;
+  if (!text) {
+    res.status(N_400).json({ error: "text required" });
+    return;
+  }
   try {
     const card = await features.getBySessionId(sessionId);
     if (card && card.userId !== userId) {
@@ -358,17 +361,18 @@ export async function handleCancelTurn(options: {
       res.status(N_404).json({ error: "turn not found" });
       return;
     }
-    if (turn.status === "running") {
-      try {
-        await cancelInteractiveChatTurn(turn.workflowId);
-      } catch (err) {
-        console.warn(
-          `[chat] cancel workflow failed: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-      await turns.finish({ id: turnId, status: "cancelled" });
-    }
-    res.json({ ok: true, status: "cancelled" });
+    const { Client, Connection } = await import("@temporalio/client");
+    const address = process.env.TEMPORAL_ADDRESS || "localhost:7233";
+    const connection = await Connection.connect({ address });
+    const client = new Client({
+      connection,
+      namespace: process.env.TEMPORAL_NAMESPACE || "default"
+    });
+    await client.workflow.getHandle(turn.workflowId).signal("userAnswer", {
+      text,
+      taskId
+    });
+    res.json({ ok: true });
   } catch (err) {
     res
       .status(N_500)

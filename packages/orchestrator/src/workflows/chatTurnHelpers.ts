@@ -1,5 +1,5 @@
 export type ChatAgentMode =
-  "agent" | "plan" | "debug" | "ask" | "multitask" | "auto" | "build";
+  "agent" | "plan" | "debug" | "ask" | "auto" | "build";
 
 export type InteractiveChatTurnArgs = {
   sessionId: string;
@@ -9,6 +9,10 @@ export type InteractiveChatTurnArgs = {
   provider: string;
   model?: string;
   reasoningEffort?: "low" | "medium" | "high";
+};
+
+export type InteractiveAgentArgs = InteractiveChatTurnArgs & {
+  maxConcurrency?: number;
 };
 
 export type InteractiveChatTurnResult = {
@@ -119,11 +123,10 @@ export function parseAppliedMode(
     v === "plan" ||
     v === "debug" ||
     v === "ask" ||
-    v === "multitask" ||
     v === "auto"
   ) {
     return v;
   }
-  if (v === "build") return "agent";
+  if (v === "build" || v === "multitask") return "agent";
   return null;
 }

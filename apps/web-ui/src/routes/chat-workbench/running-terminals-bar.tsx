@@ -135,7 +135,7 @@ export function RunningTerminalsBar({ sessionId }: { sessionId: string }) {
   return (
     <div
       data-testid="running-terminals-bar"
-      className="absolute inset-x-3 bottom-full z-10 rounded-t-lg border border-b-0 border-border bg-background px-2 py-1.5"
+      className="rounded-t-lg border border-b-0 border-border bg-background px-2 py-1.5"
     >
       <button
         type="button"

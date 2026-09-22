@@ -329,7 +329,7 @@ const CATALOG: ChatToolCatalogItem[] = [
     toolId: "switch_mode",
     toolName: "Switch mode",
     description:
-      "Propose or apply a UI mode change: agent, plan, debug, ask, multitask, auto. Ask is read-only Q&A; Agent implements and runs apps.",
+      "Propose or apply a UI mode change: agent, plan, debug, ask, auto. Ask is read-only Q&A; Agent implements and runs apps.",
     exampleUsecases: [
       "User wants Q&A only — propose Ask (then wait for confirmation outside Auto).",
       "User wants code changes while in Ask — propose Agent and wait.",

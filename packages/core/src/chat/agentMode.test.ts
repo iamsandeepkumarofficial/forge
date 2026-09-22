@@ -8,8 +8,9 @@ import {
 } from "./agentMode.js";
 
 describe("agentMode", () => {
-  it("parseAgentMode maps legacy build to agent", () => {
+  it("parseAgentMode maps legacy build and multitask to agent", () => {
     assert.equal(parseAgentMode("build"), "agent");
+    assert.equal(parseAgentMode("multitask"), "agent");
     assert.equal(parseAgentMode("plan"), "plan");
     assert.equal(parseAgentMode("auto"), "auto");
     assert.equal(parseAgentMode("nope"), null);
@@ -85,14 +86,7 @@ describe("agentMode", () => {
     );
   });
 
-  it("Multitask adds create_subtask; Auto uses agent tools", () => {
-    assert.equal(
-      isToolAllowedForMode({
-        agentMode: "multitask",
-        toolName: "create_subtask"
-      }),
-      true
-    );
+  it("Auto uses agent tools", () => {
     assert.equal(
       isToolAllowedForMode({ agentMode: "auto", toolName: "write_file" }),
       true

@@ -10,7 +10,6 @@ describe("chatModePrompt", () => {
       plan: "Plan",
       debug: "Debug",
       ask: "Ask",
-      multitask: "Multitask",
       auto: "Auto"
     };
     for (const mode of AGENT_MODE_IDS) {

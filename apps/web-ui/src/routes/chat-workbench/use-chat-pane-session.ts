@@ -7,6 +7,7 @@ import { useInitialPromptSend } from "./use-initial-prompt-send.js";
 import { useChatPaneSessionState } from "./use-chat-pane-session-state.js";
 import { useResumeRunningTurn } from "./use-resume-running-turn.js";
 import { useScrollStick } from "./use-scroll-stick.js";
+import { usePlanStream } from "./use-plan-stream.js";
 
 type SessionOptions = {
   sessionId: string;
@@ -37,6 +38,7 @@ function clearStatePathFor(options: SessionOptions): string | undefined {
 function useSessionTransport(o: SessionOptions) {
   const s = useChatPaneSessionState();
   const history = useChatHistory(o.sessionId);
+  const planStream = usePlanStream({ sessionId: o.sessionId });
   const scroll = useScrollStick({
     messageCount: history.messages.length,
     streamingText: s.streamingText,
@@ -58,14 +60,16 @@ function useSessionTransport(o: SessionOptions) {
     clearLiveTurn: s.clearLiveTurn,
     setError: s.setError,
     setMessages: history.setMessages,
-    onAppliedMode: o.onAppliedMode
+    onAppliedMode: o.onAppliedMode,
+    onPlanEvent: planStream.onPlanEvent
   });
-  return { s, history, scroll, resumeChecked };
+  return { s, history, scroll, resumeChecked, planStream };
 }
 
 export function useChatPaneSession(options: SessionOptions) {
   const o = options;
-  const { s, history, scroll, resumeChecked } = useSessionTransport(o);
+  const { s, history, scroll, resumeChecked, planStream } =
+    useSessionTransport(o);
   const sendText = (
     raw: string,
     sendOpts?: { mode?: ChatMode; truncateFromMessageId?: string }
@@ -93,6 +97,7 @@ export function useChatPaneSession(options: SessionOptions) {
       stickToBottomRef: scroll.stickToBottomRef,
       streamAbortRef: s.streamAbortRef,
       onAppliedMode: o.onAppliedMode,
+      onPlanEvent: planStream.onPlanEvent,
       truncateFromMessageId: sendOpts?.truncateFromMessageId
     });
   useInitialPromptSend({
@@ -108,6 +113,7 @@ export function useChatPaneSession(options: SessionOptions) {
   });
   return {
     ...s,
+    plan: planStream.plan,
     messages: history.messages,
     historyLoaded: history.historyLoaded,
     clearError: () => s.setError(null),
@@ -115,7 +121,7 @@ export function useChatPaneSession(options: SessionOptions) {
     stickToBottomRef: scroll.stickToBottomRef,
     sendText,
     handleSend: async () => {
-      if (!s.canSend) return;
+      if (!s.canSend && !s.canQueue) return;
       await sendText(s.input);
     },
     handleStop: () =>

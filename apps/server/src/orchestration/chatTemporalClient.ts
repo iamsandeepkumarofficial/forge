@@ -52,6 +52,26 @@ export async function startInteractiveChatTurn(
   return workflowId;
 }
 
+export async function startInteractiveAgentWorkflow(
+  options: ChatTurnOptions & { maxConcurrency?: number }
+): Promise<string> {
+  const workflowId = `agent-${options.sessionId}-${options.turnId}`;
+  const client = await getClient();
+  try {
+    await client.workflow.start("interactiveAgentWorkflow", {
+      taskQueue: TASK_QUEUE,
+      workflowId,
+      workflowIdReusePolicy:
+        WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+      args: [options]
+    });
+  } catch (err) {
+    resetClient();
+    throw err;
+  }
+  return workflowId;
+}
+
 export async function cancelInteractiveChatTurn(
   workflowId: string
 ): Promise<void> {
@@ -63,7 +83,6 @@ export async function cancelInteractiveChatTurn(
     throw err;
   }
 }
-
 
 export async function isInteractiveChatTurnRunning(
   workflowId: string

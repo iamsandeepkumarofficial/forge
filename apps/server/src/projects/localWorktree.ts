@@ -275,3 +275,111 @@ export async function removeSessionWorktree(options: {
     await git(options.canonicalKey, ["worktree", "prune"]).catch(() => {});
   }
 }
+
+export function taskWorktreeDir(
+  sessionWorkDir: string,
+  taskId: string
+): string {
+  const safe = taskId
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .slice(0, DOCKER_NAME_MAX);
+  return path.join(sessionWorkDir, ".forge-tasks", safe || "task");
+}
+
+export async function ensureTaskWorktree(options: {
+  sessionWorkDir: string;
+  taskId: string;
+  branchName?: string;
+}): Promise<{ worktreePath: string }> {
+  const worktreePath = taskWorktreeDir(options.sessionWorkDir, options.taskId);
+  await fs.mkdir(path.dirname(worktreePath), { recursive: true });
+  if (await pathExists(worktreePath)) {
+    return { worktreePath };
+  }
+  if (!(await isGitRepo(options.sessionWorkDir))) {
+    await fs.mkdir(worktreePath, { recursive: true });
+    return { worktreePath };
+  }
+  const branch =
+    options.branchName ??
+    `forge-task/${options.taskId.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+  try {
+    await git(options.sessionWorkDir, [
+      "worktree",
+      "add",
+      "-B",
+      branch,
+      worktreePath
+    ]);
+  } catch (err) {
+    if (!(await pathExists(worktreePath))) throw err;
+  }
+  return { worktreePath };
+}
+
+export type MergeTaskWorktreeResult =
+  | { ok: true }
+  | {
+      ok: false;
+      conflict: true;
+      paths: string[];
+      message: string;
+    };
+
+export async function mergeTaskWorktree(options: {
+  sessionWorkDir: string;
+  taskWorktreePath: string;
+}): Promise<MergeTaskWorktreeResult> {
+  const { sessionWorkDir, taskWorktreePath } = options;
+  if (!(await isGitRepo(sessionWorkDir))) {
+    return { ok: true };
+  }
+  if (!(await pathExists(taskWorktreePath))) {
+    return { ok: true };
+  }
+  try {
+    await git(taskWorktreePath, ["add", "-A"]);
+    await git(taskWorktreePath, [
+      "commit",
+      "--allow-empty",
+      "-m",
+      "forge: task worktree checkpoint"
+    ]).catch(() => {});
+    const { stdout: head } = await git(taskWorktreePath, ["rev-parse", "HEAD"]);
+    const sha = head.trim();
+    try {
+      await git(sessionWorkDir, ["merge", "--no-ff", "--no-edit", sha]);
+      return { ok: true };
+    } catch (err) {
+      await git(sessionWorkDir, ["merge", "--abort"]).catch(() => {});
+      let paths: string[] = [];
+      try {
+        const { stdout } = await git(sessionWorkDir, [
+          "diff",
+          "--name-only",
+          "--diff-filter=U"
+        ]);
+        paths = stdout
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean);
+      } catch {
+        paths = [];
+      }
+      return {
+        ok: false,
+        conflict: true,
+        paths,
+        message: err instanceof Error ? err.message : String(err)
+      };
+    }
+  } catch (err) {
+    await git(sessionWorkDir, ["merge", "--abort"]).catch(() => {});
+    return {
+      ok: false,
+      conflict: true,
+      paths: [],
+      message: err instanceof Error ? err.message : String(err)
+    };
+  }
+}

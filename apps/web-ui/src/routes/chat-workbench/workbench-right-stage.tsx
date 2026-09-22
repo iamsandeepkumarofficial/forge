@@ -1,10 +1,12 @@
-import { Globe, X } from "lucide-react";
+import { Globe, ListTree, X } from "lucide-react";
 import { FileTabPane } from "./files-panels.js";
 import { AppPreviewPane } from "./run-panels.js";
 import { BottomTerminal } from "./bottom-terminal.js";
+import { PlanPanel } from "./plan-panel.js";
 import { cn } from "@/lib/utils";
 import type { FileTab } from "./types.js";
-import { PREVIEW_TAB_ID, tabLabel } from "./right-tabs.js";
+import type { PlanCardModel } from "./plan-card.js";
+import { PREVIEW_TAB_ID, PLAN_TAB_ID, tabLabel } from "./right-tabs.js";
 
 function RightDocTabs(options: {
   docs: FileTab[];
@@ -45,10 +47,13 @@ function RightDocTabs(options: {
             title={tab.path}
             onClick={() => onSelect(tab.id)}
             className={cn(
-              "min-w-0 truncate px-2 py-1.5 text-xs",
+              "inline-flex min-w-0 items-center gap-1 truncate px-2 py-1.5 text-xs",
               activeId === tab.id && "font-medium"
             )}
           >
+            {tab.kind === "plan" ? (
+              <ListTree className="size-3.5 shrink-0" />
+            ) : null}
             {tab.kind === "diff" ? "Δ " : ""}
             {tabLabel(tab)}
           </button>
@@ -71,6 +76,7 @@ export function RightStage(options: {
   docs: FileTab[];
   activeId: string;
   activeDoc: FileTab | null;
+  plan?: PlanCardModel | null;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onOpenRun: () => void;
@@ -81,11 +87,18 @@ export function RightStage(options: {
     docs,
     activeId,
     activeDoc,
+    plan,
     onSelect,
     onClose,
     onOpenRun,
     onCommentSent
   } = options;
+  const showPlan = activeId === PLAN_TAB_ID;
+  const fileDoc =
+    activeDoc && (activeDoc.kind === "file" || activeDoc.kind === "diff")
+      ? activeDoc
+      : null;
+  const showFile = Boolean(fileDoc) && !showPlan;
   return (
     <div className="flex h-full flex-col">
       <div className="flex min-w-0 shrink-0 items-center gap-0.5 overflow-x-auto border-b bg-muted/40 px-1">
@@ -97,16 +110,21 @@ export function RightStage(options: {
         />
       </div>
       <div className="relative min-h-0 flex-1">
-        <div className={cn("h-full", activeDoc && "hidden")}>
+        <div className={cn("h-full", (showFile || showPlan) && "hidden")}>
           <AppPreviewPane
             sessionId={sessionId}
             onOpenRun={onOpenRun}
             onCommentSent={onCommentSent}
           />
         </div>
-        {activeDoc ? (
+        {showPlan ? (
           <div className="absolute inset-0 bg-background">
-            <FileTabPane sessionId={sessionId} tab={activeDoc} />
+            <PlanPanel plan={plan ?? null} />
+          </div>
+        ) : null}
+        {showFile && fileDoc ? (
+          <div className="absolute inset-0 bg-background">
+            <FileTabPane sessionId={sessionId} tab={fileDoc} />
           </div>
         ) : null}
       </div>

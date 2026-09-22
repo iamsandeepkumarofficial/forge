@@ -7,6 +7,7 @@ import { mountChatRoutes } from "./chat.routes.js";
 import { mountReposRoutes } from "./repos.routes.js";
 import { mountSessionRoutes } from "./session.routes.js";
 import { mountToolsRoutes } from "./tools.routes.js";
+import { mountWorkflowRoutes } from "./workflow.routes.js";
 export function createInternalRouter(): Router {
   const router = Router();
   const chatFeatureRepo = new ChatFeatureRepository();
@@ -21,5 +22,6 @@ export function createInternalRouter(): Router {
   mountReposRoutes(router);
   mountToolsRoutes(router, toolService);
   mountSessionRoutes(router);
+  mountWorkflowRoutes(router);
   return router;
 }

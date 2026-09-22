@@ -26,8 +26,7 @@ export interface ModelListResponse {
   }>;
   error?: string;
 }
-export type ChatMode =
-  "agent" | "plan" | "debug" | "ask" | "multitask" | "auto";
+export type ChatMode = "agent" | "plan" | "debug" | "ask" | "auto";
 export type ReasoningEffort = "low" | "medium" | "high";
 export type UiChatMessage = {
   id: string;
@@ -132,11 +131,13 @@ export async function startChatTurn(
     model?: string;
     mode: ChatMode;
     reasoningEffort?: ReasoningEffort;
+    forceSend?: boolean;
   }
 ): Promise<{
   turnId: string;
   workflowId: string;
   streamUrl: string;
+  queued?: boolean;
 }> {
   const res = await fetch(
     `${runnerUrl()}/api/sessions/${encodeURIComponent(sessionId)}/chat`,
@@ -150,6 +151,7 @@ export async function startChatTurn(
     turnId?: string;
     workflowId?: string;
     streamUrl?: string;
+    queued?: boolean;
     error?: string;
   };
   if (!res.ok) {
@@ -161,7 +163,8 @@ export async function startChatTurn(
   return {
     turnId: body.turnId,
     workflowId: body.workflowId ?? "",
-    streamUrl: body.streamUrl
+    streamUrl: body.streamUrl,
+    queued: body.queued === true
   };
 }
 export async function cancelChatTurn(
@@ -177,6 +180,28 @@ export async function cancelChatTurn(
       error?: string;
     };
     throw new Error(body.error || `cancel failed: ${res.status}`);
+  }
+}
+
+export async function answerChatTurn(input: {
+  sessionId: string;
+  turnId: string;
+  text: string;
+  taskId?: string;
+}): Promise<void> {
+  const res = await fetch(
+    `${runnerUrl()}/api/sessions/${encodeURIComponent(input.sessionId)}/turns/${encodeURIComponent(input.turnId)}/answer`,
+    {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ text: input.text, taskId: input.taskId })
+    }
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(body.error || `answer failed: ${res.status}`);
   }
 }
 

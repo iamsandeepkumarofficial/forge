@@ -21,9 +21,11 @@ import {
   handleDeleteMessagesFrom,
   handleBranchSessionMessages,
   handleGetRunningTurn,
+  handleGetCurrentPlan,
   handleStartChat,
   handleStreamTurn,
-  handleCancelTurn
+  handleCancelTurn,
+  handleTurnAnswer
 } from "./chatRouter/handlers.js";
 
 export function createChatRouter(): Router {
@@ -74,6 +76,9 @@ export function createChatRouter(): Router {
   router.get("/sessions/:sessionId/turns/running", pocAuth, (req, res) => {
     return handleGetRunningTurn({ req, res, features, turns });
   });
+  router.get("/sessions/:sessionId/plans/current", pocAuth, (req, res) => {
+    return handleGetCurrentPlan({ req, res, features });
+  });
   router.post("/sessions/:sessionId/chat", pocAuth, (req, res) => {
     return handleStartChat({ req, res, features, turns });
   });
@@ -89,6 +94,13 @@ export function createChatRouter(): Router {
     pocAuth,
     (req, res) => {
       return handleCancelTurn({ req, res, features, turns });
+    }
+  );
+  router.post(
+    "/sessions/:sessionId/turns/:turnId/answer",
+    pocAuth,
+    (req, res) => {
+      return handleTurnAnswer({ req, res, features, turns });
     }
   );
   return router;

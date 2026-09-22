@@ -88,7 +88,7 @@ describe("tools", () => {
     assert.deepEqual(Object.keys(tools).sort(), ["read_file"]);
   });
 
-  it("buildChatTools matches six-mode allow-lists", () => {
+  it("buildChatTools matches mode allow-lists", () => {
     process.env.WEB_TOOLS_ENABLED = "false";
     const ask = buildChatTools({ sessionId: "s1", mode: "ask" });
     assert.equal("read_file" in ask, true);
@@ -119,10 +119,6 @@ describe("tools", () => {
     const debug = buildChatTools({ sessionId: "s1", mode: "debug" });
     assert.equal("write_file" in debug, true);
     assert.equal("create_subtask" in debug, false);
-
-    const multi = buildChatTools({ sessionId: "s1", mode: "multitask" });
-    assert.equal("write_file" in multi, true);
-    assert.equal("create_subtask" in multi, true);
 
     const auto = buildChatTools({ sessionId: "s1", mode: "auto" });
     assert.equal("write_file" in auto, true);

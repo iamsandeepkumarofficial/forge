@@ -183,13 +183,12 @@ function parseStoredAgentMode(raw: string | null): ComposerAgentMode | null {
     raw === "agent" ||
     raw === "plan" ||
     raw === "debug" ||
-    raw === "multitask" ||
     raw === "ask" ||
     raw === "auto"
   ) {
     return raw;
   }
-  if (raw === "build") {
+  if (raw === "build" || raw === "multitask") {
     return "agent";
   }
   return null;

@@ -11,6 +11,7 @@ import {
   diffTabId,
   fileTabId,
   nextActiveAfterClose,
+  planTab,
   upsertDocTab
 } from "./right-tabs.js";
 
@@ -32,6 +33,11 @@ export function useWorkbenchDocs() {
     setDocs((current) => upsertDocTab(current, tab));
     setActiveRight(tab.id);
   }, []);
+  const openPlan = useCallback(() => {
+    const tab = planTab();
+    setDocs((current) => upsertDocTab(current, tab));
+    setActiveRight(tab.id);
+  }, []);
   const closeTab = useCallback((id: string) => {
     setDocs((current) => {
       const remaining = closeDocTab(current, id);
@@ -49,6 +55,7 @@ export function useWorkbenchDocs() {
     setActiveRight,
     openFile,
     openDiff,
+    openPlan,
     closeTab
   };
 }
