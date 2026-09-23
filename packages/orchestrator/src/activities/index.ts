@@ -21,7 +21,8 @@ export {
   publishTaskUpdated,
   publishPlanStatus,
   countRunningAgentTasks,
-  getPlanBudget
+  getPlanBudget,
+  executeDirectTool
 } from "./plan.js";
 export {
   ensureTaskWorktree,

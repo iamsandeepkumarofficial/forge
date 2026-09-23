@@ -27,7 +27,14 @@ const taskDraftSchema = z.object({
     .describe("Task ids that must complete first; use [] when none"),
   idempotent: z
     .boolean()
-    .describe("True when safe to retry (read-only, compile, test)")
+    .describe("True when safe to retry (read-only, compile, test)"),
+  input: z
+    .object({
+      toolName: z.string().optional(),
+      args: z.record(z.string(), z.unknown()).optional()
+    })
+    .optional()
+    .describe("For executor=tool: { toolName, args }")
 });
 
 export const planDraftSchema = z.object({
@@ -48,6 +55,8 @@ Rules:
 - Unique kebab-case ids
 - Dependencies must reference other task ids (no cycles)
 - Prefer executor "agent" for coding work
+- Use executor "tool" only with input.toolName for a known direct tool
+- Use executor "human" for approvals
 - Mark read-only/compile/test tasks idempotent:true when safe
 - Do not invent work outside the goal`;
 

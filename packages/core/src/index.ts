@@ -73,6 +73,8 @@ export {
   type TaskWaitReason,
   type WorkflowTaskSnapshot,
   type WorkflowPlanSnapshot,
+  type TaskExecutionContext,
+  type ExecutionResult,
   type PlanValidationError,
   type PlanValidationResult,
   type PlanSseEventType,

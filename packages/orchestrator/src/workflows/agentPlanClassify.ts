@@ -98,6 +98,7 @@ export function tasksForPersist(tasks: TaskState[]) {
     executor: t.executor,
     dependencies: t.dependencies,
     status: t.status,
-    idempotent: t.idempotent
+    idempotent: t.idempotent,
+    ...(t.input !== undefined ? { input: t.input } : {})
   }));
 }

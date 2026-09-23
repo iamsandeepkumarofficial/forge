@@ -11,6 +11,9 @@ import type { ChatAgentMode } from "./chatTurnHelpers.js";
 
 export type TaskState = WorkflowTaskSnapshot & {
   attemptCount: number;
+  worktreePath?: string | null;
+  input?: unknown;
+  output?: unknown;
 };
 
 export function toSnapshot(opts: {
@@ -61,7 +64,8 @@ export function draftToTasks(draft: WorkflowPlanDraft): TaskState[] {
     status: "pending" as TaskStatus,
     idempotent: t.idempotent ?? false,
     attemptCount: 0,
-    waitReason: null
+    waitReason: null,
+    ...(t.input !== undefined ? { input: t.input } : {})
   }));
 }
 

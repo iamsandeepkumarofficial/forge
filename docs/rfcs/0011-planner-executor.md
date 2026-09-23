@@ -22,3 +22,7 @@ Before Planner→DAG→Executor, Agent/Auto/Multitask/Debug runs a cheap **LLM p
 ## Specs
 
 See `specs/001-planner-executor/` (`spec.md`, `plan.md`, `data-model.md`, `contracts/`).
+
+## Follow-on
+
+Executor dispatch (agent / human / tool behind a registry, `ExecutionResult`, no engine `if/else` on kind) is specified in [RFC 0012](./0012-executor-abstraction.md).
