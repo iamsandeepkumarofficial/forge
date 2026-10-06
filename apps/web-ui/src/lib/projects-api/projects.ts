@@ -12,6 +12,7 @@ import {
 
 export async function connectProject(githubUrl: string): Promise<{
   projectId: string;
+  workspaceId: string;
   alreadyConnected: boolean;
 }> {
   if (!githubUrl || typeof githubUrl !== "string") {
@@ -53,9 +54,9 @@ export async function connectProject(githubUrl: string): Promise<{
 
 export async function connectLocalProject(localPath: string): Promise<{
   projectId: string;
+  workspaceId: string;
 }> {
-  const trimmed =
-    typeof localPath === "string" ? localPath.trim() : "";
+  const trimmed = typeof localPath === "string" ? localPath.trim() : "";
   if (!trimmed) {
     throw new ConnectProjectError("Local folder path is required", {
       code: "INVALID_LOCAL_PATH",
@@ -86,6 +87,39 @@ export async function connectLocalProject(localPath: string): Promise<{
     rethrowAsConnectError({
       error,
       prefix: "Failed to connect local folder"
+    });
+  }
+}
+
+export async function fetchPrimaryWorkspace(
+  projectId: string
+): Promise<{ workspaceId: string }> {
+  if (!projectId) {
+    throw new ConnectProjectError("Project ID is required", {
+      code: "MISSING_PROJECT_ID",
+      help: "Please provide a valid project ID."
+    });
+  }
+  try {
+    const response = await fetch(
+      `${BASE_URL}/api/projects/${projectId}/workspace`
+    );
+    if (!response.ok) {
+      const errorText = await response.text();
+      const parsed = parseApiErrorText({
+        errorText,
+        fallbackMessage: "Failed to resolve workspace"
+      });
+      throw new ConnectProjectError(parsed.errorMessage, {
+        code: parsed.errorCode,
+        help: parsed.helpText
+      });
+    }
+    return response.json();
+  } catch (error) {
+    rethrowAsConnectError({
+      error,
+      prefix: "Failed to resolve workspace"
     });
   }
 }

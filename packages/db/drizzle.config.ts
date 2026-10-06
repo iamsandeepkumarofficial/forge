@@ -9,7 +9,7 @@ config({ path: path.join(repoRoot, ".env") });
 config({ path: path.join(here, ".env"), override: true });
 
 export default defineConfig({
-  schema: "./src/schema.ts",
+  schema: ["./src/schema.ts", "./src/schemaWorkflow.ts"],
   out: "./migrations",
   dialect: "postgresql",
   dbCredentials: {

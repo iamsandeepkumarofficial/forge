@@ -5,7 +5,6 @@ import { AskUserPrompt } from "./ask-user-prompt";
 describe("AskUserPrompt", () => {
   it("submits an mcq option and closes", () => {
     const onSubmit = vi.fn();
-    const onDismiss = vi.fn();
     render(
       <AskUserPrompt
         proposal={{
@@ -19,7 +18,6 @@ describe("AskUserPrompt", () => {
           fields: []
         }}
         onSubmit={onSubmit}
-        onDismiss={onDismiss}
       />
     );
     expect(screen.getByTestId("ask-user-prompt")).toBeTruthy();
@@ -32,7 +30,9 @@ describe("AskUserPrompt", () => {
       })
     );
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(onDismiss).toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledWith({
+      text: "User answer (ask_user): skipped"
+    });
   });
 
   it("skips with a chat reply", () => {
@@ -50,7 +50,6 @@ describe("AskUserPrompt", () => {
           fields: []
         }}
         onSubmit={onSubmit}
-        onDismiss={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Skip" }));
@@ -74,7 +73,6 @@ describe("AskUserPrompt", () => {
           fields: []
         }}
         onSubmit={onSubmit}
-        onDismiss={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole("radio", { name: "Other" }));
@@ -105,7 +103,6 @@ describe("AskUserPrompt", () => {
           ]
         }}
         onSubmit={onSubmit}
-        onDismiss={vi.fn()}
       />
     );
     expect(screen.getByText("Environment")).toBeTruthy();
@@ -142,7 +139,6 @@ describe("AskUserPrompt", () => {
           ]
         }}
         onSubmit={onSubmit}
-        onDismiss={vi.fn()}
       />
     );
     expect(screen.getByRole("button", { name: "Yes" })).toBeTruthy();
@@ -167,7 +163,6 @@ describe("AskUserPrompt", () => {
           fields: [{ id: "FOO", label: "Foo", value: "bar" }]
         }}
         onSubmit={vi.fn()}
-        onDismiss={vi.fn()}
       />
     );
     expect(screen.getByText(/Details in the fields below/)).toBeTruthy();

@@ -51,17 +51,6 @@ describe("Home", () => {
   });
 
   it("lists workspaces and section-level connect cta", async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => [
-        {
-          id: "p1",
-          name: "Forge",
-          source: "github",
-          status: "available"
-        }
-      ]
-    } as Response);
     workspaceApi.listWorkspaces.mockResolvedValue([
       {
         id: "w1",
@@ -81,7 +70,6 @@ describe("Home", () => {
       expect(screen.getByText("Full stack")).toBeTruthy();
       expect(screen.getByLabelText("Connect a project")).toBeTruthy();
       expect(screen.getByLabelText("Create a workspace")).toBeTruthy();
-      expect(screen.getAllByText("Forge").length).toBeGreaterThan(0);
     });
   });
 });

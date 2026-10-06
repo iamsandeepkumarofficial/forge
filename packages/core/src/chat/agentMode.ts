@@ -3,7 +3,6 @@ export const AGENT_MODE_IDS = [
   "plan",
   "debug",
   "ask",
-  "multitask",
   "auto"
 ] as const;
 
@@ -73,26 +72,11 @@ const ASK_TOOLS = unionTools(
   ASK_USER_TOOLS
 );
 
-const MULTITASK_TOOLS = unionTools(
-  READ_TOOLS,
-  WRITE_TOOLS,
-  PREVIEW_INSPECT_TOOLS,
-  PREVIEW_RUN_TOOLS,
-  LAUNCH_TOOLS,
-  SUBTASK_TOOLS,
-  SKILL_TOOLS,
-  SETUP_TOOLS,
-  WEB_TOOLS,
-  SWITCH_TOOLS,
-  ASK_USER_TOOLS
-);
-
 export const MODE_TOOL_ALLOWLIST: Record<AgentMode, ReadonlySet<string>> = {
   agent: AGENT_TOOLS,
   plan: PLAN_TOOLS,
   debug: AGENT_TOOLS,
   ask: ASK_TOOLS,
-  multitask: MULTITASK_TOOLS,
   auto: AGENT_TOOLS
 };
 
@@ -101,7 +85,7 @@ export function parseAgentMode(raw: unknown): AgentMode | null {
     return null;
   }
   const v = raw.trim().toLowerCase();
-  if (v === "build") {
+  if (v === "build" || v === "multitask") {
     return "agent";
   }
   if ((AGENT_MODE_IDS as readonly string[]).includes(v)) {

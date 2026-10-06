@@ -32,6 +32,8 @@ function renderLeft(leftMode: LeftPaneMode) {
       onOpenFile={() => undefined}
       onOpenDiff={() => undefined}
       onShowPreview={() => undefined}
+      onOpenPlan={() => undefined}
+      onPlanChange={() => undefined}
       onTurnStatus={() => undefined}
     />
   );
@@ -41,7 +43,9 @@ describe("WorkbenchLeft", () => {
   it("shows chat in chat mode and hides other panes", () => {
     renderLeft("chat");
     expect(screen.getByTestId("chat-pane")).toBeTruthy();
-    expect(screen.queryByTestId("files-tab")).toBeNull();
+    expect(
+      screen.getByTestId("files-tab").closest("[class*='hidden']")
+    ).toBeTruthy();
     expect(screen.queryByTestId("changes-tab")).toBeNull();
     expect(screen.queryByTestId("run-sidebar")).toBeNull();
     expect(screen.queryByTestId("help-sidebar")).toBeNull();

@@ -63,13 +63,12 @@ export function loadStoredAgentMode(): ComposerAgentMode {
       v === "agent" ||
       v === "plan" ||
       v === "debug" ||
-      v === "multitask" ||
       v === "ask" ||
       v === "auto"
     ) {
       return v;
     }
-    if (v === "build") {
+    if (v === "build" || v === "multitask") {
       return "agent";
     }
   } catch {
@@ -78,12 +77,11 @@ export function loadStoredAgentMode(): ComposerAgentMode {
   try {
     const legacy = localStorage.getItem(MODE_KEY);
     if (legacy === "plan") return "plan";
-    if (legacy === "build") return "agent";
+    if (legacy === "build" || legacy === "multitask") return "agent";
     if (
       legacy === "agent" ||
       legacy === "debug" ||
       legacy === "ask" ||
-      legacy === "multitask" ||
       legacy === "auto"
     ) {
       return legacy;

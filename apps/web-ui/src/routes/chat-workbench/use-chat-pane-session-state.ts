@@ -44,8 +44,9 @@ export function useChatPaneSessionState() {
     setLiveToolParts([]);
   };
   const isStreaming = status === "submitted" || status === "streaming";
-  const canSend =
-    (input.trim().length > 0 || attachments.length > 0) && status === "ready";
+  const hasContent = input.trim().length > 0 || attachments.length > 0;
+  const canSend = hasContent && (status === "ready" || status === "error");
+  const canQueue = hasContent && status === "streaming";
   return {
     input,
     setInput,
@@ -68,6 +69,7 @@ export function useChatPaneSessionState() {
     clearLiveTurn,
     streamAbortRef,
     isStreaming,
-    canSend
+    canSend,
+    canQueue
   };
 }

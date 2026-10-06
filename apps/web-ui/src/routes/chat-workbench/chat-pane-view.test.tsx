@@ -17,6 +17,9 @@ vi.mock("./chat-message-list.js", () => ({
 vi.mock("./running-terminals-bar.js", () => ({
   RunningTerminalsBar: () => <div>running-terminals</div>
 }));
+vi.mock("./plan-tasks-bar.js", () => ({
+  PlanTasksBar: () => <div>plan-tasks</div>
+}));
 
 describe("ChatPaneView", () => {
   it("renders message list and composer", () => {
@@ -55,10 +58,24 @@ describe("ChatPaneView", () => {
         attachments={[]}
         onAttachFiles={vi.fn()}
         onRemoveAttachment={vi.fn()}
+        plan={{
+          goal: "Ship",
+          status: "running",
+          version: 1,
+          tasks: [
+            {
+              id: "t1",
+              description: "Do thing",
+              status: "running",
+              dependencies: []
+            }
+          ]
+        }}
       />
     );
     expect(screen.getByText("messages")).toBeTruthy();
     expect(screen.getByText("composer")).toBeTruthy();
     expect(screen.getByText("running-terminals")).toBeTruthy();
+    expect(screen.getByText("plan-tasks")).toBeTruthy();
   });
 });

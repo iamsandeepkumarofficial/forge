@@ -1,7 +1,6 @@
 import {
   Bug,
   Infinity as InfinityIcon,
-  Layers2,
   ListTodo,
   MessageSquare,
   Sparkles
@@ -12,13 +11,7 @@ export const N_100 = 100;
 export const N_1000 = 1000;
 export const N_1000000 = 1000000;
 
-export type ComposerAgentMode =
-  | "agent"
-  | "plan"
-  | "debug"
-  | "multitask"
-  | "ask"
-  | "auto";
+export type ComposerAgentMode = "agent" | "plan" | "debug" | "ask" | "auto";
 
 export const AGENT_MODES: Array<{
   id: ComposerAgentMode;
@@ -47,13 +40,6 @@ export const AGENT_MODES: Array<{
     label: "Ask",
     icon: MessageSquare,
     chatMode: "ask",
-    enabled: true
-  },
-  {
-    id: "multitask",
-    label: "Multitask",
-    icon: Layers2,
-    chatMode: "multitask",
     enabled: true
   },
   {

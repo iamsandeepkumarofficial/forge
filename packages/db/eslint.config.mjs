@@ -3,7 +3,7 @@ import base from "../../eslint.base.mjs";
 export default [
   ...base,
   {
-    files: ["src/schema.ts"],
+    files: ["**/schema.ts"],
     rules: {
       "max-lines": [
         "error",

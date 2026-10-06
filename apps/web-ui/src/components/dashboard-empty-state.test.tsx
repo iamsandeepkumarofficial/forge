@@ -10,8 +10,10 @@ vi.mock("../lib/desktop.js", () => ({
 vi.mock("../lib/projects-api.js", () => ({
   connectProject: vi.fn(),
   connectLocalProject: vi.fn(),
-  createChat: vi.fn(),
   ConnectProjectError: class extends Error {}
+}));
+vi.mock("../lib/workspaces-api.js", () => ({
+  createWorkspaceChat: vi.fn()
 }));
 
 describe("DashboardEmptyState", () => {

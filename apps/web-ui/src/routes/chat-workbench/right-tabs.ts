@@ -1,6 +1,7 @@
 import type { FileTab } from "./types.js";
 
 export const PREVIEW_TAB_ID = "preview";
+export const PLAN_TAB_ID = "plan";
 
 export function fileTabId(path: string): string {
   return `file:${path}`;
@@ -10,7 +11,12 @@ export function diffTabId(repo: string, path: string): string {
   return `diff:${repo}:${path}`;
 }
 
+export function planTab(): FileTab {
+  return { id: PLAN_TAB_ID, kind: "plan", path: "Plan" };
+}
+
 export function tabLabel(tab: FileTab): string {
+  if (tab.kind === "plan") return "Plan";
   return tab.path.split("/").filter(Boolean).pop() ?? tab.path;
 }
 

@@ -38,6 +38,7 @@ export type ChatComposerProps = {
   onSend: () => void;
   onStop: () => void;
   canSend: boolean;
+  canQueue?: boolean;
   status: "ready" | "submitted" | "streaming" | "error";
   agentMode: ComposerAgentMode;
   onAgentModeChange: (mode: ComposerAgentMode) => void;
@@ -95,11 +96,36 @@ function ComposerAttachments(options: {
 function ComposerSendButton(options: {
   status: ChatComposerProps["status"];
   canSend: boolean;
+  canQueue?: boolean;
   onSend: () => void;
   onStop: () => void;
 }) {
-  const { status, canSend, onSend, onStop } = options;
+  const { status, canSend, canQueue, onSend, onStop } = options;
   if (status === "streaming") {
+    if (canQueue) {
+      return (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onStop}
+            className="inline-flex size-8 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted"
+            title="Stop"
+            aria-label="Stop"
+          >
+            <Square className="size-3.5 fill-current" />
+          </button>
+          <button
+            type="button"
+            onClick={onSend}
+            className="inline-flex h-8 items-center justify-center rounded-full bg-foreground px-3 text-xs font-medium text-background"
+            title="Queue follow-up"
+            aria-label="Queue"
+          >
+            Queue
+          </button>
+        </div>
+      );
+    }
     return (
       <button
         type="button"
@@ -206,6 +232,7 @@ function ComposerToolbar(options: {
       <ComposerSendButton
         status={p.status}
         canSend={p.canSend}
+        canQueue={p.canQueue}
         onSend={p.onSend}
         onStop={p.onStop}
       />
@@ -262,6 +289,7 @@ export function ChatComposer(props: ChatComposerProps) {
     onChange,
     onSend,
     canSend,
+    canQueue,
     conversationTokens,
     maxContextTokens,
     maxOutputTokens,
@@ -301,7 +329,7 @@ export function ChatComposer(props: ChatComposerProps) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if (canSend) onSend();
+                if (canSend || canQueue) onSend();
               }
             }}
             placeholder={placeholder}

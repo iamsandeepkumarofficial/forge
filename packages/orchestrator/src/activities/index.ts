@@ -9,3 +9,23 @@ export {
   rejectChatToolCall,
   finalizeChatTurn
 } from "./chat.js";
+export {
+  createPlan,
+  repairPlan,
+  runPlanningGate,
+  persistPlan,
+  persistTask,
+  persistPlanTasks,
+  appendPlanChunk,
+  publishPlanSnapshot,
+  publishTaskUpdated,
+  publishPlanStatus,
+  countRunningAgentTasks,
+  getPlanBudget,
+  executeDirectTool
+} from "./plan.js";
+export {
+  ensureTaskWorktree,
+  mergeTaskWorktree,
+  publishMergeConflict
+} from "./worktree.js";

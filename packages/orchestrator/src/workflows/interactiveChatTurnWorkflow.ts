@@ -1,21 +1,14 @@
 import { proxyActivities, isCancellation } from "@temporalio/workflow";
 import type * as activities from "../activities/index.js";
 import {
-  isLengthFinishReason,
-  MAX_TOOL_ROUNDS,
-  roundCapNotice,
-  truncatedToolCallOutput
-} from "./chatTurnLimits.js";
-import {
   assistantTextForFinalize,
   buildResult,
   failureMessage,
   isLocalChatProvider,
-  parseAppliedMode,
-  type ChatAgentMode,
   type InteractiveChatTurnArgs,
   type InteractiveChatTurnResult
 } from "./chatTurnHelpers.js";
+import { assistantPartsForStep, runToolRoundLoop } from "./reactLoop.js";
 
 export type {
   ChatAgentMode,
@@ -29,7 +22,7 @@ export {
   isLocalChatProvider,
   previewText
 } from "./chatTurnHelpers.js";
-export { MAX_TOOL_ROUNDS };
+export { MAX_TOOL_ROUNDS } from "./chatTurnLimits.js";
 
 const short = proxyActivities<typeof activities>({
   startToCloseTimeout: "2 minutes",
@@ -58,180 +51,6 @@ const tools = proxyActivities<typeof activities>({
 
 function llmActivities(provider: string) {
   return isLocalChatProvider(provider) ? llmLocal : llmCloud;
-}
-
-type ToolCallLike = {
-  toolCallId: string;
-  toolName: string;
-  args: Record<string, unknown>;
-  thoughtSignature?: string;
-};
-
-function assistantPartsForStep(opts: {
-  reasoningText?: string;
-  text: string;
-  toolCalls?: ToolCallLike[];
-}): unknown[] {
-  return [
-    ...(opts.reasoningText
-      ? [{ type: "reasoning", text: opts.reasoningText }]
-      : []),
-    ...(opts.text ? [{ type: "text", text: opts.text }] : []),
-    ...(opts.toolCalls ?? []).map((tc) => ({
-      type: "tool-invocation",
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      args: tc.args,
-      state: "call",
-      ...(tc.thoughtSignature ? { thoughtSignature: tc.thoughtSignature } : {})
-    }))
-  ];
-}
-
-async function appendAssistantToolInvocations(opts: {
-  args: InteractiveChatTurnArgs;
-  text: string;
-  reasoningText?: string;
-  toolCalls: ToolCallLike[];
-}): Promise<void> {
-  await short.appendChatMessage({
-    sessionId: opts.args.sessionId,
-    role: "assistant",
-    parts: assistantPartsForStep({
-      reasoningText: opts.reasoningText,
-      text: opts.text,
-      toolCalls: opts.toolCalls
-    }),
-    turnId: opts.args.turnId
-  });
-}
-
-async function appendToolResultParts(opts: {
-  args: InteractiveChatTurnArgs;
-  parts: unknown[];
-}): Promise<void> {
-  await short.appendChatMessage({
-    sessionId: opts.args.sessionId,
-    role: "tool",
-    parts: opts.parts,
-    turnId: opts.args.turnId
-  });
-}
-
-async function skipRemainingTools(opts: {
-  args: InteractiveChatTurnArgs;
-  toolCalls: ToolCallLike[];
-  startIndex: number;
-  toolNameSet: Set<string>;
-  toolResultParts: unknown[];
-}): Promise<void> {
-  for (let i = opts.startIndex; i < opts.toolCalls.length; i++) {
-    const tc = opts.toolCalls[i]!;
-    opts.toolNameSet.add(tc.toolName);
-    const output = "Skipped: waiting for the user to confirm the mode switch.";
-    await short.rejectChatToolCall({
-      turnId: opts.args.turnId,
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      output
-    });
-    opts.toolResultParts.push({
-      type: "tool-result",
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      output,
-      success: false
-    });
-  }
-}
-
-async function runToolCallsRound(opts: {
-  args: InteractiveChatTurnArgs;
-  text: string;
-  reasoningText?: string;
-  toolCalls: ToolCallLike[];
-  toolNameSet: Set<string>;
-  currentMode: { value: ChatAgentMode };
-}): Promise<{ count: number; pauseForUserInput: boolean }> {
-  await appendAssistantToolInvocations(opts);
-  const toolResultParts: unknown[] = [];
-  let pauseForUserInput = false;
-  for (let i = 0; i < opts.toolCalls.length; i++) {
-    const tc = opts.toolCalls[i]!;
-    opts.toolNameSet.add(tc.toolName);
-    if (pauseForUserInput) {
-      await skipRemainingTools({
-        args: opts.args,
-        toolCalls: opts.toolCalls,
-        startIndex: i,
-        toolNameSet: opts.toolNameSet,
-        toolResultParts
-      });
-      break;
-    }
-    const result = await tools.executeChatTool({
-      sessionId: opts.args.sessionId,
-      turnId: opts.args.turnId,
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      args: tc.args,
-      agentMode: opts.currentMode.value
-    });
-    if (tc.toolName === "switch_mode") {
-      const meta = result.metadata as Record<string, unknown> | undefined;
-      if (meta?.applied === true) {
-        const next = parseAppliedMode(meta);
-        if (next) opts.currentMode.value = next;
-      } else if (meta?.needsConfirmation === true) {
-        pauseForUserInput = true;
-      }
-    } else if (tc.toolName === "ask_user") {
-      const meta = result.metadata as Record<string, unknown> | undefined;
-      if (meta?.needsUserInput === true) {
-        pauseForUserInput = true;
-      }
-    }
-    toolResultParts.push({
-      type: "tool-result",
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      output: result.output,
-      success: result.success,
-      ...(result.metadata ? { metadata: result.metadata } : {})
-    });
-  }
-  await appendToolResultParts({ args: opts.args, parts: toolResultParts });
-  return { count: opts.toolCalls.length, pauseForUserInput };
-}
-
-async function rejectTruncatedToolCalls(opts: {
-  args: InteractiveChatTurnArgs;
-  text: string;
-  reasoningText?: string;
-  toolCalls: ToolCallLike[];
-  toolNameSet: Set<string>;
-}): Promise<{ count: number; pauseForUserInput: boolean }> {
-  await appendAssistantToolInvocations(opts);
-  const toolResultParts: unknown[] = [];
-  for (const tc of opts.toolCalls) {
-    opts.toolNameSet.add(tc.toolName);
-    const output = truncatedToolCallOutput(tc.toolName);
-    await short.rejectChatToolCall({
-      turnId: opts.args.turnId,
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      output
-    });
-    toolResultParts.push({
-      type: "tool-result",
-      toolCallId: tc.toolCallId,
-      toolName: tc.toolName,
-      output,
-      success: false
-    });
-  }
-  await appendToolResultParts({ args: opts.args, parts: toolResultParts });
-  return { count: opts.toolCalls.length, pauseForUserInput: false };
 }
 
 async function handleTurnFailure(opts: {
@@ -274,84 +93,6 @@ async function handleTurnFailure(opts: {
   throw opts.err;
 }
 
-async function applyToolStep(opts: {
-  args: InteractiveChatTurnArgs;
-  text: string;
-  reasoningText?: string;
-  finishReason: string;
-  toolCalls: ToolCallLike[];
-  toolNameSet: Set<string>;
-  currentMode: { value: ChatAgentMode };
-}): Promise<{ count: number; pauseForUserInput: boolean }> {
-  if (isLengthFinishReason(opts.finishReason)) {
-    return rejectTruncatedToolCalls(opts);
-  }
-  return runToolCallsRound(opts);
-}
-
-async function runToolRoundLoop(opts: {
-  args: InteractiveChatTurnArgs;
-  currentMode: { value: ChatAgentMode };
-  toolNameSet: Set<string>;
-}): Promise<{
-  rounds: number;
-  finalText: string;
-  finalReasoningText: string;
-  toolCallCount: number;
-}> {
-  let rounds = 0;
-  let finalText = "";
-  let finalReasoningText = "";
-  let toolCallCount = 0;
-  let pendingToolsAtCap = false;
-  let messages = await short.loadChatMessages(opts.args.sessionId);
-  while (rounds < MAX_TOOL_ROUNDS) {
-    rounds += 1;
-    const step = await llmActivities(opts.args.provider).runLlmStep({
-      sessionId: opts.args.sessionId,
-      turnId: opts.args.turnId,
-      mode: opts.currentMode.value,
-      provider: opts.args.provider,
-      model: opts.args.model,
-      reasoningEffort: opts.args.reasoningEffort,
-      messages
-    });
-    if (step.text) {
-      finalText = step.text;
-    }
-    if (step.reasoningText) {
-      finalReasoningText = step.reasoningText;
-    }
-    if (!step.toolCalls.length) {
-      pendingToolsAtCap = false;
-      break;
-    }
-    finalReasoningText = "";
-    pendingToolsAtCap = true;
-    const applied = await applyToolStep({
-      args: opts.args,
-      text: step.text,
-      reasoningText: step.reasoningText,
-      finishReason: step.finishReason,
-      toolCalls: step.toolCalls,
-      toolNameSet: opts.toolNameSet,
-      currentMode: opts.currentMode
-    });
-    toolCallCount += applied.count;
-    if (applied.pauseForUserInput) {
-      pendingToolsAtCap = false;
-      break;
-    }
-    messages = await short.loadChatMessages(opts.args.sessionId);
-  }
-  if (pendingToolsAtCap && rounds >= MAX_TOOL_ROUNDS) {
-    finalText = [finalText.trim(), roundCapNotice(MAX_TOOL_ROUNDS)]
-      .filter(Boolean)
-      .join("\n\n");
-  }
-  return { rounds, finalText, finalReasoningText, toolCallCount };
-}
-
 export async function interactiveChatTurnWorkflow(
   args: InteractiveChatTurnArgs
 ): Promise<InteractiveChatTurnResult> {
@@ -368,6 +109,11 @@ export async function interactiveChatTurnWorkflow(
       turnId: args.turnId
     });
     const loop = await runToolRoundLoop({
+      deps: {
+        short,
+        llm: llmActivities(args.provider),
+        tools
+      },
       args,
       currentMode: { value: args.mode },
       toolNameSet

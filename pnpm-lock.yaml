@@ -115,9 +115,6 @@ importers:
       '@aws-sdk/types':
         specifier: ^3.699.0
         version: 3.974.5
-      '@forge/agents':
-        specifier: workspace:*
-        version: link:../../packages/agents
       '@forge/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -133,9 +130,6 @@ importers:
       '@forge/tools':
         specifier: workspace:*
         version: link:../../packages/tools
-      '@forge/workflows':
-        specifier: workspace:*
-        version: link:../../packages/workflows
       '@modelcontextprotocol/sdk':
         specifier: ^1.17.1
         version: 1.30.0(zod@4.4.3)
@@ -449,9 +443,6 @@ importers:
       '@forge/tools':
         specifier: workspace:*
         version: link:../tools
-      '@forge/workflows':
-        specifier: workspace:*
-        version: link:../workflows
       '@temporalio/activity':
         specifier: ^1.11.6
         version: 1.22.0
@@ -504,25 +495,6 @@ importers:
       ai:
         specifier: ^6.0.177
         version: 6.0.266(zod@4.4.3)
-      zod:
-        specifier: ^4.3.6
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: ^24.5.2
-        version: 24.13.3
-      tsx:
-        specifier: ^4.20.5
-        version: 4.23.12
-      typescript:
-        specifier: ~5.9.2
-        version: 5.9.3
-
-  packages/workflows:
-    dependencies:
-      yaml:
-        specifier: ^2.6.1
-        version: 2.9.0
       zod:
         specifier: ^4.3.6
         version: 4.4.3

@@ -12,8 +12,11 @@ vi.mock("../lib/desktop.js", () => ({
 vi.mock("../lib/projects-api.js", () => ({
   ConnectProjectError: class extends Error {},
   connectProject: vi.fn(),
-  connectLocalProject: vi.fn(),
-  createChat: vi.fn()
+  connectLocalProject: vi.fn()
+}));
+
+vi.mock("../lib/workspaces-api.js", () => ({
+  createWorkspaceChat: vi.fn()
 }));
 
 function wrapper({ children }: { children: ReactNode }) {

@@ -7,25 +7,35 @@ import { assertLocalFolderPath } from "../../projects/sessionSandbox/materialize
 import { ensureCanonicalGitRepo } from "../../projects/localWorktree.js";
 import { copyProjectTree } from "./copyProjectTree.js";
 import { ensureProjectsRoot, projectCanonicalDir } from "./projectsRoot.js";
+import { WorkspaceService } from "../workspace/workspace.service.js";
 
 const N_403 = 403;
 const N_404 = 404;
 const N_500 = 500;
 
+export type ConnectProjectResult = {
+  projectId: string;
+  workspaceId: string;
+  alreadyConnected?: boolean;
+};
+
 export class ProjectService {
   private projectRepo: ProjectRepository;
   private github: GithubService;
-  constructor() {
-    this.projectRepo = new ProjectRepository();
-    this.github = new GithubService();
+  constructor(
+    projectRepo = new ProjectRepository(),
+    github = new GithubService()
+  ) {
+    this.projectRepo = projectRepo;
+    this.github = github;
+  }
+  private workspaceService(): WorkspaceService {
+    return new WorkspaceService();
   }
   async connectGithub(
     githubSlug: string,
     userId: string
-  ): Promise<{
-    projectId: string;
-    alreadyConnected: boolean;
-  }> {
+  ): Promise<ConnectProjectResult> {
     if (!githubSlug || typeof githubSlug !== "string") {
       throw new Error("Invalid GitHub slug: must be a non-empty string");
     }
@@ -49,8 +59,15 @@ export class ProjectService {
       canonicalKey: null,
       status: "available"
     });
+    const { workspaceId } =
+      await this.workspaceService().wrapProjectInNewWorkspace({
+        userId,
+        projectId: result.id,
+        workspaceName: sanitizedSlug
+      });
     return {
       projectId: result.id,
+      workspaceId,
       alreadyConnected: false
     };
   }
@@ -59,13 +76,19 @@ export class ProjectService {
     localPath: string;
     userId: string;
     name?: string;
-  }): Promise<{ projectId: string }> {
+  }): Promise<ConnectProjectResult> {
     const { localPath, userId, name } = options;
     const abs = await assertLocalFolderPath(localPath);
     const dedupeKey = `local:${abs}`;
     const existing = await this.projectRepo.findByDedupeKey(userId, dedupeKey);
     if (existing) {
-      return { projectId: existing.id };
+      const { workspaceId } =
+        await this.workspaceService().ensureWorkspaceForProject({
+          userId,
+          projectId: existing.id,
+          workspaceName: existing.name
+        });
+      return { projectId: existing.id, workspaceId };
     }
     const displayName =
       (typeof name === "string" && name.trim()) ||
@@ -93,13 +116,19 @@ export class ProjectService {
         { cause: err }
       );
     }
-    return { projectId: result.id };
+    const { workspaceId } =
+      await this.workspaceService().wrapProjectInNewWorkspace({
+        userId,
+        projectId: result.id,
+        workspaceName: displayName
+      });
+    return { projectId: result.id, workspaceId };
   }
 
   async connectGitUrl(
     gitUrl: string,
     userId: string
-  ): Promise<{ projectId: string; alreadyConnected: boolean }> {
+  ): Promise<ConnectProjectResult> {
     if (!gitUrl || typeof gitUrl !== "string") {
       throw new Error("gitUrl is required");
     }

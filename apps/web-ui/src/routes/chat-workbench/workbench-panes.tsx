@@ -11,6 +11,7 @@ import { HelpSidebar } from "./help-sidebar.js";
 import { ChatPane } from "./chat-pane.js";
 import { cn } from "@/lib/utils";
 import type { LeftPaneMode, WorkbenchTurnStatus } from "./types.js";
+import type { PlanCardModel } from "./plan-card.js";
 
 export { RightStage } from "./workbench-right-stage.js";
 
@@ -27,6 +28,8 @@ export function WorkbenchLeft(options: {
   onOpenFile: (path: string) => void;
   onOpenDiff: (repo: string, path: string) => void;
   onShowPreview: () => void;
+  onOpenPlan: () => void;
+  onPlanChange: (plan: PlanCardModel | null) => void;
   onTurnStatus: (status: WorkbenchTurnStatus) => void;
 }) {
   const o = options;
@@ -44,6 +47,8 @@ export function WorkbenchLeft(options: {
           onOpenFile={o.onOpenFile}
           onTurnStatus={o.onTurnStatus}
           onOpenHelp={() => o.onLeftModeChange("help")}
+          onOpenPlan={o.onOpenPlan}
+          onPlanChange={o.onPlanChange}
         />
       </div>
       <div className={cn("min-h-0 flex-1", o.leftMode !== "files" && "hidden")}>

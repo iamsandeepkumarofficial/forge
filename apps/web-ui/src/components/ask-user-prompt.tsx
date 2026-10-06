@@ -76,9 +76,8 @@ function AskUserMcq(options: {
   proposal: AskUserProposal;
   submitting?: boolean;
   onSubmit: (result: AskUserSubmitResult) => void;
-  onDismiss: () => void;
 }) {
-  const { proposal, submitting, onSubmit, onDismiss } = options;
+  const { proposal, submitting, onSubmit } = options;
   const groupId = useId();
   const [selected, setSelected] = useState<string | null>(null);
   const [otherText, setOtherText] = useState("");
@@ -112,7 +111,7 @@ function AskUserMcq(options: {
       prompt={proposal.prompt}
       submitting={submitting}
       onSkip={() => onSubmit({ text: askUserSkipReply() })}
-      onClose={onDismiss}
+      onClose={() => onSubmit({ text: askUserSkipReply() })}
     >
       <McqChoices
         groupId={groupId}
@@ -321,9 +320,8 @@ function AskUserForm(options: {
   proposal: AskUserProposal;
   submitting?: boolean;
   onSubmit: (result: AskUserSubmitResult) => void;
-  onDismiss: () => void;
 }) {
-  const { proposal, submitting, onSubmit, onDismiss } = options;
+  const { proposal, submitting, onSubmit } = options;
   const [values, setValues] = useState(() =>
     initAskUserFormValues(proposal.fields)
   );
@@ -334,7 +332,7 @@ function AskUserForm(options: {
       prompt={proposal.prompt}
       submitting={submitting}
       onSkip={() => onSubmit({ text: askUserSkipReply() })}
-      onClose={onDismiss}
+      onClose={() => onSubmit({ text: askUserSkipReply() })}
     >
       <AskUserFormSections
         fields={proposal.fields}
@@ -367,20 +365,19 @@ function AskUserForm(options: {
 export function AskUserPrompt(options: {
   proposal: AskUserProposal;
   onSubmit: (result: AskUserSubmitResult) => void;
-  onDismiss: () => void;
   submitting?: boolean;
 }) {
-  const { proposal, onSubmit, onDismiss, submitting } = options;
+  const { proposal, onSubmit, submitting } = options;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onDismiss();
+        onSubmit({ text: askUserSkipReply() });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onDismiss]);
+  }, [onSubmit]);
 
   if (proposal.kind === "mcq") {
     return (
@@ -388,7 +385,6 @@ export function AskUserPrompt(options: {
         proposal={proposal}
         submitting={submitting}
         onSubmit={onSubmit}
-        onDismiss={onDismiss}
       />
     );
   }
@@ -397,7 +393,6 @@ export function AskUserPrompt(options: {
       proposal={proposal}
       submitting={submitting}
       onSubmit={onSubmit}
-      onDismiss={onDismiss}
     />
   );
 }

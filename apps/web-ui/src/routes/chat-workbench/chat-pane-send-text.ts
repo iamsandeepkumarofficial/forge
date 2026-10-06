@@ -1,5 +1,6 @@
 import {
   deleteSessionMessagesFrom,
+  startChatTurn,
   type ChatMode,
   type LlmProvider,
   type UiChatMessage
@@ -32,6 +33,7 @@ export type SendChatPaneTextOptions = {
   stickToBottomRef: { current: boolean };
   streamAbortRef: { current: AbortController | null };
   onAppliedMode?: (mode: ComposerAgentMode) => void;
+  onPlanEvent?: (eventType: string, payload: Record<string, unknown>) => void;
   truncateFromMessageId?: string;
 };
 
@@ -60,6 +62,32 @@ function truncateLocalMessages(
   return idx >= 0 ? prev.slice(0, idx) : prev;
 }
 
+async function queueFollowUpWhileStreaming(
+  options: SendChatPaneTextOptions,
+  text: string
+): Promise<void> {
+  options.setInput("");
+  options.setAttachments([]);
+  try {
+    const result = await startChatTurn(options.sessionId, {
+      text,
+      provider: options.provider,
+      model: options.autoModel
+        ? undefined
+        : options.activeModel.trim() || undefined,
+      mode: options.mode
+    });
+    if (result.queued) {
+      options.onPlanEvent?.("followup_queued", {
+        text,
+        turnId: result.turnId
+      });
+    }
+  } catch (err) {
+    options.setError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 export async function sendChatPaneText(
   options: SendChatPaneTextOptions
 ): Promise<void> {
@@ -67,7 +95,9 @@ export async function sendChatPaneText(
   const text = [options.raw.trim(), attachmentBlock]
     .filter(Boolean)
     .join("\n\n");
-  if (!text || options.status !== "ready") return;
+  if (!text) return;
+  const isQueue = options.status === "streaming";
+  if (options.status !== "ready" && !isQueue) return;
   if (options.truncateFromMessageId) {
     try {
       await deleteSessionMessagesFrom(
@@ -81,6 +111,10 @@ export async function sendChatPaneText(
     options.setMessages((prev) =>
       truncateLocalMessages(prev, options.truncateFromMessageId as string)
     );
+  }
+  if (isQueue) {
+    await queueFollowUpWhileStreaming(options, text);
+    return;
   }
   beginOptimisticSend(options, text);
   const ac = new AbortController();
@@ -98,6 +132,7 @@ export async function sendChatPaneText(
       signal: ac.signal,
       onTurnId: options.setActiveTurnId,
       onEvent: ({ eventType, payload }) => {
+        options.onPlanEvent?.(eventType, payload);
         applyTurnStreamEvent({
           eventType,
           payload,

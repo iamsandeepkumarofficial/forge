@@ -55,10 +55,12 @@ describe("createProjectsRouter", () => {
   before(async () => {
     mock.module("./pocAuth.js", {
       exports: {
-        createLocalUserMiddleware: () =>
-          (_r: unknown, _s: unknown, n: () => void) =>
+        createLocalUserMiddleware:
+          () => (_r: unknown, _s: unknown, n: () => void) =>
             n(),
-        createLocalUserMiddleware: () => (_r: unknown, _s: unknown, n: () => void) => n(),
+        createLocalUserMiddleware:
+          () => (_r: unknown, _s: unknown, n: () => void) =>
+            n(),
         createPocAuth: () => (_r: unknown, _s: unknown, n: () => void) => n()
       }
     });
@@ -66,13 +68,32 @@ describe("createProjectsRouter", () => {
       exports: {
         ProjectService: class {
           async connectGithub(slug: string, userId: string) {
-            return { projectId: "p1", alreadyConnected: false, slug, userId };
+            return {
+              projectId: "p1",
+              workspaceId: "w1",
+              alreadyConnected: false,
+              slug,
+              userId
+            };
           }
-          async connectLocalFolder(localPath: string, userId: string) {
-            return { projectId: "p-local", localPath, userId };
+          async connectLocalFolder(options: {
+            localPath: string;
+            userId: string;
+          }) {
+            return {
+              projectId: "p-local",
+              workspaceId: "w-local",
+              ...options
+            };
           }
           async connectGitUrl(gitUrl: string, userId: string) {
-            return { projectId: "p-git", alreadyConnected: false, gitUrl, userId };
+            return {
+              projectId: "p-git",
+              workspaceId: "w-git",
+              alreadyConnected: false,
+              gitUrl,
+              userId
+            };
           }
           async listProjects() {
             return [{ id: "p1", name: "n" }];

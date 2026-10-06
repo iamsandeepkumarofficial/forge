@@ -9,8 +9,10 @@ import type { AskUserProposal } from "../../lib/ask-user.js";
 import type { LlmProvider, UiChatMessage } from "../../lib/chat-agent.js";
 import type { ToolPart } from "../../lib/tool-display.js";
 import { ChatMessageList } from "./chat-message-list.js";
+import { PlanTasksBar } from "./plan-tasks-bar.js";
 import { RunningTerminalsBar } from "./running-terminals-bar.js";
 import type { CommittedTurnStep } from "./committed-turn-step.js";
+import type { PlanCardModel } from "./plan-card.js";
 
 export type ChatPaneViewProps = {
   sessionId: string;
@@ -35,11 +37,11 @@ export type ChatPaneViewProps = {
   onSend: () => void;
   onStop: () => void;
   canSend: boolean;
+  canQueue?: boolean;
   agentMode: ComposerAgentMode;
   onAgentModeChange: (m: ComposerAgentMode) => void;
   pendingAskUser?: AskUserProposal | null;
   onSubmitAskUser?: (result: AskUserSubmitResult) => void;
-  onDismissAskUser?: () => void;
   askUserSubmitting?: boolean;
   pendingModeSwitch?: ComposerAgentMode | null;
   modeSwitchRemainingSeconds?: number;
@@ -65,6 +67,8 @@ export type ChatPaneViewProps = {
     text: string;
   }) => void | Promise<void>;
   onRevertUserMessage?: (options: { messageId: string; text: string }) => void;
+  plan?: PlanCardModel | null;
+  onOpenPlan?: () => void;
 };
 
 export function ChatPaneView(props: ChatPaneViewProps) {
@@ -94,25 +98,19 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         onOpenHelp={o.onOpenHelp}
         onBranchAssistant={o.onBranchAssistant}
         onRevertUserMessage={o.onRevertUserMessage}
+        plan={o.plan}
+        onOpenPlan={o.onOpenPlan}
+        onForceSendQueued={
+          o.plan?.queuedFollowUp
+            ? () => o.setInput(o.plan?.queuedFollowUp?.text ?? "")
+            : undefined
+        }
       />
-      {o.pendingAskUser ? (
-        <div
-          role="status"
-          className="shrink-0 border-t bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-        >
-          Waiting on you
-        </div>
-      ) : null}
-      {o.pendingAskUser && o.onSubmitAskUser && o.onDismissAskUser ? (
-        <div className="shrink-0 border-t px-3 py-2">
-          <AskUserPrompt
-            proposal={o.pendingAskUser}
-            onSubmit={o.onSubmitAskUser}
-            onDismiss={o.onDismissAskUser}
-            submitting={o.askUserSubmitting}
-          />
-        </div>
-      ) : null}
+      <ChatPaneAskUserBlock
+        pendingAskUser={o.pendingAskUser}
+        onSubmitAskUser={o.onSubmitAskUser}
+        askUserSubmitting={o.askUserSubmitting}
+      />
       <ChatComposer
         sessionId={o.sessionId}
         branchName={o.branchName}
@@ -121,6 +119,7 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         onSend={o.onSend}
         onStop={o.onStop}
         canSend={o.canSend}
+        canQueue={o.canQueue}
         status={o.status}
         agentMode={o.agentMode}
         onAgentModeChange={o.onAgentModeChange}
@@ -141,8 +140,56 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         attachments={o.attachments}
         onAttachFiles={o.onAttachFiles}
         onRemoveAttachment={o.onRemoveAttachment}
-        leading={<RunningTerminalsBar sessionId={o.sessionId} />}
+        leading={
+          <ChatPaneComposerLeading
+            plan={o.plan}
+            onOpenPlan={o.onOpenPlan}
+            sessionId={o.sessionId}
+          />
+        }
       />
+    </div>
+  );
+}
+
+function ChatPaneAskUserBlock(props: {
+  pendingAskUser?: AskUserProposal | null;
+  onSubmitAskUser?: (result: AskUserSubmitResult) => void;
+  askUserSubmitting?: boolean;
+}) {
+  if (!props.pendingAskUser) return null;
+  return (
+    <>
+      <div
+        role="status"
+        className="shrink-0 border-t bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+      >
+        Waiting on you
+      </div>
+      {props.onSubmitAskUser ? (
+        <div className="shrink-0 border-t px-3 py-2">
+          <AskUserPrompt
+            proposal={props.pendingAskUser}
+            onSubmit={props.onSubmitAskUser}
+            submitting={props.askUserSubmitting}
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function ChatPaneComposerLeading(props: {
+  plan?: PlanCardModel | null;
+  onOpenPlan?: () => void;
+  sessionId: string;
+}) {
+  return (
+    <div className="absolute inset-x-3 bottom-full z-10 flex flex-col gap-0">
+      {props.plan && props.plan.tasks.length > 0 ? (
+        <PlanTasksBar plan={props.plan} onOpenPlan={props.onOpenPlan} />
+      ) : null}
+      <RunningTerminalsBar sessionId={props.sessionId} />
     </div>
   );
 }

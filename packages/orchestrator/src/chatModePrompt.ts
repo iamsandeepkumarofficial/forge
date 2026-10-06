@@ -36,15 +36,9 @@ const MODE_ADDENDA: Record<AgentMode, string> = {
     "to Agent/Plan/Debug (or switch_mode and wait) unless Auto. Outside Auto, after",
     "switch_mode, stop and wait for confirmation."
   ].join("\n"),
-  multitask: [
-    "You are in Multitask mode. Implement the current thread, and split distinct",
-    "parallel follow-ups with create_subtask instead of doing everything inline.",
-    "If launch.json is missing, upsert_launch_app then preview_start. Ask before switching modes unless Auto.",
-    "Outside Auto, after switch_mode, stop and wait for confirmation."
-  ].join("\n"),
   auto: [
     "You are in Auto mode. Default behavior is Agent (implement). You may call",
-    "switch_mode to Plan, Debug, Ask, Multitask, or Agent without asking the user.",
+    "switch_mode to Plan, Debug, Ask, or Agent without asking the user.",
     "After a switch, follow that mode's rules and tools. App startup: upsert_launch_app",
     "then preview_start — never run_terminal for dev servers. Do not switch to Ask when",
     "the user wants implementation or to run apps."

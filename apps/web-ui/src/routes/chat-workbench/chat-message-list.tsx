@@ -4,6 +4,8 @@ import {
   type TranscriptBodyOptions
 } from "./chat-transcript.js";
 import { looksLikePlan } from "./chat-message-turns.js";
+import type { PlanCardModel } from "./plan-card.js";
+import { PlanChatSection } from "./plan-panel.js";
 
 const N_80 = 80;
 
@@ -16,6 +18,9 @@ export type ChatMessageListOptions = TranscriptBodyOptions & {
   sessionKind: "ticket" | "workbench";
   projectId: string;
   chatId: string;
+  plan?: PlanCardModel | null;
+  onOpenPlan?: () => void;
+  onForceSendQueued?: () => void;
 };
 
 function syncStickToBottom(
@@ -49,7 +54,10 @@ export function ChatMessageList(options: ChatMessageListOptions) {
     sessionId,
     onOpenHelp,
     onBranchAssistant,
-    onRevertUserMessage
+    onRevertUserMessage,
+    plan,
+    onOpenPlan,
+    onForceSendQueued
   } = options;
   return (
     <div
@@ -77,6 +85,13 @@ export function ChatMessageList(options: ChatMessageListOptions) {
           onBranchAssistant={onBranchAssistant}
           onRevertUserMessage={onRevertUserMessage}
         />
+        {plan ? (
+          <PlanChatSection
+            plan={plan}
+            onOpenInPanel={onOpenPlan}
+            onForceSend={onForceSendQueued}
+          />
+        ) : null}
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ import { ChatPaneView } from "./chat-pane-view.js";
 import { createBranchedChat } from "./branch-chat.js";
 import type { WorkbenchTurnStatus } from "./types.js";
 import { deriveTurnStatus } from "./workbench-status.js";
+import type { PlanCardModel } from "./plan-card.js";
 
 type ChatPaneProps = {
   sessionId: string;
@@ -29,6 +30,8 @@ type ChatPaneProps = {
   onOpenFile?: (path: string) => void;
   onTurnStatus?: (status: WorkbenchTurnStatus) => void;
   onOpenHelp?: () => void;
+  onOpenPlan?: () => void;
+  onPlanChange?: (plan: PlanCardModel | null) => void;
 };
 
 async function submitAskUserAnswer(options: {
@@ -59,6 +62,8 @@ async function submitAskUserAnswer(options: {
 
 function submitAskUserFromPane(options: {
   workspaceId?: string;
+  sessionId: string;
+  activeTurnId: string | null;
   proposal: AskUserProposal;
   result: AskUserSubmitResult;
   dismissAskUser: (proposal: AskUserProposal) => void;
@@ -67,6 +72,8 @@ function submitAskUserFromPane(options: {
 }) {
   const {
     workspaceId,
+    sessionId,
+    activeTurnId,
     proposal,
     result,
     dismissAskUser,
@@ -78,7 +85,18 @@ function submitAskUserFromPane(options: {
     try {
       const text = await submitAskUserAnswer({ workspaceId, proposal, result });
       dismissAskUser(proposal);
-      void sendText(text);
+      if (activeTurnId) {
+        const { answerChatTurn } = await import("../../lib/chat-agent.js");
+        await answerChatTurn({
+          sessionId,
+          turnId: activeTurnId,
+          text
+        }).catch(() => {
+          void sendText(text);
+        });
+      } else {
+        void sendText(text);
+      }
     } catch (err) {
       dismissAskUser(proposal);
       void sendText(
@@ -194,6 +212,8 @@ function useChatPaneControllers(props: ChatPaneProps) {
     if (!proposal) return;
     submitAskUserFromPane({
       workspaceId,
+      sessionId,
+      activeTurnId: session.activeTurnId,
       proposal,
       result,
       dismissAskUser: askUser.dismissAskUser,
@@ -273,6 +293,10 @@ function ChatPaneWired(options: {
   c: ReturnType<typeof useChatPaneControllers>;
 }) {
   const { props, c } = options;
+  const onPlanChange = props.onPlanChange;
+  useEffect(() => {
+    onPlanChange?.(c.session.plan ?? null);
+  }, [onPlanChange, c.session.plan]);
   return (
     <ChatPaneView
       sessionId={props.sessionId}
@@ -292,16 +316,18 @@ function ChatPaneWired(options: {
       status={c.session.status}
       error={c.session.error}
       clearError={c.session.clearError}
+      plan={c.session.plan}
+      onOpenPlan={props.onOpenPlan}
       input={c.session.input}
       setInput={c.session.setInput}
       onSend={() => void c.session.handleSend()}
       onStop={() => void c.session.handleStop()}
       canSend={c.session.canSend}
+      canQueue={c.session.canQueue}
       agentMode={c.model.agentMode}
       onAgentModeChange={c.model.setAgentMode}
       pendingAskUser={c.askUser.pending}
       onSubmitAskUser={c.handleSubmitAskUser}
-      onDismissAskUser={c.askUser.onDismissAskUser}
       askUserSubmitting={c.askUserSubmitting}
       pendingModeSwitch={
         c.showAskUser ? null : (c.modeSwitch.pending?.target ?? null)

@@ -8,12 +8,10 @@ export type WorkbenchChrome = {
   turnStatus: WorkbenchTurnStatus;
 };
 
-export interface FileTab {
-  id: string;
-  kind: "diff" | "file";
-  repo?: string;
-  path: string;
-}
+export type FileTab =
+  | { id: string; kind: "file"; path: string; repo?: string }
+  | { id: string; kind: "diff"; path: string; repo?: string }
+  | { id: string; kind: "plan"; path: string; repo?: string };
 
 export type ViewerState = {
   title: string;

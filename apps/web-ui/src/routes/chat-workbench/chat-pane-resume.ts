@@ -33,6 +33,7 @@ export type ResumeTurnControllers = {
   setError: (e: Error | null) => void;
   setMessages: React.Dispatch<React.SetStateAction<UiChatMessage[]>>;
   onAppliedMode?: (mode: ComposerAgentMode) => void;
+  onPlanEvent?: (eventType: string, payload: Record<string, unknown>) => void;
 };
 
 export function handleResumeStreamEvent(
@@ -42,6 +43,7 @@ export function handleResumeStreamEvent(
     sessionId: string;
   }
 ): void {
+  options.onPlanEvent?.(options.eventType, options.payload);
   applyTurnStreamEvent({
     eventType: options.eventType,
     payload: options.payload,

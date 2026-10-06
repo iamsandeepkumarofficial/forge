@@ -14,7 +14,6 @@ const MODE_IDS: readonly ComposerAgentMode[] = [
   "plan",
   "debug",
   "ask",
-  "multitask",
   "auto"
 ];
 
@@ -26,6 +25,7 @@ export type ModeSwitchProposal = {
 export function parseComposerMode(raw: unknown): ComposerAgentMode | null {
   if (typeof raw !== "string") return null;
   const v = raw.trim().toLowerCase();
+  if (v === "build" || v === "multitask") return "agent";
   return (MODE_IDS as readonly string[]).includes(v)
     ? (v as ComposerAgentMode)
     : null;

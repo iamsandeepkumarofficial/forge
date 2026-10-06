@@ -26,6 +26,7 @@ export async function handleCreateWorkspace(req: Request, res: Response) {
 export async function handleListWorkspaces(req: Request, res: Response) {
   try {
     const userId = (req as AuthedRequest).forgeUser.id;
+    await workspaceService.backfillOrphanProjects(userId);
     const list = await workspaceService.listWorkspaces(userId);
     res.json({ workspaces: list });
   } catch (error: unknown) {
