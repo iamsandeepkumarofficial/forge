@@ -3,11 +3,13 @@ import {
   PLANNING_GATE_SYSTEM,
   planningGateShortcut,
   resolvePlanningGate,
+  chatToolCatalogIds,
   type PlanningGateResult,
   type WorkflowPlanDraft,
   type WorkflowPlanSnapshot
 } from "@forge/core";
 import { api, appendChunk } from "./chatApi.js";
+import { executeNamedTool } from "../tools.js";
 export {
   DEFAULT_GATE_MAX_OUTPUT_TOKENS,
   DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
@@ -257,5 +259,42 @@ export async function getPlanBudget(input: { planId: string }): Promise<{
     workingMs: Number(body.plan?.workingMs ?? 0),
     llmTokens: Number(body.plan?.llmTokens ?? 0),
     costUsd: Number(body.plan?.costUsd ?? 0)
+  };
+}
+
+export async function executeDirectTool(input: {
+  sessionId: string;
+  turnId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  agentMode?: string | null;
+}): Promise<{
+  success: boolean;
+  output: string;
+  error?: string;
+  unknownTool?: boolean;
+}> {
+  const known = new Set(chatToolCatalogIds());
+  if (!known.has(input.toolName)) {
+    return {
+      success: false,
+      output: "",
+      error: `unknown tool: ${input.toolName}`,
+      unknownTool: true
+    };
+  }
+  const result = await executeNamedTool({
+    sessionId: input.sessionId,
+    toolName: input.toolName,
+    args: input.args ?? {},
+    turnId: input.turnId,
+    agentMode: input.agentMode
+  });
+  return {
+    success: result.success,
+    output: result.output,
+    ...(result.success
+      ? {}
+      : { error: result.output || `tool ${input.toolName} failed` })
   };
 }

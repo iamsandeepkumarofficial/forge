@@ -75,7 +75,22 @@ export type WorkflowTaskSnapshot = {
   attemptCount: number;
   waitReason: TaskWaitReason | null;
   error?: string | null;
+  input?: unknown;
+  output?: unknown;
 };
+
+export type TaskExecutionContext = {
+  workflowId: string;
+  sessionId: string;
+  turnId: string;
+  planId: string;
+  taskId: string;
+};
+
+export type ExecutionResult =
+  | { kind: "waiting"; waitReason: TaskWaitReason }
+  | { kind: "completed"; output?: unknown }
+  | { kind: "failed"; error: string };
 
 export type WorkflowPlanSnapshot = {
   id: string;

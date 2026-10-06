@@ -21,7 +21,9 @@ export {
   type QueuedFollowUp,
   type TaskWaitReason,
   type WorkflowTaskSnapshot,
-  type WorkflowPlanSnapshot
+  type WorkflowPlanSnapshot,
+  type TaskExecutionContext,
+  type ExecutionResult
 } from "./types.js";
 export {
   topoSort,

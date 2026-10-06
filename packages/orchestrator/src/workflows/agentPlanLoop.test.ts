@@ -1,20 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  applyChildResult,
-  createPlanRunContext,
-  runPlanExecutionLoop
-} from "./agentPlanLoop.js";
+import { createPlanRunContext, runPlanExecutionLoop } from "./agentPlanLoop.js";
+import { applyExecutionResult } from "./agentPlanLaunch.js";
 import { draftToTasks } from "./agentWorkflowModel.js";
+import { ExecutorRegistry, HumanExecutor } from "./executors/index.js";
 
 describe("agentPlanLoop", () => {
   it("exports the plan loop helpers", () => {
     assert.equal(typeof runPlanExecutionLoop, "function");
-    assert.equal(typeof applyChildResult, "function");
+    assert.equal(typeof applyExecutionResult, "function");
     assert.equal(typeof createPlanRunContext, "function");
   });
 
-  it("applies a completed child onto task state", async () => {
+  it("applies a completed execution onto task state", async () => {
     const ctx = createPlanRunContext({
       args: {
         sessionId: "s",
@@ -33,20 +31,20 @@ describe("agentPlanLoop", () => {
         ]
       }),
       short: {
-        mergeTaskWorktree: async () => ({ ok: true })
+        mergeTaskWorktree: async () => ({ ok: true }),
+        persistTask: async () => ({ task: null }),
+        publishTaskUpdated: async () => undefined
       } as never,
       planner: {} as never,
-      maxConcurrency: 2
+      maxConcurrency: 2,
+      registry: new ExecutorRegistry().register("human", new HumanExecutor())
     });
-    await applyChildResult({
+    await applyExecutionResult({
       ctx,
       taskId: "a",
       result: {
-        taskId: "a",
-        status: "completed",
-        finalText: "done",
-        rounds: 1,
-        toolCallCount: 0
+        kind: "completed",
+        output: { finalText: "done", rounds: 1, toolCallCount: 0 }
       },
       worktreePath: null
     });

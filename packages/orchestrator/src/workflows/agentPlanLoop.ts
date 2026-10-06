@@ -1,7 +1,6 @@
 import { condition } from "@temporalio/workflow";
 import { MAX_REPLAN_COUNT, accrueWorkingMs } from "@forge/core";
 import type * as activities from "../activities/index.js";
-import type { ExecuteAgentTaskResult } from "./executeAgentTaskWorkflow.js";
 import { draftToTasks, type TaskState } from "./agentWorkflowModel.js";
 import {
   collectTaskBuckets,
@@ -17,10 +16,16 @@ import {
   snapshotFromCtx,
   type PlanShortActs
 } from "./agentPlanPersist.js";
-import { handleEmptyInFlight, launchReadyTasks } from "./agentPlanLaunch.js";
+import {
+  applyExecutionResult,
+  handleEmptyInFlight,
+  launchReadyTasks,
+  resumeWaitingTask
+} from "./agentPlanLaunch.js";
 import { scheduleReadyTasks } from "./planScheduler.js";
 import type { InteractiveAgentArgs } from "./chatTurnHelpers.js";
 import type { PlanRunContext } from "./agentPlanTypes.js";
+import { createDefaultExecutorRegistry } from "./executors/index.js";
 
 export type { PlanRunContext, InFlight } from "./agentPlanTypes.js";
 
@@ -33,8 +38,10 @@ export function createPlanRunContext(opts: {
   short: PlanShortActs;
   planner: Pick<typeof activities, "repairPlan">;
   maxConcurrency: number;
+  tools?: Pick<typeof activities, "executeDirectTool">;
+  registry?: PlanRunContext["registry"];
 }): PlanRunContext {
-  return {
+  const ctx: PlanRunContext = {
     args: opts.args,
     workflowId: opts.workflowId,
     planId: opts.planId,
@@ -56,99 +63,23 @@ export function createPlanRunContext(opts: {
     toolCallCount: 0,
     finalText: "",
     maxConcurrency: opts.maxConcurrency,
-    planner: opts.planner
+    planner: opts.planner,
+    tools: opts.tools ?? ({} as PlanRunContext["tools"]),
+    registry: undefined as unknown as PlanRunContext["registry"]
   };
-}
-
-export async function applyChildResult(opts: {
-  ctx: PlanRunContext;
-  taskId: string;
-  result: ExecuteAgentTaskResult;
-  worktreePath: string | null;
-}): Promise<void> {
-  const task = opts.ctx.tasks.find((item) => item.id === opts.taskId);
-  if (!task) {
-    return;
-  }
-  task.status = opts.result.status;
-  if (opts.result.error) {
-    task.error = opts.result.error;
-  }
-  if (opts.result.waitReason) {
-    task.waitReason = opts.result.waitReason as TaskState["waitReason"];
-  }
-  opts.ctx.rounds += opts.result.rounds;
-  opts.ctx.toolCallCount += opts.result.toolCallCount;
-  if (opts.result.finalText) {
-    opts.ctx.finalText = opts.result.finalText;
-  }
-  await mergeCompletedWorktree(opts, task);
-}
-
-async function mergeCompletedWorktree(
-  opts: {
-    ctx: PlanRunContext;
-    taskId: string;
-    result: ExecuteAgentTaskResult;
-    worktreePath: string | null;
-  },
-  task: TaskState
-): Promise<void> {
-  if (opts.result.status !== "completed" || !opts.worktreePath) {
-    return;
-  }
-  const merge = await opts.ctx.short.mergeTaskWorktree({
-    sessionId: opts.ctx.args.sessionId,
-    taskId: opts.taskId,
-    taskWorktreePath: opts.worktreePath
-  });
-  if (merge.ok) {
-    return;
-  }
-  task.status = "waiting";
-  task.waitReason = {
-    kind: "merge_conflict",
-    payload: {
-      paths: merge.paths ?? [],
-      message: merge.message
-    }
-  };
-  await opts.ctx.short.publishMergeConflict({
-    turnId: opts.ctx.args.turnId,
-    status: "waiting_human",
-    paths: merge.paths ?? [],
-    originatingTaskIds: [opts.taskId]
-  });
-}
-
-function tickWorkingMs(ctx: PlanRunContext): void {
-  const now = Date.now();
-  ctx.workingMs = accrueWorkingMs({
-    previousWorkingMs: ctx.workingMs,
-    elapsedMs: now - ctx.lastTick,
-    workInFlight: ctx.inFlight.size > 0
-  });
-  ctx.lastTick = now;
-}
-
-async function maybeStopBudget(ctx: PlanRunContext): Promise<boolean> {
-  const stop = budgetStopReason(ctx);
-  if (!stop) {
-    return false;
-  }
-  ctx.planStatus = "failed";
-  await persistCtxPlan({
-    ctx,
-    status: "failed",
-    extras: { budgetStopReason: stop },
-    budgetStopReason: stop
-  });
-  await ctx.short.publishPlanStatus({
-    turnId: ctx.args.turnId,
-    status: "failed",
-    reason: stop
-  });
-  return true;
+  ctx.registry =
+    opts.registry ??
+    createDefaultExecutorRegistry(ctx, async (input) => {
+      if (!opts.tools?.executeDirectTool) {
+        return {
+          success: false,
+          output: "",
+          error: "executeDirectTool not configured"
+        };
+      }
+      return opts.tools.executeDirectTool(input);
+    });
+  return ctx;
 }
 
 async function maybeApplyAnswer(ctx: PlanRunContext): Promise<void> {
@@ -163,6 +94,10 @@ async function maybeApplyAnswer(ctx: PlanRunContext): Promise<void> {
     parts: [{ type: "text", text: answer.text }],
     turnId: ctx.args.turnId
   });
+  const payload = {
+    decision: answer.decision ?? "approve",
+    text: answer.text
+  };
   for (const t of ctx.tasks) {
     if (t.status !== "waiting") {
       continue;
@@ -170,19 +105,7 @@ async function maybeApplyAnswer(ctx: PlanRunContext): Promise<void> {
     if (answer.taskId && t.id !== answer.taskId) {
       continue;
     }
-    t.status = "pending";
-    t.waitReason = null;
-    t.error = undefined;
-    await ctx.short.persistTask({
-      planId: ctx.planId,
-      version: ctx.version,
-      taskId: t.id,
-      patch: { status: "pending", waitReason: null, error: null }
-    });
-    await ctx.short.publishTaskUpdated({
-      turnId: ctx.args.turnId,
-      task: { id: t.id, status: "pending" }
-    });
+    await resumeWaitingTask({ ctx, task: t, payload });
   }
   ctx.planStatus = "running";
   await ctx.short.publishPlanStatus({
@@ -210,7 +133,8 @@ async function replanFromFailures(opts: {
         description: t.description,
         executor: t.executor,
         dependencies: t.dependencies,
-        idempotent: t.idempotent
+        idempotent: t.idempotent,
+        ...(t.input !== undefined ? { input: t.input } : {})
       }))
     },
     errors: opts.buckets.failed.map(
@@ -233,6 +157,38 @@ async function replanFromFailures(opts: {
       plan: snapshotFromCtx({ ctx: opts.ctx, status: "running" })
     }
   });
+}
+
+function tickWorkingMs(ctx: PlanRunContext): void {
+  const now = Date.now();
+  ctx.workingMs = accrueWorkingMs({
+    previousWorkingMs: ctx.workingMs,
+    elapsedMs: now - ctx.lastTick,
+    workInFlight: ctx.inFlight.size > 0
+  });
+  ctx.lastTick = now;
+}
+
+async function maybeStopBudget(ctx: PlanRunContext): Promise<boolean> {
+  const stop = budgetStopReason(ctx);
+  if (!stop) {
+    return false;
+  }
+  ctx.planStatus = "failed";
+  await persistCtxPlan({
+    ctx,
+    status: "failed",
+    extras: {
+      budgetStopReason: stop as "time" | "tokens" | "cost"
+    },
+    budgetStopReason: stop
+  });
+  await ctx.short.publishPlanStatus({
+    turnId: ctx.args.turnId,
+    status: "failed",
+    reason: stop
+  });
+  return true;
 }
 
 async function maybeHandleFailed(
@@ -347,10 +303,20 @@ export async function runPlanExecutionLoop(ctx: PlanRunContext): Promise<void> {
       [...ctx.inFlight.values()].map((entry) => entry.resultPromise)
     );
     ctx.inFlight.delete(finished.taskId);
-    await applyChildResult({ ctx, ...finished });
+    await applyExecutionResult({
+      ctx,
+      taskId: finished.taskId,
+      result: finished.result,
+      worktreePath: finished.worktreePath
+    });
     await publishRunningSnapshot(ctx);
   }
   if (ctx.cancelRequested) {
     ctx.planStatus = "cancelled";
+    for (const t of ctx.tasks) {
+      if (t.status === "waiting" || t.status === "pending") {
+        t.status = "cancelled";
+      }
+    }
   }
 }

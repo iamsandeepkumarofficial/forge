@@ -1,16 +1,20 @@
-import type { QueuedFollowUp, WorkflowPlanSnapshot } from "@forge/core";
+import type {
+  ExecutionResult,
+  QueuedFollowUp,
+  WorkflowPlanSnapshot
+} from "@forge/core";
 import type * as activities from "../activities/index.js";
-import type { ExecuteAgentTaskResult } from "./executeAgentTaskWorkflow.js";
 import type { TaskState } from "./agentWorkflowModel.js";
 import type { PlanShortActs } from "./agentPlanPersist.js";
 import type { InteractiveAgentArgs } from "./chatTurnHelpers.js";
+import type { ExecutorRegistry } from "./executors/index.js";
 
 export type InFlight = {
   taskId: string;
   worktreePath: string | null;
   resultPromise: Promise<{
     taskId: string;
-    result: ExecuteAgentTaskResult;
+    result: ExecutionResult;
     worktreePath: string | null;
   }>;
 };
@@ -30,7 +34,7 @@ export type PlanRunContext = {
   short: PlanShortActs;
   planStatus: WorkflowPlanSnapshot["status"];
   inFlight: Map<string, InFlight>;
-  pendingAnswer: { text: string; taskId?: string } | null;
+  pendingAnswer: { text: string; taskId?: string; decision?: string } | null;
   cancelRequested: boolean;
   lastTick: number;
   rounds: number;
@@ -38,4 +42,6 @@ export type PlanRunContext = {
   finalText: string;
   maxConcurrency: number;
   planner: Pick<typeof activities, "repairPlan">;
+  registry: ExecutorRegistry;
+  tools: Pick<typeof activities, "executeDirectTool">;
 };
