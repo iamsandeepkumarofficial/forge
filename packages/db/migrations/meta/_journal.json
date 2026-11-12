@@ -162,6 +162,13 @@
       "when": 1785900000000,
       "tag": "0022_task_io_contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785905000000,
+      "tag": "0023_task_stream_turn",
+      "breakpoints": true
     }
   ]
 }

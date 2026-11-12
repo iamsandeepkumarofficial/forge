@@ -70,6 +70,10 @@ export { checkBudget, accrueWorkingMs, type BudgetState } from "./budget.js";
 export { estimateCostUsd, PRICE_PER_MTOK_USD } from "./priceTable.js";
 export { PLAN_SSE_EVENTS, type PlanSseEventType } from "./sseEvents.js";
 export {
+  AGENT_TASK_STREAM_WORKFLOW_PREFIX,
+  isAgentTaskStreamWorkflowId
+} from "./taskStream.js";
+export {
   PLANNING_GATE_SYSTEM,
   PLANNING_GATE_TRACE_PREVIEW_CHARS,
   previewForTrace,

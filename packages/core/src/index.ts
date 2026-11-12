@@ -80,6 +80,8 @@ export {
   estimateCostUsd,
   PRICE_PER_MTOK_USD,
   PLAN_SSE_EVENTS,
+  AGENT_TASK_STREAM_WORKFLOW_PREFIX,
+  isAgentTaskStreamWorkflowId,
   PLANNING_GATE_SYSTEM,
   PLANNING_GATE_TRACE_PREVIEW_CHARS,
   previewForTrace,

@@ -119,6 +119,7 @@ export const workflowTasks = pgTable(
     attemptCount: integer("attempt_count").notNull().default(0),
     childWorkflowId: text("child_workflow_id"),
     worktreePath: text("worktree_path"),
+    streamTurnId: text("stream_turn_id"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true })
   },

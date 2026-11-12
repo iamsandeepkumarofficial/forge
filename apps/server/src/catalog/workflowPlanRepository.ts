@@ -192,6 +192,7 @@ export class WorkflowPlanRepository {
       attemptCount: number;
       childWorkflowId: string | null;
       worktreePath: string | null;
+      streamTurnId: string | null;
       startedAt: Date | null;
       finishedAt: Date | null;
     }>;

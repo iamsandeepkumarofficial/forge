@@ -182,6 +182,12 @@ export async function handlePatchPlanTask(options: {
             : body.worktreePath === null
               ? null
               : String(body.worktreePath),
+        streamTurnId:
+          body.streamTurnId === undefined
+            ? undefined
+            : body.streamTurnId === null
+              ? null
+              : String(body.streamTurnId),
         startedAt:
           body.startedAt === undefined
             ? undefined
