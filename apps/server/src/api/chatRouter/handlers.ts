@@ -22,6 +22,7 @@ export {
 } from "./sessionCopyHandlers.js";
 export { handleGetCurrentPlan } from "./planHandlers.js";
 export { handleStreamTurn, handleCancelTurn } from "./streamHandlers.js";
+export { handleTurnAnswer } from "./turnAnswer.js";
 
 const N_202 = 202;
 const N_400 = 400;
@@ -333,7 +334,7 @@ export async function handleStartChat(options: {
   }
 }
 
-export async function handleTurnAnswer(options: {
+export async function handleStartPlan(options: {
   req: Request;
   res: Response;
   features: ChatFeatureRepository;
@@ -343,13 +344,6 @@ export async function handleTurnAnswer(options: {
   const sessionId = String(req.params.sessionId ?? "");
   const turnId = String(req.params.turnId ?? "");
   const userId = (req as AuthedRequest).forgeUser.id;
-  const body = req.body as Record<string, unknown> | undefined;
-  const text = typeof body?.text === "string" ? body.text.trim() : "";
-  const taskId = typeof body?.taskId === "string" ? body.taskId : undefined;
-  if (!text) {
-    res.status(N_400).json({ error: "text required" });
-    return;
-  }
   try {
     const card = await features.getBySessionId(sessionId);
     if (card && card.userId !== userId) {
@@ -368,10 +362,7 @@ export async function handleTurnAnswer(options: {
       connection,
       namespace: process.env.TEMPORAL_NAMESPACE || "default"
     });
-    await client.workflow.getHandle(turn.workflowId).signal("userAnswer", {
-      text,
-      taskId
-    });
+    await client.workflow.getHandle(turn.workflowId).signal("startPlan");
     res.json({ ok: true });
   } catch (err) {
     res

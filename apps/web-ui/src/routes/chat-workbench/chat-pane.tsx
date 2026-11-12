@@ -32,6 +32,7 @@ type ChatPaneProps = {
   onOpenHelp?: () => void;
   onOpenPlan?: () => void;
   onPlanChange?: (plan: PlanCardModel | null) => void;
+  onActiveTurnIdChange?: (turnId: string | null) => void;
 };
 
 async function submitAskUserAnswer(options: {
@@ -288,15 +289,30 @@ function useChatMessageActions(options: {
   return { handleBranchAssistant, handleRevertUserMessage };
 }
 
+function startPlanForTurn(
+  sessionId: string,
+  turnId: string | null | undefined
+) {
+  if (!turnId) return undefined;
+  return async () => {
+    const { startChatPlan } = await import("../../lib/chat-agent.js");
+    await startChatPlan({ sessionId, turnId });
+  };
+}
+
 function ChatPaneWired(options: {
   props: ChatPaneProps;
   c: ReturnType<typeof useChatPaneControllers>;
 }) {
   const { props, c } = options;
   const onPlanChange = props.onPlanChange;
+  const onActiveTurnIdChange = props.onActiveTurnIdChange;
   useEffect(() => {
     onPlanChange?.(c.session.plan ?? null);
   }, [onPlanChange, c.session.plan]);
+  useEffect(() => {
+    onActiveTurnIdChange?.(c.session.activeTurnId ?? null);
+  }, [onActiveTurnIdChange, c.session.activeTurnId]);
   return (
     <ChatPaneView
       sessionId={props.sessionId}
@@ -318,6 +334,7 @@ function ChatPaneWired(options: {
       clearError={c.session.clearError}
       plan={c.session.plan}
       onOpenPlan={props.onOpenPlan}
+      onBuildPlan={startPlanForTurn(props.sessionId, c.session.activeTurnId)}
       input={c.session.input}
       setInput={c.session.setInput}
       onSend={() => void c.session.handleSend()}

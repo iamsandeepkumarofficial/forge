@@ -32,7 +32,9 @@ export async function planJsonWithLiveTasks(
     idempotent: t.idempotent,
     attemptCount: t.attemptCount,
     waitReason: t.waitReason,
-    error: t.error
+    error: t.error,
+    ...(t.streamTurnId ? { streamTurnId: t.streamTurnId } : {}),
+    ...(t.outputSchema ? { outputSchema: t.outputSchema } : {})
   }));
   const base =
     row.snapshot && typeof row.snapshot === "object"

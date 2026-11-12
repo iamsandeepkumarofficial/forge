@@ -12,9 +12,12 @@ const PLAN_EVENTS = {
   replan: "replan"
 } as const;
 
-function taskPatchFromPayload(
-  payload: Record<string, unknown>
-): { id: string; status?: string; error?: string } | null {
+function taskPatchFromPayload(payload: Record<string, unknown>): {
+  id: string;
+  status?: string;
+  error?: string;
+  streamTurnId?: string;
+} | null {
   const nested =
     payload.task && typeof payload.task === "object"
       ? (payload.task as Record<string, unknown>)
@@ -32,7 +35,11 @@ function taskPatchFromPayload(
     (typeof nested?.error === "string" && nested.error) ||
     (typeof payload.error === "string" && payload.error) ||
     undefined;
-  return { id, status, error };
+  const streamTurnId =
+    (typeof nested?.streamTurnId === "string" && nested.streamTurnId) ||
+    (typeof payload.streamTurnId === "string" && payload.streamTurnId) ||
+    undefined;
+  return { id, status, error, streamTurnId };
 }
 
 function planFromPublishedPayload(
@@ -92,7 +99,34 @@ export function applyPlanStreamEvent(input: {
               status: patch.status
                 ? (patch.status as PlanCardTaskStatus)
                 : t.status,
-              error: patch.error ?? t.error
+              error: patch.error ?? t.error,
+              ...(patch.streamTurnId
+                ? { streamTurnId: patch.streamTurnId }
+                : {})
+            }
+          : t
+      )
+    };
+  }
+  if (eventType === "task_started") {
+    if (!prev) return prev;
+    const taskId =
+      (typeof payload.taskId === "string" && payload.taskId) ||
+      (typeof payload.id === "string" && payload.id) ||
+      "";
+    if (!taskId) return prev;
+    const streamTurnId =
+      typeof payload.streamTurnId === "string"
+        ? payload.streamTurnId
+        : undefined;
+    return {
+      ...prev,
+      tasks: prev.tasks.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              status: "running",
+              ...(streamTurnId ? { streamTurnId } : {})
             }
           : t
       )
@@ -141,9 +175,17 @@ export function mergePlanPreferringProgress(
       const nextRank = TASK_STATUS_RANK[t.status] ?? 0;
       const prevRank = TASK_STATUS_RANK[older.status] ?? 0;
       if (prevRank > nextRank) {
-        return { ...t, status: older.status, error: older.error ?? t.error };
+        return {
+          ...t,
+          status: older.status,
+          error: older.error ?? t.error,
+          streamTurnId: older.streamTurnId ?? t.streamTurnId
+        };
       }
-      return t;
+      return {
+        ...t,
+        streamTurnId: t.streamTurnId ?? older.streamTurnId
+      };
     }),
     queuedFollowUp: next.queuedFollowUp ?? prev.queuedFollowUp
   };
