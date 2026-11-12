@@ -72,7 +72,7 @@ Agent-internal `ask_user` is unchanged: child returns waiting; answer → pendin
 
 ## Out of scope
 
-Task I/O graph, retry redesign, replan changes, worktree isolation redesign, conflict resolution, agent `resumeTask`, webhooks, schedules, additional executor kinds.
+Task I/O contracts (schemas, artifacts, structured completion) — see [RFC 0013](./0013-task-io-contracts.md). Also out of scope here: retry redesign, replan changes, worktree isolation redesign, conflict resolution, agent `resumeTask`, webhooks, schedules, additional executor kinds.
 
 ## Specs
 
