@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  PLANNING_GATE_TRACE_PREVIEW_CHARS,
   parsePlanningGateResult,
   planningGateShortcut,
+  previewForTrace,
   resolvePlanningGate
 } from "./planningGate.js";
 
@@ -64,6 +66,18 @@ describe("parsePlanningGateResult", () => {
     assert.equal(parsePlanningGateResult("not json").needsPlanning, false);
     assert.equal(parsePlanningGateResult(null).needsPlanning, false);
     assert.equal(parsePlanningGateResult({}).needsPlanning, false);
+  });
+});
+
+describe("previewForTrace", () => {
+  it("truncates long text with a marker", () => {
+    const long = "a".repeat(PLANNING_GATE_TRACE_PREVIEW_CHARS + 1);
+    const preview = previewForTrace(long);
+    assert.equal(
+      preview.startsWith("a".repeat(PLANNING_GATE_TRACE_PREVIEW_CHARS)),
+      true
+    );
+    assert.match(preview, /truncated 1 chars/);
   });
 });
 

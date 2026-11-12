@@ -1,9 +1,29 @@
+export type PlanningGateTrace = {
+  source: "shortcut" | "llm" | "gate_error";
+  provider?: string;
+  model?: string;
+  maxOutputTokens?: number;
+  promptPreview?: string;
+  llmRawPreview?: string;
+  llmRawChars?: number;
+};
+
 export type PlanningGateResult = {
   needsPlanning: boolean;
   reason: string;
+  trace?: PlanningGateTrace;
 };
 
 const GATE_REASON_MAX = 200;
+export const PLANNING_GATE_TRACE_PREVIEW_CHARS = 2000;
+
+export function previewForTrace(
+  text: string,
+  max = PLANNING_GATE_TRACE_PREVIEW_CHARS
+): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}…[truncated ${text.length - max} chars]`;
+}
 
 export const PLANNING_GATE_SYSTEM = `You are a planning gate for Forge, a coding agent.
 Decide whether the user request needs an explicit multi-step plan (Planner → task DAG → Executor)
