@@ -20,7 +20,8 @@ import {
   applyExecutionResult,
   handleEmptyInFlight,
   launchReadyTasks,
-  resumeWaitingTask
+  resumeWaitingTask,
+  serializeAgentStarts
 } from "./agentPlanLaunch.js";
 import { scheduleReadyTasks } from "./planScheduler.js";
 import type { InteractiveAgentArgs } from "./chatTurnHelpers.js";
@@ -34,11 +35,14 @@ export function createPlanRunContext(opts: {
   workflowId: string;
   planId: string;
   goal: string;
+  sections?: PlanRunContext["sections"];
   tasks: TaskState[];
   short: PlanShortActs;
   planner: Pick<typeof activities, "repairPlan">;
   maxConcurrency: number;
   tools?: Pick<typeof activities, "executeDirectTool">;
+  react?: PlanRunContext["react"];
+  forceChildIsolation?: boolean;
   registry?: PlanRunContext["registry"];
 }): PlanRunContext {
   const ctx: PlanRunContext = {
@@ -46,6 +50,8 @@ export function createPlanRunContext(opts: {
     workflowId: opts.workflowId,
     planId: opts.planId,
     goal: opts.goal,
+    ...(opts.sections?.length ? { sections: opts.sections } : {}),
+    ...(opts.forceChildIsolation ? { forceChildIsolation: true } : {}),
     version: 1,
     replanCount: 0,
     tasks: opts.tasks,
@@ -57,6 +63,7 @@ export function createPlanRunContext(opts: {
     planStatus: "running",
     inFlight: new Map(),
     pendingAnswer: null,
+    buildRequested: false,
     cancelRequested: false,
     lastTick: Date.now(),
     rounds: 0,
@@ -65,6 +72,7 @@ export function createPlanRunContext(opts: {
     maxConcurrency: opts.maxConcurrency,
     planner: opts.planner,
     tools: opts.tools ?? ({} as PlanRunContext["tools"]),
+    ...(opts.react ? { react: opts.react } : {}),
     registry: undefined as unknown as PlanRunContext["registry"]
   };
   ctx.registry =
@@ -88,16 +96,31 @@ async function maybeApplyAnswer(ctx: PlanRunContext): Promise<void> {
     return;
   }
   ctx.pendingAnswer = null;
-  await ctx.short.appendChatMessage({
-    sessionId: ctx.args.sessionId,
-    role: "user",
-    parts: [{ type: "text", text: answer.text }],
-    turnId: ctx.args.turnId
-  });
-  const payload = {
-    decision: answer.decision ?? "approve",
-    text: answer.text
-  };
+  const text =
+    typeof answer.text === "string" && answer.text.trim()
+      ? answer.text.trim()
+      : answer.payload !== undefined
+        ? JSON.stringify(answer.payload)
+        : "";
+  if (text) {
+    await ctx.short.appendChatMessage({
+      sessionId: ctx.args.sessionId,
+      role: "user",
+      parts: [{ type: "text", text }],
+      turnId: ctx.args.turnId
+    });
+  }
+  const payload =
+    answer.payload !== undefined
+      ? {
+          decision: answer.decision ?? "approve",
+          payload: answer.payload,
+          ...(answer.text !== undefined ? { text: answer.text } : {})
+        }
+      : {
+          decision: answer.decision ?? "approve",
+          text: answer.text ?? ""
+        };
   for (const t of ctx.tasks) {
     if (t.status !== "waiting") {
       continue;
@@ -128,12 +151,18 @@ async function replanFromFailures(opts: {
     model: opts.ctx.args.model,
     draft: {
       goal: opts.ctx.goal,
+      ...(opts.ctx.sections?.length ? { sections: opts.ctx.sections } : {}),
       tasks: opts.ctx.tasks.map((t) => ({
         id: t.id,
         description: t.description,
         executor: t.executor,
         dependencies: t.dependencies,
         idempotent: t.idempotent,
+        ...(t.isolation ? { isolation: t.isolation } : {}),
+        ...(t.rationale ? { rationale: t.rationale } : {}),
+        inputSchema: t.inputSchema,
+        outputSchema: t.outputSchema,
+        ...(t.inputMappings?.length ? { inputMappings: t.inputMappings } : {}),
         ...(t.input !== undefined ? { input: t.input } : {})
       }))
     },
@@ -142,6 +171,9 @@ async function replanFromFailures(opts: {
     )
   });
   opts.ctx.goal = repaired.goal;
+  if (repaired.sections?.length) {
+    opts.ctx.sections = repaired.sections;
+  }
   opts.ctx.tasks = keepCompletedOnReplan({
     next: draftToTasks(repaired),
     completedIds: opts.buckets.completed
@@ -275,14 +307,17 @@ async function finishTick(
     instanceRunningCount: ctx.inFlight.size,
     maxPerRun: ctx.maxConcurrency
   });
+  const toStart = canStartNew
+    ? serializeAgentStarts({ ctx, toStart: decision.toStart })
+    : [];
   await launchReadyTasks({
     ctx,
-    toStart: canStartNew ? decision.toStart : []
+    toStart
   });
   const empty = await handleEmptyInFlight({
     ctx,
     buckets,
-    readyCount: decision.toStart.length
+    readyCount: toStart.length
   });
   if (empty) {
     return empty;

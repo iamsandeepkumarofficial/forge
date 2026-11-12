@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ToolExecutor } from "./tool.js";
 import { draftToTasks } from "../agentWorkflowModel.js";
+import { withSchemas } from "../testTaskDraft.js";
 
 describe("ToolExecutor", () => {
   it("fails without toolName and runs named tools", async () => {
@@ -10,16 +11,19 @@ describe("ToolExecutor", () => {
       calls.push(input.toolName);
       return { success: true, output: "ok" };
     });
-    const bare = draftToTasks({
-      goal: "g",
-      tasks: [{ id: "t", description: "x", executor: "tool" }]
-    })[0]!;
+    const bare = draftToTasks(
+      withSchemas({
+        goal: "g",
+        tasks: [{ id: "t", description: "x", executor: "tool" }]
+      })
+    )[0]!;
     const context = {
       workflowId: "w",
       sessionId: "s",
       turnId: "t",
       planId: "p",
-      taskId: "t"
+      taskId: "t",
+      input: {}
     };
     assert.equal((await tool.execute({ task: bare, context })).kind, "failed");
     const named = { ...bare, input: { toolName: "list_files" } };

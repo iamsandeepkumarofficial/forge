@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { emptyObjectSchema } from "@forge/core";
 import { PLANNER_MAX_ATTEMPTS, planDraftSchema } from "./planInvoke.js";
+
+const schema = emptyObjectSchema();
 
 describe("planInvoke", () => {
   it("caps planner attempts", () => {
@@ -13,7 +16,9 @@ describe("planInvoke", () => {
           description: "Read the repo",
           executor: "agent",
           dependencies: [],
-          idempotent: true
+          idempotent: true,
+          inputSchema: schema,
+          outputSchema: schema
         }
       ]
     });

@@ -14,7 +14,13 @@ export {
   toolNeedsApproval,
   waitingApproval
 } from "./types.js";
-export { AgentExecutor, type AgentExecutorDeps } from "./agent.js";
+export {
+  AgentExecutor,
+  runChildAgentTask,
+  runInlineAgentTask,
+  type AgentExecutorDeps
+} from "./agent.js";
+export { buildTaskBrief, type TaskBriefVoice } from "../taskBrief.js";
 export { HumanExecutor } from "./human.js";
 export { ToolExecutor } from "./tool.js";
 export { ExecutorRegistry } from "./registry.js";

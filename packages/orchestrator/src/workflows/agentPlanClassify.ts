@@ -58,15 +58,27 @@ export function keepCompletedOnReplan(opts: {
 
 export function formatPlanMarkdown(opts: {
   goal: string;
+  sections?: Array<{ title: string; body: string }>;
   tasks: TaskState[];
 }): string {
+  const narrative = (opts.sections ?? []).map(
+    (s) => `**${s.title}:** ${s.body}`
+  );
   const items = opts.tasks.map((t, i) => {
     const deps = t.dependencies.length
       ? ` _(depends on: ${t.dependencies.join(", ")})_`
       : "";
-    return `${i + 1}. **${t.id}** (${t.executor}) — ${t.description}${deps}`;
+    const rationale = t.rationale ? `\n   - _${t.rationale}_` : "";
+    return `${i + 1}. **${t.id}** (${t.executor}) — ${t.description}${deps}${rationale}`;
   });
-  return ["## Plan", "", `**Goal:** ${opts.goal}`, "", ...items].join("\n");
+  return [
+    "## Plan",
+    "",
+    `**Goal:** ${opts.goal}`,
+    ...(narrative.length ? ["", ...narrative] : []),
+    "",
+    ...items
+  ].join("\n");
 }
 
 export function planTurnSummary(opts: {
@@ -99,6 +111,11 @@ export function tasksForPersist(tasks: TaskState[]) {
     dependencies: t.dependencies,
     status: t.status,
     idempotent: t.idempotent,
+    ...(t.isolation ? { isolation: t.isolation } : {}),
+    ...(t.rationale ? { rationale: t.rationale } : {}),
+    inputSchema: t.inputSchema,
+    outputSchema: t.outputSchema,
+    ...(t.inputMappings?.length ? { inputMappings: t.inputMappings } : {}),
     ...(t.input !== undefined ? { input: t.input } : {})
   }));
 }

@@ -12,6 +12,8 @@ import type { ChatAgentMode } from "./chatTurnHelpers.js";
 export type TaskState = WorkflowTaskSnapshot & {
   attemptCount: number;
   worktreePath?: string | null;
+
+  streamTurnId?: string | null;
   input?: unknown;
   output?: unknown;
 };
@@ -24,10 +26,13 @@ export function toSnapshot(opts: {
   replanCount: number;
   tasks: TaskState[];
   extras?: Partial<WorkflowPlanSnapshot>;
+  sections?: WorkflowPlanSnapshot["sections"];
 }): WorkflowPlanSnapshot {
+  const sections = opts.sections ?? opts.extras?.sections;
   return {
     id: opts.planId,
     goal: opts.goal,
+    ...(sections?.length ? { sections } : {}),
     status: opts.status,
     version: opts.version,
     replanCount: opts.replanCount,
@@ -50,7 +55,12 @@ export function toSnapshot(opts: {
       idempotent: t.idempotent,
       attemptCount: t.attemptCount,
       waitReason: t.waitReason,
-      error: t.error
+      error: t.error,
+      ...(t.isolation ? { isolation: t.isolation } : {}),
+      ...(t.rationale ? { rationale: t.rationale } : {}),
+      inputSchema: t.inputSchema,
+      outputSchema: t.outputSchema,
+      ...(t.inputMappings?.length ? { inputMappings: t.inputMappings } : {})
     }))
   };
 }
@@ -65,6 +75,11 @@ export function draftToTasks(draft: WorkflowPlanDraft): TaskState[] {
     idempotent: t.idempotent ?? false,
     attemptCount: 0,
     waitReason: null,
+    ...(t.isolation ? { isolation: t.isolation } : {}),
+    ...(t.rationale ? { rationale: t.rationale } : {}),
+    inputSchema: t.inputSchema,
+    outputSchema: t.outputSchema,
+    ...(t.inputMappings?.length ? { inputMappings: t.inputMappings } : {}),
     ...(t.input !== undefined ? { input: t.input } : {})
   }));
 }

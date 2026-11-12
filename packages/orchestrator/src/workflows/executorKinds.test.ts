@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { draftToTasks } from "./agentWorkflowModel.js";
 import { createPlanRunContext } from "./agentPlanLoop.js";
-import { launchReadyTasks, resumeWaitingTask } from "./agentPlanLaunch.js";
+import {
+  applyExecutionResult,
+  launchReadyTasks,
+  resumeWaitingTask
+} from "./agentPlanLaunch.js";
 import {
   AgentExecutor,
   ExecutorRegistry,
@@ -12,7 +16,8 @@ import {
   type TaskExecutor
 } from "./executors/index.js";
 import type { TaskState } from "./agentWorkflowModel.js";
-import type { TaskExecutionContext } from "@forge/core";
+import { withSchemas } from "./testTaskDraft.js";
+import { emptyObjectSchema, type TaskExecutionContext } from "@forge/core";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -37,7 +42,23 @@ function stubShort() {
       persistPlan: async () => ({ plan: {} }),
       publishPlanSnapshot: async () => undefined,
       publishMergeConflict: async () => undefined,
-      appendPlanChunk: async () => undefined
+      appendPlanChunk: async () => undefined,
+      createTaskStreamTurn: async () => ({
+        turnId: "stream-stub",
+        workflowId: "agent-task-stream-stub"
+      }),
+      prepareTaskInput: async (input: { staticInput?: unknown }) => ({
+        ok: true as const,
+        input: input.staticInput ?? {}
+      }),
+      spillTaskOutput: async (input: { value: unknown }) => ({
+        kind: "value" as const,
+        value: input.value
+      }),
+      loadTaskArtifact: async () => ({
+        ok: false as const,
+        error: "not found"
+      })
     }
   };
 }
@@ -48,7 +69,8 @@ function ctxBase(taskId: string): TaskExecutionContext {
     sessionId: "s",
     turnId: "t",
     planId: "p",
-    taskId
+    taskId,
+    input: {}
   };
 }
 
@@ -61,10 +83,12 @@ describe("executor kinds", () => {
 
   it("human execute waits then resume completes", async () => {
     const human = new HumanExecutor();
-    const task = draftToTasks({
-      goal: "g",
-      tasks: [{ id: "h", description: "Approve?", executor: "human" }]
-    })[0]!;
+    const task = draftToTasks(
+      withSchemas({
+        goal: "g",
+        tasks: [{ id: "h", description: "Approve?", executor: "human" }]
+      })
+    )[0]!;
     const waiting = await human.execute({ task, context: ctxBase("h") });
     assert.equal(waiting.kind, "waiting");
     const done = await human.resume({
@@ -77,10 +101,12 @@ describe("executor kinds", () => {
 
   it("human reject fails and does not complete", async () => {
     const human = new HumanExecutor();
-    const task = draftToTasks({
-      goal: "g",
-      tasks: [{ id: "h", description: "Approve?", executor: "human" }]
-    })[0]!;
+    const task = draftToTasks(
+      withSchemas({
+        goal: "g",
+        tasks: [{ id: "h", description: "Approve?", executor: "human" }]
+      })
+    )[0]!;
     const rejected = await human.resume({
       task,
       payload: { decision: "reject" },
@@ -94,10 +120,12 @@ describe("executor kinds", () => {
       success: true,
       output: "ok"
     }));
-    const task = draftToTasks({
-      goal: "g",
-      tasks: [{ id: "t1", description: "Run", executor: "tool" }]
-    })[0]!;
+    const task = draftToTasks(
+      withSchemas({
+        goal: "g",
+        tasks: [{ id: "t1", description: "Run", executor: "tool" }]
+      })
+    )[0]!;
     const result = await tool.execute({ task, context: ctxBase("t1") });
     assert.equal(result.kind, "failed");
     assert.match(result.error, /toolName/);
@@ -110,17 +138,19 @@ describe("executor kinds", () => {
       return { success: true, output: "ok" };
     });
     const task: TaskState = {
-      ...draftToTasks({
-        goal: "g",
-        tasks: [
-          {
-            id: "t1",
-            description: "List",
-            executor: "tool",
-            input: { toolName: "list_files" }
-          }
-        ]
-      })[0]!,
+      ...draftToTasks(
+        withSchemas({
+          goal: "g",
+          tasks: [
+            {
+              id: "t1",
+              description: "List",
+              executor: "tool",
+              input: { toolName: "list_files" }
+            }
+          ]
+        })
+      )[0]!,
       input: { toolName: "list_files" }
     };
     const result = await tool.execute({ task, context: ctxBase("t1") });
@@ -135,17 +165,19 @@ describe("executor kinds", () => {
       return { success: true, output: "ok" };
     });
     const task: TaskState = {
-      ...draftToTasks({
-        goal: "g",
-        tasks: [
-          {
-            id: "t1",
-            description: "Install",
-            executor: "tool",
-            input: { toolName: "install_project_infra" }
-          }
-        ]
-      })[0]!,
+      ...draftToTasks(
+        withSchemas({
+          goal: "g",
+          tasks: [
+            {
+              id: "t1",
+              description: "Install",
+              executor: "tool",
+              input: { toolName: "install_project_infra" }
+            }
+          ]
+        })
+      )[0]!,
       input: { toolName: "install_project_infra" }
     };
     const result = await tool.execute({ task, context: ctxBase("t1") });
@@ -175,7 +207,9 @@ describe("executor kinds", () => {
           status: "pending",
           idempotent: false,
           attemptCount: 0,
-          waitReason: null
+          waitReason: null,
+          inputSchema: emptyObjectSchema(),
+          outputSchema: emptyObjectSchema()
         }
       ],
       short: short as never,
@@ -191,8 +225,11 @@ describe("executor kinds", () => {
 
   it("fake executor works without engine launch changes", async () => {
     class FakeExecutor implements TaskExecutor {
-      async execute(): Promise<{ kind: "completed"; output: string }> {
-        return { kind: "completed", output: "fake-ok" };
+      async execute(): Promise<{
+        kind: "completed";
+        output: { kind: "value"; value: Record<string, never> };
+      }> {
+        return { kind: "completed", output: { kind: "value", value: {} } };
       }
     }
     const { short } = stubShort();
@@ -211,10 +248,12 @@ describe("executor kinds", () => {
       workflowId: "wf",
       planId: "p1",
       goal: "g",
-      tasks: draftToTasks({
-        goal: "g",
-        tasks: [{ id: "a", description: "Fake", executor: "agent" }]
-      }),
+      tasks: draftToTasks(
+        withSchemas({
+          goal: "g",
+          tasks: [{ id: "a", description: "Fake", executor: "agent" }]
+        })
+      ),
       short: short as never,
       planner: {} as never,
       maxConcurrency: 1,
@@ -224,7 +263,10 @@ describe("executor kinds", () => {
     assert.equal(ctx.inFlight.size, 1);
     const finished = await ctx.inFlight.get("a")!.resultPromise;
     assert.equal(finished.result.kind, "completed");
-    assert.equal((finished.result as { output?: string }).output, "fake-ok");
+    assert.deepEqual((finished.result as { output?: unknown }).output, {
+      kind: "value",
+      value: {}
+    });
   });
 
   it("human completion unblocks a dependent via resume", async () => {
@@ -246,19 +288,21 @@ describe("executor kinds", () => {
       workflowId: "wf",
       planId: "p1",
       goal: "g",
-      tasks: draftToTasks({
-        goal: "g",
-        tasks: [
-          { id: "approval", description: "OK?", executor: "human" },
-          {
-            id: "publish",
-            description: "Publish",
-            executor: "tool",
-            dependencies: ["approval"],
-            input: { toolName: "list_files" }
-          }
-        ]
-      }),
+      tasks: draftToTasks(
+        withSchemas({
+          goal: "g",
+          tasks: [
+            { id: "approval", description: "OK?", executor: "human" },
+            {
+              id: "publish",
+              description: "Publish",
+              executor: "tool",
+              dependencies: ["approval"],
+              input: { toolName: "list_files" }
+            }
+          ]
+        })
+      ),
       short: short as never,
       planner: {} as never,
       maxConcurrency: 1,
@@ -275,6 +319,152 @@ describe("executor kinds", () => {
     assert.equal(ctx.tasks[0]?.status, "completed");
   });
 
+  it("root tool envelope skips closed inputSchema and still runs", async () => {
+    const calls: string[] = [];
+    const { short } = stubShort();
+    const registry = new ExecutorRegistry().register(
+      "tool",
+      new ToolExecutor(async (input) => {
+        calls.push(input.toolName);
+        return { success: true, output: "{}" };
+      })
+    );
+    const tasks = draftToTasks(
+      withSchemas({
+        goal: "g",
+        tasks: [
+          {
+            id: "list",
+            description: "List files",
+            executor: "tool",
+            input: { toolName: "list_files", args: { path: "." } }
+          }
+        ]
+      })
+    );
+    const ctx = createPlanRunContext({
+      args: {
+        sessionId: "s",
+        turnId: "t",
+        userText: "hi",
+        mode: "agent",
+        provider: "openai"
+      },
+      workflowId: "wf",
+      planId: "p1",
+      goal: "g",
+      tasks,
+      short: short as never,
+      planner: {} as never,
+      maxConcurrency: 1,
+      registry
+    });
+    await launchReadyTasks({ ctx, toStart: ["list"] });
+    const finished = await ctx.inFlight.get("list")!.resultPromise;
+    assert.equal(finished.result.kind, "completed");
+    assert.deepEqual(calls, ["list_files"]);
+    assert.equal(
+      (ctx.tasks[0]?.input as { toolName?: string }).toolName,
+      "list_files"
+    );
+    assert.notEqual(ctx.tasks[0]?.status, "failed");
+  });
+
+  it("reuses a running child stream across wait and opens a new one after failure", async () => {
+    const { short } = stubShort();
+    let created = 0;
+    short.createTaskStreamTurn = async () => {
+      created += 1;
+      return {
+        turnId: `stream-${created}`,
+        workflowId: `agent-task-stream-${created}`
+      };
+    };
+    class PauseThenFail implements TaskExecutor {
+      calls = 0;
+      async execute() {
+        this.calls += 1;
+        if (this.calls === 1) {
+          return {
+            kind: "waiting" as const,
+            waitReason: { kind: "ask_user" as const, payload: { taskId: "a" } }
+          };
+        }
+        return { kind: "failed" as const, error: "boom" };
+      }
+    }
+    const executor = new PauseThenFail();
+    const tasks = draftToTasks(
+      withSchemas({
+        goal: "g",
+        tasks: [
+          {
+            id: "a",
+            description: "Research",
+            executor: "agent",
+            isolation: "child"
+          }
+        ]
+      })
+    );
+    const ctx = createPlanRunContext({
+      args: {
+        sessionId: "s",
+        turnId: "t",
+        userText: "hi",
+        mode: "agent",
+        provider: "openai"
+      },
+      workflowId: "wf",
+      planId: "p1",
+      goal: "g",
+      tasks,
+      short: short as never,
+      planner: {} as never,
+      maxConcurrency: 1,
+      registry: new ExecutorRegistry().register("agent", executor)
+    });
+
+    await launchReadyTasks({ ctx, toStart: ["a"] });
+    let finished = await ctx.inFlight.get("a")!.resultPromise;
+    await applyExecutionResult({
+      ctx,
+      taskId: "a",
+      result: finished.result,
+      worktreePath: null
+    });
+    assert.equal(ctx.tasks[0]?.status, "waiting");
+    assert.equal(ctx.tasks[0]?.streamTurnId, "stream-1");
+    assert.equal(created, 1);
+
+    await resumeWaitingTask({
+      ctx,
+      task: ctx.tasks[0]!,
+      payload: { decision: "approve", text: "go on" }
+    });
+    assert.equal(ctx.tasks[0]?.status, "pending");
+    ctx.inFlight.delete("a");
+    await launchReadyTasks({ ctx, toStart: ["a"] });
+    assert.equal(created, 1);
+    assert.equal(ctx.tasks[0]?.streamTurnId, "stream-1");
+
+    finished = await ctx.inFlight.get("a")!.resultPromise;
+    await applyExecutionResult({
+      ctx,
+      taskId: "a",
+      result: finished.result,
+      worktreePath: null
+    });
+    assert.equal(ctx.tasks[0]?.status, "failed");
+    assert.equal(ctx.tasks[0]?.streamTurnId, null);
+
+    ctx.tasks[0]!.status = "pending";
+    ctx.inFlight.delete("a");
+    await launchReadyTasks({ ctx, toStart: ["a"] });
+    assert.equal(created, 2);
+    assert.equal(ctx.tasks[0]?.streamTurnId, "stream-2");
+  });
+
   it("AgentExecutor class does not import ToolExecutor", async () => {
     const agentPath = path.join(
       path.dirname(fileURLToPath(import.meta.url)),
@@ -284,6 +474,8 @@ describe("executor kinds", () => {
     const src = await readFile(agentPath, "utf8");
     assert.equal(src.includes("ToolExecutor"), false);
     assert.equal(src.includes("executeDirectTool"), false);
+    assert.equal(src.includes("startChild"), true);
+    assert.equal(src.includes("effectiveIsolation"), true);
     assert.equal(typeof AgentExecutor, "function");
   });
 });

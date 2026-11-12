@@ -3,7 +3,8 @@ import {
   isCancellation,
   workflowInfo,
   defineSignal,
-  setHandler
+  setHandler,
+  condition
 } from "@temporalio/workflow";
 import {
   MAX_AGENTS_PER_RUN,
@@ -36,14 +37,24 @@ import {
   runPlanExecutionLoop,
   type PlanRunContext
 } from "./agentPlanLoop.js";
+import { userRequestsSubAgents } from "./taskIsolation.js";
 
 export type { InteractiveAgentArgs };
 
 export const queueFollowUpSignal =
   defineSignal<[QueuedFollowUp]>("queueFollowUp");
 export const forceSendSignal = defineSignal("forceSend");
-export const userAnswerSignal =
-  defineSignal<[{ text: string; taskId?: string }]>("userAnswer");
+export const userAnswerSignal = defineSignal<
+  [
+    {
+      text?: string;
+      taskId?: string;
+      decision?: "approve" | "reject" | "skip";
+      payload?: unknown;
+    }
+  ]
+>("userAnswer");
+export const startPlanSignal = defineSignal("startPlan");
 export const cancelRunSignal = defineSignal("cancelRun");
 
 const short = proxyActivities<typeof activities>({
@@ -90,9 +101,26 @@ function bindPlanSignals(ctx: PlanRunContext): void {
   setHandler(userAnswerSignal, (a) => {
     ctx.pendingAnswer = a;
   });
+  setHandler(startPlanSignal, () => {
+    ctx.buildRequested = true;
+  });
   setHandler(cancelRunSignal, () => {
     ctx.cancelRequested = true;
   });
+}
+
+async function waitForBuildApproval(
+  ctx: PlanRunContext
+): Promise<"build" | "cancel"> {
+  await short.publishPlanStatus({
+    turnId: ctx.args.turnId,
+    status: "planned"
+  });
+  await condition(() => ctx.buildRequested || ctx.cancelRequested);
+  if (ctx.cancelRequested) {
+    return "cancel";
+  }
+  return "build";
 }
 
 async function runDirectReactTurn(opts: {
@@ -158,7 +186,11 @@ async function persistPublishedPlan(ctx: PlanRunContext): Promise<void> {
     parts: [
       {
         type: "text",
-        text: formatPlanMarkdown({ goal: ctx.goal, tasks: ctx.tasks })
+        text: formatPlanMarkdown({
+          goal: ctx.goal,
+          sections: ctx.sections,
+          tasks: ctx.tasks
+        })
       }
     ],
     turnId: ctx.args.turnId
@@ -304,14 +336,20 @@ async function runPlannedTurn(opts: {
     model: opts.args.model,
     mode: opts.args.mode
   });
+  const llm = llmActivities(opts.args.provider);
+  const forceChildIsolation = userRequestsSubAgents(opts.args.userText);
   const ctx = createPlanRunContext({
     args: opts.args,
     workflowId: workflowInfo().workflowId,
     planId: opts.args.turnId,
     goal: draft.goal,
+    ...(draft.sections?.length ? { sections: draft.sections } : {}),
     tasks: draftToTasks(draft),
     short,
     planner,
+    tools,
+    react: { short, llm, tools },
+    ...(forceChildIsolation ? { forceChildIsolation: true } : {}),
     maxConcurrency: Math.min(
       Math.max(1, opts.args.maxConcurrency ?? 4),
       MAX_AGENTS_PER_RUN
@@ -319,8 +357,14 @@ async function runPlannedTurn(opts: {
   });
   bindPlanSignals(ctx);
   await persistPublishedPlan(ctx);
+  ctx.planStatus = "planned";
   if (!isMutatingMode(opts.args.mode)) {
     return completePlanOnly(ctx, opts.toolNameSet);
+  }
+  const gate = await waitForBuildApproval(ctx);
+  if (gate === "cancel") {
+    ctx.planStatus = "cancelled";
+    return finalizePlanTurn(ctx, opts.toolNameSet);
   }
   await markPlanRunning(ctx);
   await runPlanExecutionLoop(ctx);

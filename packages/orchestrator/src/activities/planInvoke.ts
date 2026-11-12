@@ -1,64 +1,20 @@
-import { z } from "zod";
-import { generateObject, generateText, NoObjectGeneratedError } from "ai";
-import {
-  MAX_TASKS_PER_PLAN_VERSION,
-  validatePlanDraft,
-  type WorkflowPlanDraft
-} from "@forge/core";
+import { generateText, Output, NoObjectGeneratedError } from "ai";
+import { validatePlanDraft, type WorkflowPlanDraft } from "@forge/core";
 import { resolveChatLanguageModel, coerceChatProvider } from "../chatModel.js";
 import { resolveModelConfig } from "../model.js";
 import { readForgeLlmConfig } from "../forgeLlmConfig.js";
 import { withHeartbeats } from "./chatApi.js";
+import { PLANNER_SYSTEM } from "./planPrompt.js";
+import { planDraftSchema, type PlanDraftSchema } from "./planDraftSchema.js";
 
 export const PLANNER_MAX_ATTEMPTS = 2;
 
 export const DEFAULT_PLANNER_MAX_OUTPUT_TOKENS = 16_384;
 
-export const DEFAULT_GATE_MAX_OUTPUT_TOKENS = 256;
+export const DEFAULT_GATE_MAX_OUTPUT_TOKENS = 800;
 
-const taskDraftSchema = z.object({
-  id: z.string().min(1).describe("Unique kebab-case task id"),
-  description: z.string().min(1).describe("What this task must accomplish"),
-  executor: z
-    .enum(["agent", "tool", "human"])
-    .describe("Who runs the task: coding agent, direct tool, or human"),
-  dependencies: z
-    .array(z.string())
-    .describe("Task ids that must complete first; use [] when none"),
-  idempotent: z
-    .boolean()
-    .describe("True when safe to retry (read-only, compile, test)"),
-  input: z
-    .object({
-      toolName: z.string().optional(),
-      args: z.record(z.string(), z.unknown()).optional()
-    })
-    .optional()
-    .describe("For executor=tool: { toolName, args }")
-});
-
-export const planDraftSchema = z.object({
-  goal: z.string().min(1).describe("Short statement of the user goal"),
-  tasks: z
-    .array(taskDraftSchema)
-    .min(1)
-    .max(MAX_TASKS_PER_PLAN_VERSION)
-    .describe(`Ordered tasks, at most ${MAX_TASKS_PER_PLAN_VERSION}`)
-});
-
-export type PlanDraftSchema = z.infer<typeof planDraftSchema>;
-
-const PLANNER_SYSTEM = `You are a software planning agent for Forge.
-Produce a structured plan for the user goal.
-Rules:
-- At most ${MAX_TASKS_PER_PLAN_VERSION} tasks
-- Unique kebab-case ids
-- Dependencies must reference other task ids (no cycles)
-- Prefer executor "agent" for coding work
-- Use executor "tool" only with input.toolName for a known direct tool
-- Use executor "human" for approvals
-- Mark read-only/compile/test tasks idempotent:true when safe
-- Do not invent work outside the goal`;
+export { coercePlannerTaskDraft, planDraftSchema } from "./planDraftSchema.js";
+export type { PlanDraftSchema } from "./planDraftSchema.js";
 
 function plannerInvocationError(message: string): Error {
   return new Error(`Planner invocation failed: ${message}`);
@@ -142,7 +98,7 @@ function logPlanner(event: string, fields: Record<string, unknown>): void {
   console.info(`[planner] ${event}`, fields);
 }
 
-function logGenerateObjectFailure(opts: {
+function logStructuredPlannerFailure(opts: {
   detail?: string;
   requestedModel: string | null;
   resolvedModel: string;
@@ -158,11 +114,11 @@ function logGenerateObjectFailure(opts: {
     error: errorMessage(err)
   };
   if (!NoObjectGeneratedError.isInstance(err)) {
-    logPlanner("generateObject:fail", base);
+    logPlanner("generateText+output:fail", base);
     return;
   }
   const described = describeNoObjectCause(err.cause);
-  logPlanner("generateObject:fail", {
+  logPlanner("generateText+output:fail", {
     ...base,
     finishReason: err.finishReason ?? null,
     causeMessage: described.causeMessage,
@@ -186,7 +142,7 @@ async function callPlannerStructured(opts: {
     { provider: chatProvider, name: opts.model },
     { baseUrl: forge.baseUrl, model: forge.model }
   );
-  logPlanner("generateObject:start", {
+  logPlanner("generateText+output:start", {
     detail: opts.detail,
     requestedProvider: opts.provider,
     requestedModel: opts.model ?? null,
@@ -200,9 +156,9 @@ async function callPlannerStructured(opts: {
   const model = await resolveChatLanguageModel(chatProvider, opts.model);
   try {
     const result = await withHeartbeats({
-      work: generateObject({
+      work: generateText({
         model,
-        schema: planDraftSchema,
+        output: Output.object({ schema: planDraftSchema }),
         system: opts.system,
         prompt: opts.prompt,
         maxOutputTokens:
@@ -214,14 +170,17 @@ async function callPlannerStructured(opts: {
         resolvedModel: resolved.name
       }
     });
-    logPlanner("generateObject:ok", {
+    if (result.output == null) {
+      throw new Error("model did not produce a structured plan object");
+    }
+    logPlanner("generateText+output:ok", {
       detail: opts.detail,
       resolvedModel: resolved.name,
-      taskCount: result.object.tasks.length
+      taskCount: result.output.tasks.length
     });
-    return result.object;
+    return result.output;
   } catch (err) {
-    logGenerateObjectFailure({
+    logStructuredPlannerFailure({
       detail: opts.detail,
       requestedModel: opts.model ?? null,
       resolvedModel: resolved.name,

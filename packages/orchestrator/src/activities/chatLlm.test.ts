@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildLlmProviderOptions,
   buildPlanAwareSystemPrompt,
+  createStreamDeltaBatcher,
   extractThoughtSignature,
   formatLlmCallError,
   resolveChatProvider,
@@ -96,5 +97,18 @@ describe("chatLlm", () => {
       shouldFlushDeltaBatch({ bufferLength: 10, elapsedMs: 10 }),
       false
     );
+  });
+
+  it("quiet stream batcher accumulates text without posting chunks", async () => {
+    const batch = createStreamDeltaBatcher({
+      turnId: "t",
+      eventType: "text_delta",
+      quiet: true,
+      maxChars: 4,
+      maxMs: 1
+    });
+    await batch.push("abcdef");
+    await batch.flush();
+    assert.equal(batch.fullText(), "abcdef");
   });
 });

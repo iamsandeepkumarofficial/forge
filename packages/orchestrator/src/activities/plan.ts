@@ -1,60 +1,26 @@
 import {
   PLAN_SSE_EVENTS,
-  PLANNING_GATE_SYSTEM,
-  planningGateShortcut,
-  resolvePlanningGate,
   chatToolCatalogIds,
-  type PlanningGateResult,
   type WorkflowPlanDraft,
   type WorkflowPlanSnapshot
 } from "@forge/core";
-import { api, appendChunk } from "./chatApi.js";
+import { api, appendChunk, loadChatMessages } from "./chatApi.js";
 import { executeNamedTool } from "../tools.js";
+import { formatPlannerChatExcerpt } from "./planningGateRun.js";
 export {
   DEFAULT_GATE_MAX_OUTPUT_TOKENS,
   DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
   PLANNER_MAX_ATTEMPTS,
-  planDraftSchema
+  planDraftSchema,
+  coercePlannerTaskDraft
 } from "./planInvoke.js";
 export type { PlanDraftSchema } from "./planInvoke.js";
-import {
-  DEFAULT_GATE_MAX_OUTPUT_TOKENS,
-  callPlannerText,
-  invokePlannerWithRetries
-} from "./planInvoke.js";
+import { invokePlannerWithRetries } from "./planInvoke.js";
 
-export async function runPlanningGate(input: {
-  sessionId: string;
-  turnId: string;
-  userText: string;
-  provider: string;
-  model?: string;
-  mode?: string;
-}): Promise<PlanningGateResult> {
-  const early = planningGateShortcut({
-    userText: input.userText,
-    mode: input.mode
-  });
-  if (early) return early;
-
-  try {
-    const text = await callPlannerText({
-      system: PLANNING_GATE_SYSTEM,
-      prompt: `User request:\n${input.userText.trim()}\n\nMode: ${input.mode ?? "agent"}`,
-      provider: input.provider,
-      model: input.model,
-      maxOutputTokens: DEFAULT_GATE_MAX_OUTPUT_TOKENS,
-      detail: "planningGate"
-    });
-    return resolvePlanningGate({
-      userText: input.userText,
-      mode: input.mode,
-      llmRaw: text
-    });
-  } catch {
-    return { needsPlanning: false, reason: "gate_error" };
-  }
-}
+export {
+  formatPlannerChatExcerpt,
+  runPlanningGate
+} from "./planningGateRun.js";
 
 export async function createPlan(input: {
   sessionId: string;
@@ -65,22 +31,35 @@ export async function createPlan(input: {
   mode?: string;
   maxOutputTokens?: number;
 }): Promise<WorkflowPlanDraft> {
+  let chatExcerpt = "";
+  try {
+    const messages = await loadChatMessages(input.sessionId);
+    chatExcerpt = formatPlannerChatExcerpt(messages);
+  } catch {
+    chatExcerpt = "";
+  }
   return invokePlannerWithRetries({
     provider: input.provider,
     model: input.model,
     detail: "createPlan",
     maxOutputTokens: input.maxOutputTokens,
     buildPrompt: (attempt, lastError) => {
+      const parts = [
+        `User goal:\n${input.goal}`,
+        `Mode: ${input.mode ?? "agent"}`
+      ];
+      if (chatExcerpt) {
+        parts.push(`Recent chat (ground narrative sections):\n${chatExcerpt}`);
+      }
       if (attempt === 1 || !lastError) {
-        return `User goal:\n${input.goal}\n\nMode: ${input.mode ?? "agent"}`;
+        return parts.join("\n\n");
       }
       return [
         `Previous structured plan attempt failed validation or generation.`,
         `Fix the plan for this goal.`,
-        `Goal: ${input.goal}`,
-        `Mode: ${input.mode ?? "agent"}`,
+        ...parts,
         `Last error: ${lastError}`
-      ].join("\n");
+      ].join("\n\n");
     }
   });
 }
@@ -170,6 +149,9 @@ export async function persistPlanTasks(input: {
     status?: string;
     idempotent?: boolean;
     input?: unknown;
+    inputSchema?: Record<string, unknown>;
+    outputSchema?: Record<string, unknown>;
+    inputMappings?: Array<Record<string, unknown>>;
   }>;
 }): Promise<{ tasks: unknown[] }> {
   const res = await api(

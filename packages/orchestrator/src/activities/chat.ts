@@ -24,10 +24,12 @@ export type ChatTurnInput = {
 
 export {
   appendChatMessage,
+  createTaskStreamTurn,
   ensureChatSandbox,
   finishChatTurn,
   getChatSystemPrompt,
-  loadChatMessages
+  loadChatMessages,
+  AGENT_TASK_STREAM_WORKFLOW_PREFIX
 } from "./chatApi.js";
 
 export { partsToModelMessages, sanitizeToolCallPairs } from "./chatMessages.js";
@@ -41,12 +43,22 @@ export {
   runLlmStep
 } from "./chatLlm.js";
 
+function shouldSkipChunks(input: {
+  quiet?: boolean;
+  streamTurnId?: string;
+}): boolean {
+  return input.quiet === true && !input.streamTurnId;
+}
+
 export async function rejectChatToolCall(input: {
   turnId: string;
   toolCallId: string;
   toolName: string;
   output: string;
+  quiet?: boolean;
+  streamTurnId?: string;
 }): Promise<void> {
+  if (shouldSkipChunks(input)) return;
   await appendChunk({
     turnId: input.turnId,
     eventType: "tool_start",
@@ -74,19 +86,24 @@ export async function executeChatTool(input: {
   toolName: string;
   args: Record<string, unknown>;
   agentMode?: AgentMode | "plan" | "build" | null;
+  quiet?: boolean;
+  streamTurnId?: string;
 }): Promise<{
   success: boolean;
   output: string;
   metadata?: Record<string, unknown>;
 }> {
-  await appendChunk({
-    turnId: input.turnId,
-    eventType: "tool_start",
-    payload: {
-      toolCallId: input.toolCallId,
-      toolName: input.toolName
-    }
-  });
+  const skipChunks = shouldSkipChunks(input);
+  if (!skipChunks) {
+    await appendChunk({
+      turnId: input.turnId,
+      eventType: "tool_start",
+      payload: {
+        toolCallId: input.toolCallId,
+        toolName: input.toolName
+      }
+    });
+  }
   const result = await withHeartbeats({
     work: executeNamedTool({
       sessionId: input.sessionId,
@@ -97,17 +114,19 @@ export async function executeChatTool(input: {
     }),
     detail: `executeChatTool:${input.toolName}`
   });
-  await appendChunk({
-    turnId: input.turnId,
-    eventType: "tool_result",
-    payload: {
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      success: result.success,
-      output: result.output.slice(0, N_8000),
-      ...(result.metadata ? { metadata: result.metadata } : {})
-    }
-  });
+  if (!skipChunks) {
+    await appendChunk({
+      turnId: input.turnId,
+      eventType: "tool_result",
+      payload: {
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        success: result.success,
+        output: result.output.slice(0, N_8000),
+        ...(result.metadata ? { metadata: result.metadata } : {})
+      }
+    });
+  }
   return {
     success: result.success,
     output: result.output,

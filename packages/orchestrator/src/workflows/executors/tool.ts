@@ -9,6 +9,7 @@ import {
   type ExecutorResumeCall,
   type ResumableExecutor
 } from "./types.js";
+import { normalizeRawToolResult } from "./normalizeToolResult.js";
 
 export type ExecuteDirectToolFn = (input: {
   sessionId: string;
@@ -26,8 +27,16 @@ export type ExecuteDirectToolFn = (input: {
 export class ToolExecutor implements ResumableExecutor {
   constructor(private readonly executeDirectTool: ExecuteDirectToolFn) {}
 
+  private toolInput(call: ExecutorCall): unknown {
+    if (toolNameFromInput(call.context.input)) {
+      return call.context.input;
+    }
+    return call.task.input ?? call.context.input ?? {};
+  }
+
   async execute(call: ExecutorCall): Promise<ExecutionResult> {
-    const toolName = toolNameFromInput(call.task.input);
+    const input = this.toolInput(call);
+    const toolName = toolNameFromInput(input);
     if (!toolName) {
       return {
         kind: "failed",
@@ -38,7 +47,7 @@ export class ToolExecutor implements ResumableExecutor {
       return waitingApproval({
         description: call.task.description,
         toolName,
-        args: toolArgsFromInput(call.task.input)
+        args: toolArgsFromInput(input)
       });
     }
     return this.runTool({ call, toolName });
@@ -49,12 +58,13 @@ export class ToolExecutor implements ResumableExecutor {
     if (decision === "reject" || decision === "skip") {
       return { kind: "failed", error: decision };
     }
+    const input = this.toolInput(call);
     const fromPayload =
       call.payload && typeof call.payload === "object"
         ? (call.payload as { toolName?: unknown }).toolName
         : undefined;
     const toolName =
-      toolNameFromInput(call.task.input) ??
+      toolNameFromInput(input) ??
       (typeof fromPayload === "string" ? fromPayload : null);
     if (!toolName) {
       return {
@@ -74,7 +84,7 @@ export class ToolExecutor implements ResumableExecutor {
         sessionId: opts.call.context.sessionId,
         turnId: opts.call.context.turnId,
         toolName: opts.toolName,
-        args: toolArgsFromInput(opts.call.task.input),
+        args: toolArgsFromInput(this.toolInput(opts.call)),
         agentMode: null
       });
       if (result.unknownTool) {
@@ -86,7 +96,13 @@ export class ToolExecutor implements ResumableExecutor {
           error: result.error ?? result.output ?? "tool failed"
         };
       }
-      return { kind: "completed", output: result.output };
+      return {
+        kind: "completed",
+        output: {
+          kind: "value",
+          value: normalizeRawToolResult(result.output)
+        }
+      };
     } catch (err) {
       return {
         kind: "failed",

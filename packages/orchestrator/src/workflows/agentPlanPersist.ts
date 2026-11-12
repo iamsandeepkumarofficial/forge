@@ -19,8 +19,14 @@ export type PlanShortActs = Pick<
   | "publishMergeConflict"
   | "appendPlanChunk"
   | "appendChatMessage"
+  | "loadChatMessages"
+  | "rejectChatToolCall"
   | "mergeTaskWorktree"
   | "ensureTaskWorktree"
+  | "prepareTaskInput"
+  | "spillTaskOutput"
+  | "loadTaskArtifact"
+  | "createTaskStreamTurn"
 >;
 
 export type PlanPersistCtx = {
@@ -28,6 +34,7 @@ export type PlanPersistCtx = {
   workflowId: string;
   planId: string;
   goal: string;
+  sections?: WorkflowPlanSnapshot["sections"];
   version: number;
   replanCount: number;
   tasks: TaskState[];
@@ -46,6 +53,7 @@ export function snapshotFromCtx(opts: {
   return toSnapshot({
     planId: opts.ctx.planId,
     goal: opts.ctx.goal,
+    sections: opts.ctx.sections,
     status: opts.status,
     version: opts.ctx.version,
     replanCount: opts.ctx.replanCount,

@@ -11,8 +11,9 @@ import {
   retryableFailedTasks,
   tasksForPersist
 } from "./agentPlanClassify.js";
+import { withSchemas } from "./testTaskDraft.js";
 
-const draft = {
+const draft = withSchemas({
   goal: "Ship auth",
   tasks: [
     {
@@ -30,7 +31,7 @@ const draft = {
       idempotent: false
     }
   ]
-};
+});
 
 describe("agentPlanClassify", () => {
   it("groups tasks by status", () => {
@@ -79,5 +80,33 @@ describe("agentPlanClassify", () => {
     );
     assert.equal(resultStatusForPlan("cancelled"), "cancelled");
     assert.equal(tasksForPersist(tasks)[0]?.id, "inspect");
+  });
+
+  it("formats fluid sections and task rationale in markdown", () => {
+    const tasks = draftToTasks({
+      ...draft,
+      sections: [
+        { title: "Problem", body: "Missing login" },
+        { title: "Risks", body: "Breaking sessions" }
+      ],
+      tasks: draft.tasks.map((t, i) =>
+        i === 0 ? { ...t, rationale: "Map the boundary first" } : t
+      )
+    });
+    const md = formatPlanMarkdown({
+      goal: "Ship auth",
+      sections: [
+        { title: "Problem", body: "Missing login" },
+        { title: "Risks", body: "Breaking sessions" }
+      ],
+      tasks
+    });
+    assert.match(md, /\*\*Problem:\*\* Missing login/);
+    assert.match(md, /\*\*Risks:\*\* Breaking sessions/);
+    assert.match(md, /Map the boundary first/);
+    assert.equal(
+      tasksForPersist(tasks)[0]?.rationale,
+      "Map the boundary first"
+    );
   });
 });
