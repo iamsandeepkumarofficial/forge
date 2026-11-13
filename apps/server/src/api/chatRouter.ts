@@ -25,6 +25,7 @@ import {
   handleStartChat,
   handleStreamTurn,
   handleCancelTurn,
+  handleStartPlan,
   handleTurnAnswer
 } from "./chatRouter/handlers.js";
 
@@ -35,31 +36,7 @@ export function createChatRouter(): Router {
   const messages = new SessionMessageRepository();
   const turns = new ChatTurnRepository();
   const chunks = new ChatTurnChunkRepository();
-  router.get("/settings/llm", pocAuth, (req, res) => {
-    return handleGetLlmSettings(req, res);
-  });
-  router.put("/settings/llm", pocAuth, (req, res) => {
-    return handlePutLlmSettings(req, res);
-  });
-  router.get("/runtime/activity", pocAuth, (req, res) => {
-    return handleGetRuntimeActivity(req, res);
-  });
-  router.post(
-    "/runtime/activity/sessions/:sessionId/stop",
-    pocAuth,
-    (req, res) => {
-      return handleStopRuntimeSession(req, res);
-    }
-  );
-  router.post("/runtime/activity/apps/stop", pocAuth, (req, res) => {
-    return handleStopRuntimeApp(req, res);
-  });
-  router.get("/models", pocAuth, (req, res) => {
-    return handleModelsList(req, res);
-  });
-  router.get("/models/context-window", pocAuth, (req, res) => {
-    return handleModelContextWindow(req, res);
-  });
+  registerSupportRoutes(router, pocAuth);
   router.get("/sessions/:sessionId/messages", pocAuth, (req, res) => {
     return handleListChatMessages({ req, res, features, messages });
   });
@@ -103,5 +80,43 @@ export function createChatRouter(): Router {
       return handleTurnAnswer({ req, res, features, turns });
     }
   );
+  router.post(
+    "/sessions/:sessionId/turns/:turnId/start-plan",
+    pocAuth,
+    (req, res) => {
+      return handleStartPlan({ req, res, features, turns });
+    }
+  );
   return router;
+}
+
+function registerSupportRoutes(
+  router: Router,
+  pocAuth: ReturnType<typeof createLocalUserMiddleware>
+): void {
+  router.get("/settings/llm", pocAuth, (req, res) => {
+    return handleGetLlmSettings(req, res);
+  });
+  router.put("/settings/llm", pocAuth, (req, res) => {
+    return handlePutLlmSettings(req, res);
+  });
+  router.get("/runtime/activity", pocAuth, (req, res) => {
+    return handleGetRuntimeActivity(req, res);
+  });
+  router.post(
+    "/runtime/activity/sessions/:sessionId/stop",
+    pocAuth,
+    (req, res) => {
+      return handleStopRuntimeSession(req, res);
+    }
+  );
+  router.post("/runtime/activity/apps/stop", pocAuth, (req, res) => {
+    return handleStopRuntimeApp(req, res);
+  });
+  router.get("/models", pocAuth, (req, res) => {
+    return handleModelsList(req, res);
+  });
+  router.get("/models/context-window", pocAuth, (req, res) => {
+    return handleModelContextWindow(req, res);
+  });
 }

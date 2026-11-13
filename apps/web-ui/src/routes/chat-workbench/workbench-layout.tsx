@@ -40,6 +40,7 @@ export function Workbench(options: {
   const docs = useWorkbenchDocs();
   const chrome = useWorkbenchChrome({ onChromeChange: o.onChromeChange });
   const [plan, setPlan] = useState<PlanCardModel | null>(null);
+  const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
 
   return (
     <ResizableSplit
@@ -66,12 +67,14 @@ export function Workbench(options: {
           onShowPreview={() => docs.setActiveRight(PREVIEW_TAB_ID)}
           onOpenPlan={docs.openPlan}
           onPlanChange={setPlan}
+          onActiveTurnIdChange={setActiveTurnId}
           onTurnStatus={chrome.setTurnStatus}
         />
       }
       right={
         <RightStage
           sessionId={o.sessionId}
+          activeTurnId={activeTurnId}
           docs={docs.docs}
           activeId={docs.activeRight}
           activeDoc={docs.activeDoc}

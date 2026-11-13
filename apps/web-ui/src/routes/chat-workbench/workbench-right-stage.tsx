@@ -71,8 +71,47 @@ function RightDocTabs(options: {
   );
 }
 
+function planBuildAction(
+  sessionId: string,
+  activeTurnId: string | null | undefined
+): (() => Promise<void>) | undefined {
+  if (!activeTurnId) return undefined;
+  return async () => {
+    const { startChatPlan } = await import("../../lib/chat-agent.js");
+    await startChatPlan({ sessionId, turnId: activeTurnId });
+  };
+}
+
+function planHumanAnswer(
+  sessionId: string,
+  activeTurnId: string | null | undefined
+) {
+  if (!activeTurnId) return undefined;
+  return async ({
+    taskId,
+    decision,
+    payload
+  }: {
+    taskId: string;
+    decision: "approve" | "reject" | "skip";
+    payload?: unknown;
+  }) => {
+    const { answerChatTurn } = await import("../../lib/chat-agent.js");
+    await answerChatTurn({
+      sessionId,
+      turnId: activeTurnId,
+      taskId,
+      decision,
+      ...(payload !== undefined
+        ? { payload }
+        : { text: decision === "skip" ? "Skipped" : "Rejected" })
+    });
+  };
+}
+
 export function RightStage(options: {
   sessionId: string;
+  activeTurnId?: string | null;
   docs: FileTab[];
   activeId: string;
   activeDoc: FileTab | null;
@@ -84,6 +123,7 @@ export function RightStage(options: {
 }) {
   const {
     sessionId,
+    activeTurnId,
     docs,
     activeId,
     activeDoc,
@@ -119,7 +159,12 @@ export function RightStage(options: {
         </div>
         {showPlan ? (
           <div className="absolute inset-0 bg-background">
-            <PlanPanel plan={plan ?? null} />
+            <PlanPanel
+              plan={plan ?? null}
+              sessionId={sessionId}
+              onBuild={planBuildAction(sessionId, activeTurnId)}
+              onHumanAnswer={planHumanAnswer(sessionId, activeTurnId)}
+            />
           </div>
         ) : null}
         {showFile && fileDoc ? (

@@ -5,12 +5,14 @@ export function PlanChatSection(props: {
   plan: PlanCardModel;
   onOpenInPanel?: () => void;
   onForceSend?: () => void;
+  onBuild?: () => void | Promise<void>;
 }) {
-  const { plan, onOpenInPanel, onForceSend } = props;
+  const { plan, onOpenInPanel, onForceSend, onBuild } = props;
   const done = plan.tasks.filter((t) => t.status === "completed").length;
   const active =
     plan.tasks.find((t) => t.status === "running" || t.status === "waiting") ??
     null;
+  const canBuild = plan.status === "planned" && Boolean(onBuild);
   return (
     <section
       aria-label="Execution plan"
@@ -25,18 +27,34 @@ export function PlanChatSection(props: {
             {plan.tasks.length > 0 ? ` · ${done}/${plan.tasks.length}` : ""}
           </span>
         </div>
-        {onOpenInPanel ? (
-          <button
-            type="button"
-            onClick={onOpenInPanel}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
-          >
-            <PanelRight className="size-3.5" />
-            Open in panel
-          </button>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1">
+          {canBuild ? (
+            <button
+              type="button"
+              onClick={() => void onBuild?.()}
+              className="inline-flex items-center rounded-md border border-foreground/20 bg-foreground px-2 py-1 text-xs font-medium text-background hover:opacity-90"
+            >
+              Build
+            </button>
+          ) : null}
+          {onOpenInPanel ? (
+            <button
+              type="button"
+              onClick={onOpenInPanel}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
+            >
+              <PanelRight className="size-3.5" />
+              Open in panel
+            </button>
+          ) : null}
+        </div>
       </header>
       <p className="mb-1.5 line-clamp-2 text-muted-foreground">{plan.goal}</p>
+      {canBuild ? (
+        <p className="mb-1.5 text-xs text-muted-foreground">
+          Waiting for Build — plan will not run until you start it.
+        </p>
+      ) : null}
       {active ? (
         <p className="mb-1.5 text-xs text-muted-foreground">
           Now: <span className="text-foreground">{active.description}</span>
@@ -64,7 +82,14 @@ export function PlanChatSection(props: {
 
 export function PlanPanel(props: {
   plan: PlanCardModel | null;
+  sessionId?: string;
   onForceSend?: () => void;
+  onBuild?: () => void | Promise<void>;
+  onHumanAnswer?: (input: {
+    taskId: string;
+    decision: "approve" | "reject" | "skip";
+    payload?: unknown;
+  }) => void | Promise<void>;
 }) {
   if (!props.plan) {
     return (
@@ -75,7 +100,13 @@ export function PlanPanel(props: {
   }
   return (
     <div className="h-full overflow-y-auto p-4">
-      <PlanCard plan={props.plan} onForceSend={props.onForceSend} />
+      <PlanCard
+        plan={props.plan}
+        sessionId={props.sessionId}
+        onForceSend={props.onForceSend}
+        onBuild={props.onBuild}
+        onHumanAnswer={props.onHumanAnswer}
+      />
     </div>
   );
 }

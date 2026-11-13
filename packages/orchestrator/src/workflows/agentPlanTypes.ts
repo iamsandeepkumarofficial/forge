@@ -1,5 +1,6 @@
 import type {
   ExecutionResult,
+  PlanSection,
   QueuedFollowUp,
   WorkflowPlanSnapshot
 } from "@forge/core";
@@ -19,11 +20,21 @@ export type InFlight = {
   }>;
 };
 
+export type PlanReactActs = {
+  short: Pick<
+    typeof activities,
+    "loadChatMessages" | "appendChatMessage" | "rejectChatToolCall"
+  >;
+  llm: Pick<typeof activities, "runLlmStep">;
+  tools: Pick<typeof activities, "executeChatTool">;
+};
+
 export type PlanRunContext = {
   args: InteractiveAgentArgs;
   workflowId: string;
   planId: string;
   goal: string;
+  sections?: PlanSection[];
   version: number;
   replanCount: number;
   tasks: TaskState[];
@@ -34,7 +45,14 @@ export type PlanRunContext = {
   short: PlanShortActs;
   planStatus: WorkflowPlanSnapshot["status"];
   inFlight: Map<string, InFlight>;
-  pendingAnswer: { text: string; taskId?: string; decision?: string } | null;
+  pendingAnswer: {
+    text?: string;
+    taskId?: string;
+    decision?: string;
+    payload?: unknown;
+  } | null;
+
+  buildRequested: boolean;
   cancelRequested: boolean;
   lastTick: number;
   rounds: number;
@@ -44,4 +62,8 @@ export type PlanRunContext = {
   planner: Pick<typeof activities, "repairPlan">;
   registry: ExecutorRegistry;
   tools: Pick<typeof activities, "executeDirectTool">;
+
+  react?: PlanReactActs;
+
+  forceChildIsolation?: boolean;
 };

@@ -11,7 +11,9 @@ import {
   type ChatAgentMode,
   type InteractiveChatTurnArgs
 } from "./chatTurnHelpers.js";
+import { tryParseJsonObject } from "./jsonText.js";
 import { assistantPartsForStep, runToolRoundLoop } from "./reactLoop.js";
+import { buildTaskBrief } from "./taskBrief.js";
 
 export type ExecuteAgentTaskArgs = {
   sessionId: string;
@@ -20,18 +22,28 @@ export type ExecuteAgentTaskArgs = {
   planVersion: number;
   taskId: string;
   description: string;
+
+  input?: unknown;
+
+  outputSchema?: Record<string, unknown>;
   provider: string;
   model?: string;
   reasoningEffort?: "low" | "medium" | "high";
   mode: ChatAgentMode;
   worktreePath?: string | null;
   attempt: number;
+
+  quiet?: boolean;
+
+  streamTurnId?: string;
 };
 
 export type ExecuteAgentTaskResult = {
   taskId: string;
   status: "completed" | "failed" | "cancelled" | "waiting";
   finalText: string;
+
+  structuredOutput?: unknown;
   rounds: number;
   toolCallCount: number;
   error?: string;
@@ -63,6 +75,9 @@ function llmActivities(provider: string) {
 }
 
 async function markTaskRunning(args: ExecuteAgentTaskArgs): Promise<void> {
+  if (args.quiet) {
+    return;
+  }
   await short.persistTask({
     planId: args.planId,
     version: args.planVersion,
@@ -95,6 +110,19 @@ async function markTaskRunning(args: ExecuteAgentTaskArgs): Promise<void> {
   });
 }
 
+async function finishStreamTurn(
+  args: ExecuteAgentTaskArgs,
+  status: "completed" | "cancelled" | "failed"
+): Promise<void> {
+  if (!args.streamTurnId) return;
+  await CancellationScope.nonCancellable(async () => {
+    await short.finishChatTurn({
+      turnId: args.streamTurnId!,
+      status
+    });
+  });
+}
+
 async function markTaskWaiting(opts: {
   args: ExecuteAgentTaskArgs;
   finalText: string;
@@ -105,20 +133,23 @@ async function markTaskWaiting(opts: {
     kind: "ask_user" as const,
     payload: { taskId: opts.args.taskId }
   };
-  await short.persistTask({
-    planId: opts.args.planId,
-    version: opts.args.planVersion,
-    taskId: opts.args.taskId,
-    patch: {
-      status: "waiting",
-      waitReason,
-      output: { text: opts.finalText }
-    }
-  });
-  await short.publishTaskUpdated({
-    turnId: opts.args.turnId,
-    task: { id: opts.args.taskId, status: "waiting", waitReason }
-  });
+  if (!opts.args.quiet) {
+    await short.persistTask({
+      planId: opts.args.planId,
+      version: opts.args.planVersion,
+      taskId: opts.args.taskId,
+      patch: {
+        status: "waiting",
+        waitReason,
+        output: { text: opts.finalText }
+      }
+    });
+    await short.publishTaskUpdated({
+      turnId: opts.args.turnId,
+      task: { id: opts.args.taskId, status: "waiting", waitReason }
+    });
+  }
+
   return {
     taskId: opts.args.taskId,
     status: "waiting",
@@ -135,35 +166,44 @@ async function markTaskCompleted(opts: {
   reasoningText: string;
   rounds: number;
   toolCallCount: number;
+  structuredOutput?: unknown;
 }): Promise<ExecuteAgentTaskResult> {
-  await short.appendChatMessage({
-    sessionId: opts.args.sessionId,
-    role: "assistant",
-    parts: assistantPartsForStep({
-      reasoningText: opts.reasoningText,
-      text: opts.finalText
-    }),
-    turnId: opts.args.turnId
-  });
-  await short.persistTask({
-    planId: opts.args.planId,
-    version: opts.args.planVersion,
-    taskId: opts.args.taskId,
-    patch: {
-      status: "completed",
-      finishedAt: new Date().toISOString(),
-      output: { text: opts.finalText },
-      error: null
-    }
-  });
-  await short.publishTaskUpdated({
-    turnId: opts.args.turnId,
-    task: { id: opts.args.taskId, status: "completed" }
-  });
+  const structured =
+    opts.structuredOutput !== undefined
+      ? opts.structuredOutput
+      : { summary: opts.finalText || "completed" };
+  if (!opts.args.quiet) {
+    await short.appendChatMessage({
+      sessionId: opts.args.sessionId,
+      role: "assistant",
+      parts: assistantPartsForStep({
+        reasoningText: opts.reasoningText,
+        text: opts.finalText
+      }),
+      turnId: opts.args.turnId
+    });
+    await short.persistTask({
+      planId: opts.args.planId,
+      version: opts.args.planVersion,
+      taskId: opts.args.taskId,
+      patch: {
+        status: "completed",
+        finishedAt: new Date().toISOString(),
+        output: { kind: "value", value: structured },
+        error: null
+      }
+    });
+    await short.publishTaskUpdated({
+      turnId: opts.args.turnId,
+      task: { id: opts.args.taskId, status: "completed" }
+    });
+  }
+  await finishStreamTurn(opts.args, "completed");
   return {
     taskId: opts.args.taskId,
     status: "completed",
     finalText: opts.finalText,
+    structuredOutput: structured,
     rounds: opts.rounds,
     toolCallCount: opts.toolCallCount
   };
@@ -172,21 +212,24 @@ async function markTaskCompleted(opts: {
 async function markTaskCancelled(
   args: ExecuteAgentTaskArgs
 ): Promise<ExecuteAgentTaskResult> {
-  await CancellationScope.nonCancellable(async () => {
-    await short.persistTask({
-      planId: args.planId,
-      version: args.planVersion,
-      taskId: args.taskId,
-      patch: {
-        status: "cancelled",
-        finishedAt: new Date().toISOString()
-      }
+  if (!args.quiet) {
+    await CancellationScope.nonCancellable(async () => {
+      await short.persistTask({
+        planId: args.planId,
+        version: args.planVersion,
+        taskId: args.taskId,
+        patch: {
+          status: "cancelled",
+          finishedAt: new Date().toISOString()
+        }
+      });
+      await short.publishTaskUpdated({
+        turnId: args.turnId,
+        task: { id: args.taskId, status: "cancelled" }
+      });
     });
-    await short.publishTaskUpdated({
-      turnId: args.turnId,
-      task: { id: args.taskId, status: "cancelled" }
-    });
-  });
+  }
+  await finishStreamTurn(args, "cancelled");
   return {
     taskId: args.taskId,
     status: "cancelled",
@@ -201,20 +244,23 @@ async function markTaskFailed(
   err: unknown
 ): Promise<ExecuteAgentTaskResult> {
   const message = failureMessage(err);
-  await short.persistTask({
-    planId: args.planId,
-    version: args.planVersion,
-    taskId: args.taskId,
-    patch: {
-      status: "failed",
-      finishedAt: new Date().toISOString(),
-      error: message
-    }
-  });
-  await short.publishTaskUpdated({
-    turnId: args.turnId,
-    task: { id: args.taskId, status: "failed", error: message }
-  });
+  if (!args.quiet) {
+    await short.persistTask({
+      planId: args.planId,
+      version: args.planVersion,
+      taskId: args.taskId,
+      patch: {
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+        error: message
+      }
+    });
+    await short.publishTaskUpdated({
+      turnId: args.turnId,
+      task: { id: args.taskId, status: "failed", error: message }
+    });
+  }
+  await finishStreamTurn(args, "failed");
   return {
     taskId: args.taskId,
     status: "failed",
@@ -225,10 +271,35 @@ async function markTaskFailed(
   };
 }
 
+function taskContractSeed(args: ExecuteAgentTaskArgs): Array<{
+  id: string;
+  role: string;
+  parts: unknown[];
+}> {
+  const contractPrompt =
+    args.quiet === true
+      ? args.description
+      : buildTaskBrief({
+          voice: "task",
+          taskId: args.taskId,
+          description: args.description,
+          input: args.input,
+          outputSchema: args.outputSchema
+        });
+  return [
+    {
+      id: `task-${args.taskId}-contract`,
+      role: "user",
+      parts: [{ type: "text", text: contractPrompt }]
+    }
+  ];
+}
+
 export async function executeAgentTaskWorkflow(
   args: ExecuteAgentTaskArgs
 ): Promise<ExecuteAgentTaskResult> {
   const toolNameSet = new Set<string>();
+  const quiet = args.quiet === true;
   const turnArgs: InteractiveChatTurnArgs = {
     sessionId: args.sessionId,
     turnId: args.turnId,
@@ -236,10 +307,13 @@ export async function executeAgentTaskWorkflow(
     mode: args.mode === "plan" ? "agent" : args.mode,
     provider: args.provider,
     model: args.model,
-    reasoningEffort: args.reasoningEffort
+    reasoningEffort: args.reasoningEffort,
+    quiet,
+    ...(args.streamTurnId ? { streamTurnId: args.streamTurnId } : {})
   };
   try {
     await markTaskRunning(args);
+    const seedMessages = taskContractSeed(args);
     const loop = await runToolRoundLoop({
       deps: {
         short,
@@ -250,7 +324,9 @@ export async function executeAgentTaskWorkflow(
       currentMode: {
         value: args.mode === "plan" ? "agent" : args.mode
       },
-      toolNameSet
+      toolNameSet,
+      outputSchema: args.outputSchema,
+      ...(seedMessages ? { seedMessages } : {})
     });
     const finalText = assistantTextForFinalize({
       text: loop.finalText,
@@ -265,12 +341,26 @@ export async function executeAgentTaskWorkflow(
         toolCallCount: loop.toolCallCount
       });
     }
+    if (args.outputSchema && loop.structuredOutput === undefined) {
+      const parsed = tryParseJsonObject(finalText);
+      return markTaskFailed(
+        args,
+        new Error(
+          parsed === undefined
+            ? "agent finished without schema-valid structured output"
+            : "agent finished with invalid structured output"
+        )
+      );
+    }
     return markTaskCompleted({
       args,
       finalText,
       reasoningText: loop.finalReasoningText,
       rounds: loop.rounds,
-      toolCallCount: loop.toolCallCount
+      toolCallCount: loop.toolCallCount,
+      ...(loop.structuredOutput !== undefined
+        ? { structuredOutput: loop.structuredOutput }
+        : {})
     });
   } catch (err) {
     if (isCancellation(err)) {

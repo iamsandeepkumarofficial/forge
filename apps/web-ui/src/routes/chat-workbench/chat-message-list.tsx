@@ -21,6 +21,7 @@ export type ChatMessageListOptions = TranscriptBodyOptions & {
   plan?: PlanCardModel | null;
   onOpenPlan?: () => void;
   onForceSendQueued?: () => void;
+  onBuildPlan?: () => void | Promise<void>;
 };
 
 function syncStickToBottom(
@@ -57,7 +58,8 @@ export function ChatMessageList(options: ChatMessageListOptions) {
     onRevertUserMessage,
     plan,
     onOpenPlan,
-    onForceSendQueued
+    onForceSendQueued,
+    onBuildPlan
   } = options;
   return (
     <div
@@ -90,6 +92,7 @@ export function ChatMessageList(options: ChatMessageListOptions) {
             plan={plan}
             onOpenInPanel={onOpenPlan}
             onForceSend={onForceSendQueued}
+            onBuild={onBuildPlan}
           />
         ) : null}
       </div>

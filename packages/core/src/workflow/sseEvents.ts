@@ -5,7 +5,8 @@ export const PLAN_SSE_EVENTS = {
   budgetUpdated: "budget_updated",
   followupQueued: "followup_queued",
   replan: "replan",
-  mergeConflict: "merge_conflict"
+  mergeConflict: "merge_conflict",
+  planningGate: "planning_gate"
 } as const;
 
 export type PlanSseEventType =

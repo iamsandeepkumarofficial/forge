@@ -1,12 +1,16 @@
 import {
   deleteSessionMessagesFrom,
+  fetchSessionMessages,
   startChatTurn,
   type ChatMode,
   type LlmProvider,
   type UiChatMessage
 } from "../../lib/chat-agent.js";
 import type { ComposerAgentMode } from "../../components/chat-composer-shared.js";
-import type { ToolPart } from "../../lib/tool-display.js";
+import {
+  mergeSessionMessagesForUi,
+  type ToolPart
+} from "../../lib/tool-display.js";
 import { readAttachmentsAsText, runChatSend } from "./chat-pane-send.js";
 import { applyTurnStreamEvent } from "./chat-pane-stream-events.js";
 
@@ -88,6 +92,12 @@ async function queueFollowUpWhileStreaming(
   }
 }
 
+function reloadSessionMessages(options: SendChatPaneTextOptions): void {
+  void fetchSessionMessages(options.sessionId)
+    .then((rows) => options.setMessages(mergeSessionMessagesForUi(rows)))
+    .catch(() => undefined);
+}
+
 export async function sendChatPaneText(
   options: SendChatPaneTextOptions
 ): Promise<void> {
@@ -143,6 +153,9 @@ export async function sendChatPaneText(
           onAppliedMode: options.onAppliedMode,
           onLlmStart: options.flushLiveStep
         });
+        if (eventType === "task_result_message") {
+          void reloadSessionMessages(options);
+        }
       }
     });
     options.setMessages(rows);

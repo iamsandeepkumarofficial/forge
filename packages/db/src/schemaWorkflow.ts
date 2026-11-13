@@ -93,10 +93,33 @@ export const workflowTasks = pgTable(
     waitReason: jsonb("wait_reason").$type<Record<string, unknown> | null>(),
     input: jsonb("input").$type<unknown>(),
     output: jsonb("output").$type<unknown>(),
+    inputSchema: jsonb("input_schema")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({
+        schemaVersion: 1,
+        type: "object",
+        additionalProperties: false,
+        properties: {}
+      }),
+    outputSchema: jsonb("output_schema")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({
+        schemaVersion: 1,
+        type: "object",
+        additionalProperties: false,
+        properties: {}
+      }),
+    inputMappings: jsonb("input_mappings")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default([]),
     error: text("error"),
     attemptCount: integer("attempt_count").notNull().default(0),
     childWorkflowId: text("child_workflow_id"),
     worktreePath: text("worktree_path"),
+    streamTurnId: text("stream_turn_id"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true })
   },

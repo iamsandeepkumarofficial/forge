@@ -117,11 +117,20 @@ export class WorkflowPlanRepository {
       status?: WorkflowTask["status"];
       idempotent?: boolean;
       input?: unknown;
+      inputSchema?: Record<string, unknown>;
+      outputSchema?: Record<string, unknown>;
+      inputMappings?: Array<Record<string, unknown>>;
     }>;
   }): Promise<WorkflowTask[]> {
     const db = getDb();
     const { planId, version, tasks } = input;
     if (tasks.length === 0) return [];
+    const emptySchema = {
+      schemaVersion: 1,
+      type: "object",
+      additionalProperties: false,
+      properties: {}
+    };
     const rows = await db
       .insert(workflowTasks)
       .values(
@@ -134,7 +143,10 @@ export class WorkflowPlanRepository {
           dependencies: t.dependencies ?? [],
           status: t.status ?? "pending",
           idempotent: t.idempotent ?? false,
-          input: t.input === undefined ? null : sanitizeJsonForPg(t.input)
+          input: t.input === undefined ? null : sanitizeJsonForPg(t.input),
+          inputSchema: sanitizeJsonForPg(t.inputSchema ?? emptySchema),
+          outputSchema: sanitizeJsonForPg(t.outputSchema ?? emptySchema),
+          inputMappings: sanitizeJsonForPg(t.inputMappings ?? [])
         }))
       )
       .onConflictDoUpdate({
@@ -145,7 +157,10 @@ export class WorkflowPlanRepository {
           dependencies: sql`excluded.dependencies`,
           status: sql`excluded.status`,
           idempotent: sql`excluded.idempotent`,
-          input: sql`excluded.input`
+          input: sql`excluded.input`,
+          inputSchema: sql`excluded.input_schema`,
+          outputSchema: sql`excluded.output_schema`,
+          inputMappings: sql`excluded.input_mappings`
         }
       })
       .returning();
@@ -177,6 +192,7 @@ export class WorkflowPlanRepository {
       attemptCount: number;
       childWorkflowId: string | null;
       worktreePath: string | null;
+      streamTurnId: string | null;
       startedAt: Date | null;
       finishedAt: Date | null;
     }>;

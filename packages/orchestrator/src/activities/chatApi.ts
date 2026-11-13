@@ -1,5 +1,8 @@
+import { AGENT_TASK_STREAM_WORKFLOW_PREFIX } from "@forge/core";
 import { heartbeat } from "@temporalio/activity";
 import { env } from "../env.js";
+
+export { AGENT_TASK_STREAM_WORKFLOW_PREFIX };
 
 const N_15000 = 15000;
 
@@ -129,4 +132,27 @@ export async function finishChatTurn(opts: {
     method: "POST",
     body: JSON.stringify({ status: opts.status, error: opts.error ?? null })
   });
+}
+
+export async function createTaskStreamTurn(input: {
+  sessionId: string;
+  planId: string;
+  taskId: string;
+  attempt: number;
+  provider?: string;
+  model?: string;
+}): Promise<{ turnId: string; workflowId: string }> {
+  const workflowId = `${AGENT_TASK_STREAM_WORKFLOW_PREFIX}${input.sessionId}-${input.planId}-${input.taskId}-${input.attempt}`;
+  const res = await api(`/internal/chat/turns`, {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId: input.sessionId,
+      workflowId,
+      mode: "agent",
+      provider: input.provider ?? null,
+      model: input.model ?? null
+    })
+  });
+  const turn = (await res.json()) as { id: string };
+  return { turnId: turn.id, workflowId };
 }

@@ -54,7 +54,11 @@ export function handleResumeStreamEvent(
     onAppliedMode: options.onAppliedMode,
     onLlmStart: options.flushLiveStep
   });
-  if (options.eventType === "tool_result" || options.eventType === "done") {
+  if (
+    options.eventType === "tool_result" ||
+    options.eventType === "done" ||
+    options.eventType === "task_result_message"
+  ) {
     void fetchSessionMessages(options.sessionId)
       .then((rows) => options.setMessages(mergeSessionMessagesForUi(rows)))
       .catch(() => undefined);

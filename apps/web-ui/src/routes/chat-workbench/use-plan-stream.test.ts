@@ -39,6 +39,34 @@ describe("applyPlanStreamEvent", () => {
     );
   });
 
+  it("stores streamTurnId from task_updated and task_started", () => {
+    const updated = applyPlanStreamEvent({
+      prev: basePlan,
+      eventType: "task_updated",
+      payload: {
+        task: {
+          id: "inspect",
+          status: "running",
+          streamTurnId: "stream-1"
+        }
+      }
+    });
+    expect(updated?.tasks.find((t) => t.id === "inspect")?.streamTurnId).toBe(
+      "stream-1"
+    );
+    const started = applyPlanStreamEvent({
+      prev: basePlan,
+      eventType: "task_started",
+      payload: {
+        taskId: "implement",
+        streamTurnId: "stream-2"
+      }
+    });
+    const task = started?.tasks.find((t) => t.id === "implement");
+    expect(task?.status).toBe("running");
+    expect(task?.streamTurnId).toBe("stream-2");
+  });
+
   it("updates task status from flat contract payload", () => {
     const next = applyPlanStreamEvent({
       prev: basePlan,

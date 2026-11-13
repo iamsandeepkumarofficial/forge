@@ -69,6 +69,7 @@ export type ChatPaneViewProps = {
   onRevertUserMessage?: (options: { messageId: string; text: string }) => void;
   plan?: PlanCardModel | null;
   onOpenPlan?: () => void;
+  onBuildPlan?: () => void | Promise<void>;
 };
 
 export function ChatPaneView(props: ChatPaneViewProps) {
@@ -100,6 +101,7 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         onRevertUserMessage={o.onRevertUserMessage}
         plan={o.plan}
         onOpenPlan={o.onOpenPlan}
+        onBuildPlan={o.onBuildPlan}
         onForceSendQueued={
           o.plan?.queuedFollowUp
             ? () => o.setInput(o.plan?.queuedFollowUp?.text ?? "")
@@ -111,44 +113,51 @@ export function ChatPaneView(props: ChatPaneViewProps) {
         onSubmitAskUser={o.onSubmitAskUser}
         askUserSubmitting={o.askUserSubmitting}
       />
-      <ChatComposer
-        sessionId={o.sessionId}
-        branchName={o.branchName}
-        value={o.input}
-        onChange={o.setInput}
-        onSend={o.onSend}
-        onStop={o.onStop}
-        canSend={o.canSend}
-        canQueue={o.canQueue}
-        status={o.status}
-        agentMode={o.agentMode}
-        onAgentModeChange={o.onAgentModeChange}
-        pendingModeSwitch={o.pendingModeSwitch}
-        modeSwitchRemainingSeconds={o.modeSwitchRemainingSeconds}
-        onConfirmModeSwitch={o.onConfirmModeSwitch}
-        onDismissModeSwitch={o.onDismissModeSwitch}
-        provider={o.provider}
-        model={o.model}
-        autoModel={o.autoModel}
-        onAutoModelChange={o.onAutoModelChange}
-        modelsByProvider={o.modelsByProvider}
-        modelsLoading={o.modelsLoading}
-        onModelSelect={o.onModelSelect}
-        conversationTokens={o.conversationTokens}
-        maxContextTokens={o.maxContextTokens}
-        maxOutputTokens={o.maxOutputTokens}
-        attachments={o.attachments}
-        onAttachFiles={o.onAttachFiles}
-        onRemoveAttachment={o.onRemoveAttachment}
-        leading={
-          <ChatPaneComposerLeading
-            plan={o.plan}
-            onOpenPlan={o.onOpenPlan}
-            sessionId={o.sessionId}
-          />
-        }
-      />
+      <ChatPaneComposer o={o} />
     </div>
+  );
+}
+
+function ChatPaneComposer(props: { o: ChatPaneViewProps }) {
+  const o = props.o;
+  return (
+    <ChatComposer
+      sessionId={o.sessionId}
+      branchName={o.branchName}
+      value={o.input}
+      onChange={o.setInput}
+      onSend={o.onSend}
+      onStop={o.onStop}
+      canSend={o.canSend}
+      canQueue={o.canQueue}
+      status={o.status}
+      agentMode={o.agentMode}
+      onAgentModeChange={o.onAgentModeChange}
+      pendingModeSwitch={o.pendingModeSwitch}
+      modeSwitchRemainingSeconds={o.modeSwitchRemainingSeconds}
+      onConfirmModeSwitch={o.onConfirmModeSwitch}
+      onDismissModeSwitch={o.onDismissModeSwitch}
+      provider={o.provider}
+      model={o.model}
+      autoModel={o.autoModel}
+      onAutoModelChange={o.onAutoModelChange}
+      modelsByProvider={o.modelsByProvider}
+      modelsLoading={o.modelsLoading}
+      onModelSelect={o.onModelSelect}
+      conversationTokens={o.conversationTokens}
+      maxContextTokens={o.maxContextTokens}
+      maxOutputTokens={o.maxOutputTokens}
+      attachments={o.attachments}
+      onAttachFiles={o.onAttachFiles}
+      onRemoveAttachment={o.onRemoveAttachment}
+      leading={
+        <ChatPaneComposerLeading
+          plan={o.plan}
+          onOpenPlan={o.onOpenPlan}
+          sessionId={o.sessionId}
+        />
+      }
+    />
   );
 }
 

@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  like,
+  not,
+  sql
+} from "drizzle-orm";
 import { getDb } from "@forge/db";
 import {
   chatTurnChunks,
@@ -8,8 +19,14 @@ import {
   type ChatTurnChunk,
   type SessionMessage
 } from "@forge/db";
+import {
+  AGENT_TASK_STREAM_WORKFLOW_PREFIX,
+  isAgentTaskStreamWorkflowId
+} from "@forge/core";
 import { sanitizeJsonForPg } from "./sanitizeJsonForPg.js";
 import { idsFromMessageOnward } from "./sessionMessagesRevert.js";
+
+export { AGENT_TASK_STREAM_WORKFLOW_PREFIX, isAgentTaskStreamWorkflowId };
 export class SessionMessageRepository {
   async listBySessionId(sessionId: string): Promise<SessionMessage[]> {
     const db = getDb();
@@ -136,7 +153,13 @@ export class ChatTurnRepository {
       .select()
       .from(chatTurns)
       .where(
-        and(eq(chatTurns.sessionId, sessionId), eq(chatTurns.status, "running"))
+        and(
+          eq(chatTurns.sessionId, sessionId),
+          eq(chatTurns.status, "running"),
+          not(
+            like(chatTurns.workflowId, `${AGENT_TASK_STREAM_WORKFLOW_PREFIX}%`)
+          )
+        )
       )
       .orderBy(desc(chatTurns.startedAt))
       .limit(1);
@@ -147,7 +170,14 @@ export class ChatTurnRepository {
     const rows = await db
       .select({ sessionId: chatTurns.sessionId })
       .from(chatTurns)
-      .where(eq(chatTurns.status, "running"));
+      .where(
+        and(
+          eq(chatTurns.status, "running"),
+          not(
+            like(chatTurns.workflowId, `${AGENT_TASK_STREAM_WORKFLOW_PREFIX}%`)
+          )
+        )
+      );
     return [...new Set(rows.map((row) => row.sessionId))];
   }
   async listBySessionId(sessionId: string): Promise<ChatTurn[]> {

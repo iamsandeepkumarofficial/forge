@@ -1,13 +1,15 @@
 export {
   loadChatMessages,
   appendChatMessage,
+  createTaskStreamTurn,
   ensureChatSandbox,
   getChatSystemPrompt,
   finishChatTurn,
   runLlmStep,
   executeChatTool,
   rejectChatToolCall,
-  finalizeChatTurn
+  finalizeChatTurn,
+  AGENT_TASK_STREAM_WORKFLOW_PREFIX
 } from "./chat.js";
 export {
   createPlan,
@@ -29,3 +31,9 @@ export {
   mergeTaskWorktree,
   publishMergeConflict
 } from "./worktree.js";
+export {
+  spillTaskOutput,
+  loadTaskArtifact,
+  prepareTaskInput,
+  artifactFilePath
+} from "./taskIo.js";

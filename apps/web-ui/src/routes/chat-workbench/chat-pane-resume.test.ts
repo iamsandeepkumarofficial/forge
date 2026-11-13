@@ -68,6 +68,17 @@ describe("chat-pane-resume", () => {
     expect(vi.mocked(fetchSessionMessages)).toHaveBeenCalledWith("s1");
   });
 
+  it("reloads messages when a task posts findings to the parent turn", () => {
+    vi.mocked(fetchSessionMessages).mockClear();
+    handleResumeStreamEvent({
+      eventType: "task_result_message",
+      payload: { taskId: "research_a", text: "### Research\n\nFindings" },
+      sessionId: "s1",
+      ...controllers()
+    });
+    expect(vi.mocked(fetchSessionMessages)).toHaveBeenCalledWith("s1");
+  });
+
   it("resumeIfRunningTurn no-ops when idle", async () => {
     vi.mocked(fetchRunningTurn).mockResolvedValueOnce(null);
     const ac = new AbortController();

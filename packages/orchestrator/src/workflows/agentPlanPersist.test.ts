@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { snapshotFromCtx, budgetStopReason } from "./agentPlanPersist.js";
 import { draftToTasks } from "./agentWorkflowModel.js";
+import { withSchemas } from "./testTaskDraft.js";
 import type { PlanPersistCtx } from "./agentPlanPersist.js";
 
 function fakeCtx(): PlanPersistCtx {
@@ -18,12 +19,14 @@ function fakeCtx(): PlanPersistCtx {
     goal: "Ship",
     version: 1,
     replanCount: 0,
-    tasks: draftToTasks({
-      goal: "Ship",
-      tasks: [
-        { id: "a", description: "Do it", executor: "agent", dependencies: [] }
-      ]
-    }),
+    tasks: draftToTasks(
+      withSchemas({
+        goal: "Ship",
+        tasks: [
+          { id: "a", description: "Do it", executor: "agent", dependencies: [] }
+        ]
+      })
+    ),
     workingMs: 0,
     llmTokens: 0,
     costUsd: 0,

@@ -183,18 +183,44 @@ export async function cancelChatTurn(
   }
 }
 
+export async function startChatPlan(input: {
+  sessionId: string;
+  turnId: string;
+}): Promise<void> {
+  const res = await fetch(
+    `${runnerUrl()}/api/sessions/${encodeURIComponent(input.sessionId)}/turns/${encodeURIComponent(input.turnId)}/start-plan`,
+    {
+      method: "POST",
+      headers: authHeaders()
+    }
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(body.error || `start plan failed: ${res.status}`);
+  }
+}
+
 export async function answerChatTurn(input: {
   sessionId: string;
   turnId: string;
-  text: string;
+  text?: string;
   taskId?: string;
+  decision?: "approve" | "reject" | "skip";
+  payload?: unknown;
 }): Promise<void> {
   const res = await fetch(
     `${runnerUrl()}/api/sessions/${encodeURIComponent(input.sessionId)}/turns/${encodeURIComponent(input.turnId)}/answer`,
     {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ text: input.text, taskId: input.taskId })
+      body: JSON.stringify({
+        ...(input.text !== undefined ? { text: input.text } : {}),
+        ...(input.taskId !== undefined ? { taskId: input.taskId } : {}),
+        ...(input.decision !== undefined ? { decision: input.decision } : {}),
+        ...(input.payload !== undefined ? { payload: input.payload } : {})
+      })
     }
   );
   if (!res.ok) {

@@ -7,5 +7,6 @@ describe("sseEvents", () => {
     assert.equal(PLAN_SSE_EVENTS.planPublished, "plan_published");
     assert.equal(PLAN_SSE_EVENTS.replan, "replan");
     assert.equal(PLAN_SSE_EVENTS.mergeConflict, "merge_conflict");
+    assert.equal(PLAN_SSE_EVENTS.planningGate, "planning_gate");
   });
 });

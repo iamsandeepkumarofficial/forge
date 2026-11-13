@@ -9,6 +9,10 @@ export type InteractiveChatTurnArgs = {
   provider: string;
   model?: string;
   reasoningEffort?: "low" | "medium" | "high";
+
+  quiet?: boolean;
+
+  streamTurnId?: string;
 };
 
 export type InteractiveAgentArgs = InteractiveChatTurnArgs & {

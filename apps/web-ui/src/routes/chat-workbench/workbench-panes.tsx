@@ -30,6 +30,7 @@ export function WorkbenchLeft(options: {
   onShowPreview: () => void;
   onOpenPlan: () => void;
   onPlanChange: (plan: PlanCardModel | null) => void;
+  onActiveTurnIdChange?: (turnId: string | null) => void;
   onTurnStatus: (status: WorkbenchTurnStatus) => void;
 }) {
   const o = options;
@@ -49,6 +50,7 @@ export function WorkbenchLeft(options: {
           onOpenHelp={() => o.onLeftModeChange("help")}
           onOpenPlan={o.onOpenPlan}
           onPlanChange={o.onPlanChange}
+          onActiveTurnIdChange={o.onActiveTurnIdChange}
         />
       </div>
       <div className={cn("min-h-0 flex-1", o.leftMode !== "files" && "hidden")}>
